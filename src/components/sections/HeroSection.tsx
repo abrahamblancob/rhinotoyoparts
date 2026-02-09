@@ -11,12 +11,12 @@ export function HeroSection() {
       {/* Video Background */}
       <div className="rhino-hero-video-wrapper">
         <video autoPlay muted loop playsInline>
-          <source src="/hero-video.mp4" type="video/mp4" />
+          <source src="/hero-video-processed.mp4" type="video/mp4" />
         </video>
       </div>
 
       {/* Dark overlay for readability */}
-      <div className="absolute inset-0 z-10 pointer-events-none" style={{ backgroundColor: 'rgba(0, 0, 0, 0.5)' }} />
+      <div className="absolute inset-0 z-10 pointer-events-none" style={{ backgroundColor: 'rgba(0, 0, 0, 0.7)' }} />
 
       {/* Content */}
       <div className="relative z-20 text-center rhino-container">
