@@ -75,7 +75,7 @@ export function RhinoModel() {
     [],
   );
 
-  const eyeGlow = useMemo(
+  const _eyeGlow = useMemo(
     () =>
       new THREE.MeshStandardMaterial({
         color: '#ff1a1a',

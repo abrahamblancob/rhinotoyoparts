@@ -8,7 +8,7 @@ interface SectionWrapperProps {
   dark?: boolean;
 }
 
-export function SectionWrapper({ id, children, className = '', dark = false }: SectionWrapperProps) {
+export function SectionWrapper({ id, children, className = '', dark: _dark = false }: SectionWrapperProps) {
   return (
     <motion.section
       id={id}

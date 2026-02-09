@@ -34,7 +34,7 @@ const sizeStyles = {
 };
 
 export function Button(props: ButtonProps) {
-  const { variant = 'primary', size = 'md', children, className = '', ...rest } = props;
+  const { variant = 'primary', size = 'md', children, className = '' } = props;
 
   const baseStyles =
     'inline-flex items-center justify-center font-semibold rounded-lg transition-all duration-300 cursor-pointer';
