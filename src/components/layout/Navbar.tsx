@@ -13,6 +13,7 @@ export function Navbar() {
 
   return (
     <motion.nav
+      aria-label="Navegacion principal"
       initial={{ y: -100 }}
       animate={{ y: 0 }}
       transition={{ duration: 0.6, ease: 'easeOut' }}
@@ -26,7 +27,7 @@ export function Navbar() {
         <div className="flex items-center justify-between h-20">
           {/* Logo */}
           <a href="#inicio" className="shrink-0">
-            <img src="/logo.jpg" alt="Rhino Toyo Parts" className="h-14 w-auto" />
+            <img src="/logo.jpg" alt="Rhino Toyo Parts - Inicio" width="120" height="56" className="h-14 w-auto" />
           </a>
 
           {/* Desktop nav */}

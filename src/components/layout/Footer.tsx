@@ -10,7 +10,7 @@ export function Footer() {
         <div className="footer-grid grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3">
           {/* Brand */}
           <div>
-            <img src="/logo.jpg" alt="Rhino Toyo Parts" className="h-16 w-auto" />
+            <img src="/logo.jpg" alt="Rhino Toyo Parts" width="140" height="64" loading="lazy" className="h-16 w-auto" />
             <p className="footer-brand-text text-rhino-steel text-sm leading-relaxed">
               Tu proveedor de confianza en repuestos Toyota en Venezuela.
               Calidad, garantia y los mejores precios del mercado.
@@ -22,7 +22,7 @@ export function Footer() {
             <h4 className="footer-heading text-rhino-white font-semibold uppercase tracking-wider text-sm">
               Enlaces
             </h4>
-            <nav className="footer-links flex flex-col">
+            <nav aria-label="Enlaces del sitio" className="footer-links flex flex-col">
               {['Inicio', 'Nosotros', 'Tienda'].map((link) => (
                 <a
                   key={link}
@@ -40,7 +40,7 @@ export function Footer() {
             <h4 className="footer-heading text-rhino-white font-semibold uppercase tracking-wider text-sm">
               Contacto
             </h4>
-            <div className="footer-contact-items flex flex-col">
+            <address className="footer-contact-items flex flex-col" style={{ fontStyle: 'normal' }}>
               <a
                 href={`mailto:${CONTACT_INFO.email}`}
                 className="flex items-center gap-2 text-rhino-steel hover:text-rhino-white transition-colors text-sm"
@@ -66,7 +66,7 @@ export function Footer() {
                 <Instagram size={16} className="shrink-0" />
                 @rhinotoyoparts
               </a>
-            </div>
+            </address>
           </div>
         </div>
 

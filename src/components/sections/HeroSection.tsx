@@ -95,7 +95,7 @@ export function HeroSection() {
           animate={{ y: [0, 8, 0] }}
           transition={{ repeat: Infinity, duration: 2, ease: 'easeInOut' }}
         >
-          <ChevronDown size={28} className="text-rhino-steel" />
+          <ChevronDown size={28} className="text-rhino-steel" aria-hidden="true" />
         </motion.div>
       </motion.div>
     </section>
