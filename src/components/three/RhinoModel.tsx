@@ -75,18 +75,6 @@ export function RhinoModel() {
     [],
   );
 
-  const _eyeGlow = useMemo(
-    () =>
-      new THREE.MeshStandardMaterial({
-        color: '#ff1a1a',
-        emissive: '#ff0000',
-        emissiveIntensity: 3,
-        metalness: 0.2,
-        roughness: 0.1,
-      }),
-    [],
-  );
-
   const rustMetal = useMemo(
     () =>
       new THREE.MeshStandardMaterial({
