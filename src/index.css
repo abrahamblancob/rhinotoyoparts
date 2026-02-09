@@ -586,6 +586,29 @@ body {
   background-color: #999999;
 }
 
+/* Hero video responsive */
+.rhino-hero-video-wrapper {
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  overflow: hidden;
+  z-index: 0;
+}
+
+.rhino-hero-video-wrapper video {
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  min-width: 100%;
+  min-height: 100%;
+  width: auto;
+  height: auto;
+  transform: translate(-50%, -50%);
+  object-fit: cover;
+}
+
 ::-webkit-scrollbar {
   width: 6px;
 }
