@@ -26,7 +26,7 @@ export const sellers: Seller[] = [
     description:
       'Experto en repuestos electricos y electronicos, con conocimientos para pruebas en sitio.',
     imageUrl: '/sellers/seller-placeholder.webp',
-    whatsappNumber: '584120000003',
+    whatsappNumber: '584242374723',
   },
   {
     id: 'vendedor-4',
@@ -35,6 +35,6 @@ export const sellers: Seller[] = [
     description:
       'Experto en ventas y marketing, brindando asesoria personalizada para cada cliente.',
     imageUrl: '/sellers/seller-placeholder.webp',
-    whatsappNumber: '584120000004',
+    whatsappNumber: '584121169448',
   },
 ];
