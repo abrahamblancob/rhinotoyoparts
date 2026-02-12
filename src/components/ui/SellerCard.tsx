@@ -16,6 +16,9 @@ export function SellerCard({ seller, index }: SellerCardProps) {
     `Hola ${seller.name}, me comunico desde la web de Rhino Toyo Parts. Me interesa consultar sobre repuestos.`,
   );
 
+  // Short URL for QR code (no message) so the QR is simpler and easier to scan
+  const qrLink = `https://wa.me/${seller.whatsappNumber}`;
+
   return (
     <motion.div
       initial={{ opacity: 0, y: 40 }}
@@ -55,13 +58,14 @@ export function SellerCard({ seller, index }: SellerCardProps) {
 
       {/* QR + WhatsApp button */}
       <div className="flex items-end justify-between gap-3">
-        <div className="bg-white p-1.5 sm:p-2 rounded-lg shrink-0 border border-rhino-light-gray">
+        <div className="bg-white p-2 sm:p-2.5 rounded-lg shrink-0 border border-rhino-light-gray">
           <QRCodeSVG
-            value={whatsappLink}
-            size={64}
+            value={qrLink}
+            size={96}
             bgColor="#ffffff"
             fgColor="#0a0a0a"
-            level="M"
+            level="H"
+            marginSize={1}
           />
         </div>
 

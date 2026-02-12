@@ -30,7 +30,7 @@ export const sellers: Seller[] = [
   },
   {
     id: 'vendedor-4',
-    name: 'Giusseppe Gianniti',
+    name: 'Giuseppe Giannitti',
     role: 'Especialista en Ventas',
     description:
       'Experto en ventas y marketing, brindando asesoria personalizada para cada cliente.',
