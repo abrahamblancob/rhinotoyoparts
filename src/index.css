@@ -1397,9 +1397,13 @@ body {
 .rhino-vision-hero-title {
   font-size: 56px;
   font-weight: 800;
-  color: #d32f2f;
+  color: #ffffff;
   margin-bottom: 20px;
   line-height: 1.2;
+}
+
+.rhino-text-red {
+  color: #d32f2f;
 }
 
 @media (max-width: 768px) {

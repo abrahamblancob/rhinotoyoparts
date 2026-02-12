@@ -32,7 +32,7 @@ export function RhinoVisionPage() {
                                 transition={{ delay: 0.3, duration: 0.6 }}
                                 className="rhino-vision-hero-title"
                             >
-                                Rhino Vision
+                                Rhino <span className="rhino-text-red">Vision</span>
                             </motion.h1>
 
                             <motion.p
