@@ -607,6 +607,550 @@ body {
   object-fit: cover;
 }
 
+/* ═══════════════════════════════════════════════════════════════
+   RHINO HUB — B2B Section (Dark Industrial Theme)
+   ═══════════════════════════════════════════════════════════════ */
+
+/* Hero */
+.rhino-hub-hero {
+  position: relative;
+  min-height: 500px;
+  display: flex;
+  align-items: center;
+  overflow: hidden;
+}
+
+@media (min-width: 640px) {
+  .rhino-hub-hero {
+    min-height: 600px;
+  }
+}
+
+@media (min-width: 1024px) {
+  .rhino-hub-hero {
+    min-height: 700px;
+  }
+}
+
+.rhino-hub-hero-bg {
+  position: absolute;
+  inset: 0;
+  z-index: 0;
+}
+
+.rhino-hub-hero-bg img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  object-position: center center;
+}
+
+.rhino-hub-hero-overlay {
+  position: absolute;
+  inset: 0;
+  background: linear-gradient(
+    to right,
+    rgba(0, 0, 0, 0.85) 0%,
+    rgba(0, 0, 0, 0.6) 50%,
+    rgba(0, 0, 0, 0.3) 100%
+  );
+}
+
+@media (max-width: 639px) {
+  .rhino-hub-hero-overlay {
+    background: linear-gradient(
+      to bottom,
+      rgba(0, 0, 0, 0.6) 0%,
+      rgba(0, 0, 0, 0.88) 100%
+    );
+  }
+}
+
+.rhino-hub-hero-content {
+  max-width: 520px;
+  padding: 80px 0;
+}
+
+@media (min-width: 640px) {
+  .rhino-hub-hero-content {
+    padding: 100px 0;
+  }
+}
+
+@media (min-width: 1024px) {
+  .rhino-hub-hero-content {
+    padding: 120px 0;
+  }
+}
+
+.rhino-hub-hero-title {
+  font-size: 40px;
+  font-weight: 800;
+  color: #ffffff;
+  margin-bottom: 16px;
+  line-height: 1.1;
+}
+
+@media (min-width: 640px) {
+  .rhino-hub-hero-title {
+    font-size: 56px;
+  }
+}
+
+.rhino-hub-hero-subtitle {
+  font-size: 16px;
+  color: #bbb;
+  line-height: 1.7;
+  margin-bottom: 24px;
+}
+
+@media (min-width: 640px) {
+  .rhino-hub-hero-subtitle {
+    font-size: 18px;
+  }
+}
+
+/* Badge */
+.rhino-hub-badge {
+  display: inline-block;
+  background-color: rgba(211, 47, 47, 0.15);
+  color: #ef5350;
+  font-size: 11px;
+  font-weight: 700;
+  padding: 4px 10px;
+  border-radius: 6px;
+  letter-spacing: 0.5px;
+  border: 1px solid rgba(211, 47, 47, 0.3);
+}
+
+.rhino-hub-badge-lg {
+  display: inline-block;
+  background-color: rgba(211, 47, 47, 0.12);
+  color: #ef5350;
+  font-size: 12px;
+  font-weight: 700;
+  padding: 6px 16px;
+  border-radius: 8px;
+  letter-spacing: 1px;
+  margin-bottom: 20px;
+  border: 1px solid rgba(211, 47, 47, 0.25);
+}
+
+/* Dark section background */
+.rhino-hub-dark-section {
+  background-color: #0f0f0f !important;
+}
+
+/* Benefit cards */
+.rhino-hub-benefit-card {
+  background-color: #1a1a1a;
+  border: 1px solid #2a2a2a;
+  border-radius: 16px;
+  padding: 28px 24px;
+  transition: border-color 0.3s ease, box-shadow 0.3s ease;
+}
+
+.rhino-hub-benefit-card:hover {
+  border-color: #d32f2f40;
+  box-shadow: 0 8px 32px rgba(211, 47, 47, 0.08);
+}
+
+.rhino-hub-benefit-icon {
+  width: 52px;
+  height: 52px;
+  border-radius: 12px;
+  background: linear-gradient(135deg, #d32f2f20, #d32f2f08);
+  border: 1px solid #d32f2f30;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: #d32f2f;
+  margin-bottom: 20px;
+}
+
+/* Upload section */
+.rhino-hub-upload-section {
+  background-color: #141414;
+  border: 1px solid #252525;
+  border-radius: 16px;
+  padding: 28px 20px;
+}
+
+@media (min-width: 640px) {
+  .rhino-hub-upload-section {
+    padding: 36px 32px;
+  }
+}
+
+/* Dropzone */
+.rhino-hub-dropzone {
+  border: 2px dashed #333;
+  border-radius: 12px;
+  padding: 40px 20px;
+  text-align: center;
+  cursor: pointer;
+  transition: border-color 0.3s ease, background-color 0.3s ease;
+  background-color: #0f0f0f;
+}
+
+.rhino-hub-dropzone:hover,
+.rhino-hub-dropzone.dragging {
+  border-color: #d32f2f;
+  background-color: rgba(211, 47, 47, 0.04);
+}
+
+.rhino-hub-file-tag {
+  display: inline-block;
+  background-color: #222;
+  color: #888;
+  font-size: 11px;
+  font-weight: 600;
+  padding: 4px 10px;
+  border-radius: 6px;
+  font-family: monospace;
+}
+
+.rhino-hub-demo-btn {
+  margin-top: 20px;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  background-color: transparent;
+  color: #d32f2f;
+  font-size: 13px;
+  font-weight: 600;
+  padding: 10px 20px;
+  border-radius: 8px;
+  border: 1px solid #d32f2f50;
+  cursor: pointer;
+  transition: background-color 0.2s ease, color 0.2s ease;
+}
+
+.rhino-hub-demo-btn:hover {
+  background-color: #d32f2f;
+  color: white;
+}
+
+/* File info bar */
+.rhino-hub-file-bar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  background-color: #1a1a1a;
+  border: 1px solid #2a2a2a;
+  border-radius: 8px;
+  padding: 10px 14px;
+  margin-bottom: 16px;
+}
+
+.rhino-hub-close-btn {
+  color: #666;
+  background: none;
+  border: none;
+  cursor: pointer;
+  padding: 4px;
+  border-radius: 4px;
+  transition: color 0.2s ease;
+}
+
+.rhino-hub-close-btn:hover {
+  color: #ef5350;
+}
+
+/* Table */
+.rhino-hub-table-wrapper {
+  overflow-x: auto;
+  border-radius: 8px;
+  border: 1px solid #252525;
+  -webkit-overflow-scrolling: touch;
+}
+
+.rhino-hub-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 13px;
+  white-space: nowrap;
+}
+
+.rhino-hub-table thead {
+  background-color: #1a1a1a;
+}
+
+.rhino-hub-table th {
+  color: #888;
+  font-weight: 600;
+  font-size: 11px;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+  padding: 12px 14px;
+  text-align: left;
+  border-bottom: 1px solid #2a2a2a;
+}
+
+.rhino-hub-table td {
+  color: #ccc;
+  padding: 11px 14px;
+  border-bottom: 1px solid #1e1e1e;
+}
+
+.rhino-hub-table tbody tr {
+  transition: background-color 0.15s ease;
+}
+
+.rhino-hub-table tbody tr:hover {
+  background-color: #1a1a1a;
+}
+
+.rhino-hub-table tbody tr:last-child td {
+  border-bottom: none;
+}
+
+/* Validation summary */
+.rhino-hub-validation {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 16px;
+  padding: 12px 0;
+  margin-top: 8px;
+}
+
+/* Action buttons */
+.rhino-hub-submit-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  background-color: #d32f2f;
+  color: white;
+  padding: 12px 28px;
+  border-radius: 10px;
+  font-size: 14px;
+  font-weight: 600;
+  border: none;
+  cursor: pointer;
+  transition: background-color 0.2s ease, transform 0.2s ease;
+  box-shadow: 0 4px 16px rgba(211, 47, 47, 0.25);
+}
+
+.rhino-hub-submit-btn:hover {
+  background-color: #b71c1c;
+  transform: translateY(-1px);
+}
+
+.rhino-hub-secondary-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  background-color: transparent;
+  color: #999;
+  padding: 12px 28px;
+  border-radius: 10px;
+  font-size: 14px;
+  font-weight: 600;
+  border: 1px solid #333;
+  cursor: pointer;
+  transition: border-color 0.2s ease, color 0.2s ease;
+}
+
+.rhino-hub-secondary-btn:hover {
+  border-color: #666;
+  color: #ccc;
+}
+
+/* Rhino Hub Nav Link (desktop) */
+.rhino-hub-nav-link {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  background: linear-gradient(135deg, #d32f2f, #b71c1c);
+  color: white;
+  padding: 8px 18px;
+  border-radius: 8px;
+  font-size: 12px;
+  font-weight: 700;
+  text-decoration: none;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+  transition: transform 0.2s ease, box-shadow 0.2s ease;
+  box-shadow: 0 2px 12px rgba(211, 47, 47, 0.3);
+}
+
+.rhino-hub-nav-link:hover {
+  transform: translateY(-1px);
+  box-shadow: 0 4px 16px rgba(211, 47, 47, 0.45);
+}
+
+/* Rhino Hub Nav Link (mobile) */
+.rhino-hub-nav-link-mobile {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  background: linear-gradient(135deg, #d32f2f, #b71c1c);
+  color: white;
+  padding: 10px 20px;
+  border-radius: 10px;
+  font-size: 14px;
+  font-weight: 700;
+  text-decoration: none;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+  margin-top: 8px;
+  box-shadow: 0 2px 12px rgba(211, 47, 47, 0.3);
+}
+
+/* ── Light theme variants (matching landing page) ── */
+
+/* Benefit cards — light */
+.rhino-hub-benefit-card-light {
+  background-color: #ffffff;
+  border: 1px solid #e0e0e0;
+  border-radius: 16px;
+  padding: 28px 24px;
+  transition: border-color 0.3s ease, box-shadow 0.3s ease;
+}
+
+.rhino-hub-benefit-card-light:hover {
+  border-color: rgba(211, 47, 47, 0.4);
+  box-shadow: 0 16px 32px rgba(0, 0, 0, 0.1);
+}
+
+/* Upload section — light */
+.rhino-hub-upload-section-light {
+  background-color: #ffffff;
+  border: 1px solid #e0e0e0;
+  border-radius: 16px;
+  padding: 28px 20px;
+}
+
+@media (min-width: 640px) {
+  .rhino-hub-upload-section-light {
+    padding: 36px 32px;
+  }
+}
+
+/* Dropzone — light */
+.rhino-hub-dropzone-light {
+  border: 2px dashed #d0d0d0;
+  border-radius: 12px;
+  padding: 40px 20px;
+  text-align: center;
+  cursor: pointer;
+  transition: border-color 0.3s ease, background-color 0.3s ease;
+  background-color: #f7f7f7;
+}
+
+.rhino-hub-dropzone-light:hover,
+.rhino-hub-dropzone-light.dragging {
+  border-color: #d32f2f;
+  background-color: rgba(211, 47, 47, 0.03);
+}
+
+/* File tags — light */
+.rhino-hub-file-tag-light {
+  display: inline-block;
+  background-color: #e8e8e8;
+  color: #666;
+  font-size: 11px;
+  font-weight: 600;
+  padding: 4px 10px;
+  border-radius: 6px;
+  font-family: monospace;
+}
+
+/* File info bar — light */
+.rhino-hub-file-bar-light {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  background-color: #f7f7f7;
+  border: 1px solid #e0e0e0;
+  border-radius: 8px;
+  padding: 10px 14px;
+  margin-bottom: 16px;
+}
+
+.rhino-hub-close-btn-light {
+  color: #999;
+  background: none;
+  border: none;
+  cursor: pointer;
+  padding: 4px;
+  border-radius: 4px;
+  transition: color 0.2s ease;
+}
+
+.rhino-hub-close-btn-light:hover {
+  color: #d32f2f;
+}
+
+/* Table — light */
+.rhino-hub-table-wrapper-light {
+  overflow-x: auto;
+  border-radius: 8px;
+  border: 1px solid #e0e0e0;
+  -webkit-overflow-scrolling: touch;
+}
+
+.rhino-hub-table-light {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 13px;
+  white-space: nowrap;
+}
+
+.rhino-hub-table-light thead {
+  background-color: #f2f2f2;
+}
+
+.rhino-hub-table-light th {
+  color: #666;
+  font-weight: 600;
+  font-size: 11px;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+  padding: 12px 14px;
+  text-align: left;
+  border-bottom: 1px solid #e0e0e0;
+}
+
+.rhino-hub-table-light td {
+  color: #1a1a1a;
+  padding: 11px 14px;
+  border-bottom: 1px solid #f0f0f0;
+}
+
+.rhino-hub-table-light tbody tr {
+  transition: background-color 0.15s ease;
+}
+
+.rhino-hub-table-light tbody tr:hover {
+  background-color: #f7f7f7;
+}
+
+.rhino-hub-table-light tbody tr:last-child td {
+  border-bottom: none;
+}
+
+/* Secondary button — light */
+.rhino-hub-secondary-btn-light {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  background-color: transparent;
+  color: #666;
+  padding: 12px 28px;
+  border-radius: 10px;
+  font-size: 14px;
+  font-weight: 600;
+  border: 1px solid #d0d0d0;
+  cursor: pointer;
+  transition: border-color 0.2s ease, color 0.2s ease;
+}
+
+.rhino-hub-secondary-btn-light:hover {
+  border-color: #999;
+  color: #1a1a1a;
+}
+
 ::-webkit-scrollbar {
   width: 6px;
 }
