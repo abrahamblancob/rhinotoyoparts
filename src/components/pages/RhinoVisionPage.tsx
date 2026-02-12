@@ -17,14 +17,7 @@ export function RhinoVisionPage() {
                 >
                     <div className="rhino-container rhino-section-spacing">
                         <div className="rhino-vision-hero-content">
-                            <motion.div
-                                initial={{ opacity: 0, scale: 0.9 }}
-                                animate={{ opacity: 1, scale: 1 }}
-                                transition={{ delay: 0.2, duration: 0.5 }}
-                                className="rhino-vision-hero-badge"
-                            >
-                                ✨ Powered by Wabyte AI
-                            </motion.div>
+
 
                             <motion.h1
                                 initial={{ opacity: 0, y: 20 }}
@@ -55,6 +48,16 @@ export function RhinoVisionPage() {
                                 y con qué modelos es compatible. ¡Todo en menos de 20 segundos!
                                 Olvídate de buscar por horas, nosotros te ayudamos a encontrar lo que necesitas.
                             </motion.p>
+
+                            <motion.div
+                                initial={{ opacity: 0, scale: 0.9 }}
+                                animate={{ opacity: 1, scale: 1 }}
+                                transition={{ delay: 0.6, duration: 0.5 }}
+                                className="rhino-vision-hero-badge"
+                                style={{ marginTop: '24px', marginBottom: '0' }}
+                            >
+                                ✨ Powered by Wabyte AI
+                            </motion.div>
                         </div>
                     </div>
                 </motion.section>
