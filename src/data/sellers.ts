@@ -8,7 +8,7 @@ export const sellers: Seller[] = [
     description:
       'Experto en motores y repuestos Toyota con mas de 15 años de experiencia en el mercado.',
     imageUrl: '/sellers/seller-placeholder.webp',
-    whatsappNumber: '584120000001',
+    whatsappNumber: '584241396324',
   },
   {
     id: 'vendedor-2',
@@ -17,7 +17,7 @@ export const sellers: Seller[] = [
     description:
       'Experto en logistica y mercadeo, garantizando la mejor experiencia para nuestros clientes.',
     imageUrl: '/sellers/seller-placeholder.webp',
-    whatsappNumber: '584120000002',
+    whatsappNumber: '584242121072',
   },
   {
     id: 'vendedor-3',

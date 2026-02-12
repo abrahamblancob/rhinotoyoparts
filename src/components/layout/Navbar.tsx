@@ -3,6 +3,7 @@ import { motion, AnimatePresence } from 'framer-motion';
 import { Menu, X } from 'lucide-react';
 import { NAV_ITEMS } from '../../config/navigation';
 import { useScrollDirection } from '../../hooks/useScrollDirection';
+import { trackNavClick } from '../../utils/analytics';
 
 export function Navbar() {
   const [isOpen, setIsOpen] = useState(false);
@@ -36,6 +37,7 @@ export function Navbar() {
               <a
                 key={item.href}
                 href={item.href}
+                onClick={() => trackNavClick(item.label)}
                 className="text-rhino-silver hover:text-rhino-white transition-colors duration-200 text-sm font-medium uppercase tracking-wider relative group"
               >
                 {item.label}
@@ -70,7 +72,7 @@ export function Navbar() {
                 <a
                   key={item.href}
                   href={item.href}
-                  onClick={closeMenu}
+                  onClick={() => { trackNavClick(item.label); closeMenu(); }}
                   className="block text-rhino-silver hover:text-rhino-white hover:pl-2 transition-all duration-200 text-base font-medium uppercase tracking-wider py-2"
                 >
                   {item.label}

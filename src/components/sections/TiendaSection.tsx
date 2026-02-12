@@ -3,19 +3,18 @@ import { motion } from 'framer-motion';
 import { ChevronLeft, ChevronRight } from 'lucide-react';
 import { SectionWrapper } from '../ui/SectionWrapper';
 import { SectionTitle } from '../ui/SectionTitle';
+import { trackMercadoLibreClick } from '../../utils/analytics';
 
 const MERCADOLIBRE_URL = 'https://listado.mercadolibre.com.ve/tienda-rhino-toyo-parts';
 
-// Placeholder images - se reemplazarán con fotos reales de la tienda
 const storeImages = [
-  { id: 1, alt: 'Tienda Rhino Toyo Parts - Fachada' },
-  { id: 2, alt: 'Tienda Rhino Toyo Parts - Interior' },
-  { id: 3, alt: 'Tienda Rhino Toyo Parts - Estantería' },
-  { id: 4, alt: 'Tienda Rhino Toyo Parts - Mostrador' },
-  { id: 5, alt: 'Tienda Rhino Toyo Parts - Almacén' },
+  { id: 1, src: '/tienda/mostrador-toyota.jpg', alt: 'Rhino Toyo Parts - Mostrador principal con logo Toyota' },
+  { id: 2, src: '/tienda/estanteria-repuestos.jpg', alt: 'Rhino Toyo Parts - Estantería de repuestos y aceites' },
+  { id: 3, src: '/tienda/equipos-diagnostico.jpg', alt: 'Rhino Toyo Parts - Equipos de diagnóstico y piezas de motor' },
+  { id: 4, src: '/tienda/suspension-direccion.jpg', alt: 'Rhino Toyo Parts - Suspensión y sistemas de dirección' },
+  { id: 5, src: '/tienda/direccion-baterias.jpg', alt: 'Rhino Toyo Parts - Cajas de dirección y baterías' },
+  { id: 6, src: '/tienda/puerta-toyota.jpg', alt: 'Rhino Toyo Parts - Puerta Toyota y repuestos' },
 ];
-
-const placeholderColors = ['#d32f2f', '#b71c1c', '#ef5350', '#c62828', '#e53935'];
 
 function ImageSlider() {
   const [current, setCurrent] = useState(0);
@@ -33,19 +32,14 @@ function ImageSlider() {
             className="rhino-slider-slide"
             style={{
               transform: `translateX(${(index - current) * 100}%)`,
-              backgroundColor: placeholderColors[index],
             }}
           >
-            <div className="rhino-slider-placeholder">
-              <svg width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="white" strokeWidth="1.5">
-                <rect x="3" y="3" width="18" height="18" rx="2" />
-                <circle cx="8.5" cy="8.5" r="1.5" />
-                <path d="m21 15-5-5L5 21" />
-              </svg>
-              <p style={{ color: 'white', fontSize: '14px', marginTop: '12px', fontWeight: 600 }}>
-                {img.alt}
-              </p>
-            </div>
+            <img
+              src={img.src}
+              alt={img.alt}
+              loading={index === 0 ? 'eager' : 'lazy'}
+              style={{ width: '100%', height: '100%', objectFit: 'cover' }}
+            />
           </div>
         ))}
       </div>
@@ -92,6 +86,7 @@ export function TiendaSection() {
           viewport={{ once: true }}
           transition={{ duration: 0.5 }}
           className="rhino-ml-card"
+          onClick={trackMercadoLibreClick}
         >
           <div className="rhino-ml-logo-container">
             <img
