@@ -1,20 +1,17 @@
-import { Navbar } from './components/layout/Navbar';
-import { Footer } from './components/layout/Footer';
-import { HeroSection } from './components/sections/HeroSection';
-import { AboutSection } from './components/sections/AboutSection';
-import { TiendaSection } from './components/sections/TiendaSection';
+import { BrowserRouter as Router, Routes, Route } from 'react-router-dom';
+import { HomePage } from './components/pages/HomePage';
+import { RhinoVisionPage } from './components/pages/RhinoVisionPage';
 
 function App() {
   return (
-    <div className="min-h-screen overflow-x-hidden">
-      <Navbar />
-      <main>
-        <HeroSection />
-        <AboutSection />
-        <TiendaSection />
-      </main>
-      <Footer />
-    </div>
+    <Router>
+      <div className="min-h-screen overflow-x-hidden">
+        <Routes>
+          <Route path="/" element={<HomePage />} />
+          <Route path="/rhinovision" element={<RhinoVisionPage />} />
+        </Routes>
+      </div>
+    </Router>
   );
 }
 

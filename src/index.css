@@ -30,13 +30,11 @@ html {
 body {
   font-family: var(--font-body);
   background-color: #f5f5f5;
-  background-image: repeating-linear-gradient(
-    45deg,
-    transparent,
-    transparent 10px,
-    rgba(150, 150, 150, 0.06) 10px,
-    rgba(150, 150, 150, 0.06) 11px
-  );
+  background-image: repeating-linear-gradient(45deg,
+      transparent,
+      transparent 10px,
+      rgba(150, 150, 150, 0.06) 10px,
+      rgba(150, 150, 150, 0.06) 11px);
   color: #1a1a1a;
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;
@@ -624,4 +622,882 @@ body {
 
 ::-webkit-scrollbar-thumb:hover {
   background: #aaaaaa;
+}
+
+/* ═══════════════════════════════════════════════════════════════
+   RHINO VISION STYLES
+   ═══════════════════════════════════════════════════════════════ */
+
+.rhino-vision-container {
+  width: 100%;
+}
+
+.rhino-vision-grid {
+  display: grid;
+  grid-template-columns: 1fr;
+  gap: 32px;
+}
+
+@media (min-width: 1024px) {
+  .rhino-vision-grid {
+    grid-template-columns: 1fr 1fr;
+    gap: 40px;
+  }
+}
+
+/* Upload Zone */
+.rhino-upload-zone {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  background: #ffffff;
+  border: 2px dashed #d32f2f;
+  border-radius: 16px;
+  padding: 48px 24px;
+  text-align: center;
+  transition: all 0.2s ease;
+  cursor: pointer;
+  min-height: 400px;
+}
+
+.rhino-upload-zone:hover:not(.disabled) {
+  background: rgba(211, 47, 47, 0.05);
+  transform: scale(1.01);
+}
+
+.rhino-upload-zone.dragging {
+  border-style: solid;
+  background: rgba(211, 47, 47, 0.1);
+  transform: scale(1.02);
+}
+
+.rhino-upload-zone.disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
+}
+
+.rhino-upload-icon {
+  color: #d32f2f;
+  margin-bottom: 24px;
+}
+
+.rhino-upload-title {
+  font-size: 20px;
+  font-weight: 700;
+  color: #1a1a1a;
+  margin-bottom: 8px;
+}
+
+.rhino-upload-subtitle {
+  font-size: 14px;
+  color: #666666;
+  margin-bottom: 24px;
+}
+
+.rhino-upload-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  background: linear-gradient(135deg, #d32f2f 0%, #b71c1c 100%);
+  color: white;
+  padding: 14px 32px;
+  border-radius: 12px;
+  font-size: 16px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all 0.2s ease;
+  box-shadow: 0 4px 16px rgba(211, 47, 47, 0.3);
+  margin-bottom: 16px;
+}
+
+.rhino-upload-btn:hover {
+  transform: translateY(-2px);
+  box-shadow: 0 6px 20px rgba(211, 47, 47, 0.4);
+}
+
+.rhino-upload-formats {
+  font-size: 12px;
+  color: #999999;
+}
+
+/* Instructions Panel */
+.rhino-vision-instructions {
+  background: linear-gradient(135deg, #f7f7f7 0%, #ffffff 100%);
+  border: 1px solid #e0e0e0;
+  border-radius: 16px;
+  padding: 32px;
+}
+
+.rhino-instructions-title {
+  font-size: 22px;
+  font-weight: 700;
+  color: #1a1a1a;
+  margin-bottom: 24px;
+}
+
+.rhino-instructions-list {
+  list-style: none;
+  display: flex;
+  flex-direction: column;
+  gap: 20px;
+}
+
+.rhino-instructions-list li {
+  display: flex;
+  gap: 16px;
+  align-items: flex-start;
+}
+
+.rhino-step-number {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 32px;
+  height: 32px;
+  background: #d32f2f;
+  color: white;
+  border-radius: 50%;
+  font-weight: 700;
+  font-size: 14px;
+  flex-shrink: 0;
+}
+
+.rhino-instructions-list li strong {
+  display: block;
+  color: #1a1a1a;
+  margin-bottom: 4px;
+}
+
+.rhino-instructions-list li p {
+  color: #666666;
+  font-size: 14px;
+  line-height: 1.5;
+}
+
+/* Image Preview */
+.rhino-image-preview-container {
+  display: flex;
+  flex-direction: column;
+  gap: 24px;
+}
+
+.rhino-image-preview {
+  position: relative;
+  background: #ffffff;
+  border: 1px solid #e0e0e0;
+  border-radius: 16px;
+  padding: 24px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+}
+
+.rhino-preview-img {
+  width: 100%;
+  max-width: 300px;
+  height: auto;
+  border-radius: 12px;
+  margin-bottom: 16px;
+}
+
+.rhino-remove-image-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  background: transparent;
+  border: none;
+  color: #666666;
+  font-size: 14px;
+  cursor: pointer;
+  transition: color 0.2s ease;
+}
+
+.rhino-remove-image-btn:hover:not(:disabled) {
+  color: #d32f2f;
+}
+
+.rhino-remove-image-btn:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.rhino-preview-info {
+  display: flex;
+  gap: 16px;
+  align-items: center;
+  background: #f7f7f7;
+  padding: 16px;
+  border-radius: 12px;
+}
+
+.rhino-preview-thumbnail {
+  width: 60px;
+  height: 60px;
+  border-radius: 8px;
+  overflow: hidden;
+  flex-shrink: 0;
+}
+
+.rhino-preview-thumbnail img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+
+.rhino-preview-details {
+  flex: 1;
+}
+
+.rhino-preview-filename {
+  font-weight: 600;
+  color: #1a1a1a;
+  margin-bottom: 4px;
+  word-break: break-word;
+}
+
+.rhino-preview-filesize {
+  font-size: 14px;
+  color: #666666;
+}
+
+.rhino-analyze-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 10px;
+  background: linear-gradient(135deg, #d32f2f 0%, #b71c1c 100%);
+  color: white;
+  padding: 18px 48px;
+  border-radius: 12px;
+  font-size: 20px;
+  font-weight: 700;
+  border: none;
+  cursor: pointer;
+  transition: all 0.2s ease;
+  box-shadow: 0 8px 24px rgba(211, 47, 47, 0.3);
+  width: 100%;
+}
+
+.rhino-analyze-btn:hover:not(:disabled) {
+  transform: translateY(-2px);
+  box-shadow: 0 10px 28px rgba(211, 47, 47, 0.4);
+}
+
+.rhino-analyze-btn:disabled {
+  opacity: 0.7;
+  cursor: not-allowed;
+}
+
+.rhino-spinner {
+  width: 20px;
+  height: 20px;
+  border: 3px solid rgba(255, 255, 255, 0.3);
+  border-top-color: white;
+  border-radius: 50%;
+  animation: spin 1s linear infinite;
+}
+
+@keyframes spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+.rhino-preview-help {
+  text-align: center;
+  color: #666666;
+  font-size: 14px;
+  line-height: 1.6;
+}
+
+/* Ready State */
+.rhino-vision-ready {
+  background: linear-gradient(135deg, #f7f7f7 0%, #ffffff 100%);
+  border: 1px solid #e0e0e0;
+  border-radius: 16px;
+  padding: 32px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.rhino-ready-content h3 {
+  font-size: 22px;
+  font-weight: 700;
+  color: #1a1a1a;
+  margin-bottom: 16px;
+}
+
+.rhino-ready-content p {
+  color: #666666;
+  line-height: 1.6;
+  margin-bottom: 12px;
+}
+
+.rhino-ready-note {
+  font-size: 14px;
+  color: #999999;
+  font-style: italic;
+}
+
+/* Analyzing State */
+.rhino-vision-analyzing {
+  position: relative;
+  background: #ffffff;
+  border: 1px solid #e0e0e0;
+  border-radius: 16px;
+  padding: 60px 32px;
+  min-height: 500px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  overflow: hidden;
+}
+
+.rhino-analyzing-overlay {
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  overflow: hidden;
+  border-radius: 16px;
+}
+
+.rhino-analyzing-bg {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  opacity: 0.15;
+  filter: blur(8px);
+}
+
+.rhino-analyzing-content {
+  position: relative;
+  z-index: 1;
+  text-align: center;
+  background: rgba(255, 255, 255, 0.95);
+  padding: 40px;
+  border-radius: 16px;
+  backdrop-filter: blur(10px);
+}
+
+.rhino-analyzing-spinner {
+  color: #d32f2f;
+  animation: spin 1s linear infinite;
+  margin: 0 auto 24px;
+}
+
+.rhino-analyzing-title {
+  font-size: 24px;
+  font-weight: 700;
+  color: #1a1a1a;
+  margin-bottom: 24px;
+}
+
+.rhino-progress-bar {
+  width: 100%;
+  max-width: 300px;
+  height: 8px;
+  background: #e0e0e0;
+  border-radius: 4px;
+  overflow: hidden;
+  margin: 0 auto 20px;
+}
+
+.rhino-progress-fill {
+  height: 100%;
+  background: linear-gradient(90deg, #d32f2f 0%, #ef5350 100%);
+  border-radius: 4px;
+  animation: fillProgress 3s ease-in-out infinite;
+}
+
+@keyframes fillProgress {
+  0% {
+    width: 0%;
+  }
+
+  50% {
+    width: 70%;
+  }
+
+  100% {
+    width: 100%;
+  }
+}
+
+.rhino-analyzing-text {
+  color: #666666;
+  line-height: 1.6;
+  max-width: 400px;
+  margin: 0 auto;
+}
+
+/* Result Card */
+.rhino-result-card {
+  background: #ffffff;
+  border: 1px solid #e0e0e0;
+  border-radius: 16px;
+  padding: 32px;
+  box-shadow: 0 4px 16px rgba(0, 0, 0, 0.08);
+}
+
+.rhino-result-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 24px;
+  padding-bottom: 16px;
+  border-bottom: 2px solid #f7f7f7;
+}
+
+.rhino-result-title {
+  font-size: 18px;
+  font-weight: 700;
+  color: #1a1a1a;
+}
+
+.rhino-confidence-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 6px 16px;
+  border-radius: 20px;
+  color: white;
+  font-weight: 700;
+  font-size: 14px;
+}
+
+.rhino-result-content {
+  display: grid;
+  grid-template-columns: 1fr;
+  gap: 24px;
+  margin-bottom: 24px;
+}
+
+@media (min-width: 640px) {
+  .rhino-result-content {
+    grid-template-columns: 200px 1fr;
+  }
+}
+
+.rhino-result-image {
+  width: 100%;
+  max-width: 200px;
+  margin: 0 auto;
+}
+
+.rhino-result-image img {
+  width: 100%;
+  height: auto;
+  border-radius: 12px;
+  border: 1px solid #e0e0e0;
+}
+
+.rhino-result-info {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.rhino-part-name {
+  font-size: 22px;
+  font-weight: 700;
+  color: #d32f2f;
+  margin-bottom: 8px;
+}
+
+.rhino-part-category,
+.rhino-part-condition,
+.rhino-part-confidence {
+  font-size: 14px;
+  color: #666666;
+}
+
+.rhino-part-description {
+  margin-top: 8px;
+  color: #1a1a1a;
+  line-height: 1.6;
+}
+
+.rhino-compatible-models {
+  background: #f7f7f7;
+  border-radius: 12px;
+  padding: 20px;
+  margin-bottom: 24px;
+}
+
+.rhino-models-title {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 16px;
+  font-weight: 700;
+  color: #1a1a1a;
+  margin-bottom: 16px;
+}
+
+.rhino-models-list {
+  list-style: none;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.rhino-model-item {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 10px;
+  background: #ffffff;
+  border-radius: 8px;
+  transition: background 0.2s ease;
+  cursor: default;
+}
+
+.rhino-model-item:hover {
+  background: #fafafa;
+}
+
+.rhino-toyota-badge {
+  display: inline-block;
+  background: #d32f2f;
+  color: white;
+  padding: 4px 10px;
+  border-radius: 6px;
+  font-size: 12px;
+  font-weight: 700;
+}
+
+.rhino-whatsapp-cta-btn {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  background: linear-gradient(135deg, #16a34a 0%, #15803d 100%);
+  color: white;
+  padding: 18px 44px;
+  border-radius: 12px;
+  font-size: 18px;
+  font-weight: 600;
+  border: none;
+  cursor: pointer;
+  transition: all 0.2s ease;
+  box-shadow: 0 8px 24px rgba(22, 163, 74, 0.3);
+  width: 100%;
+  margin-bottom: 16px;
+}
+
+.rhino-whatsapp-cta-btn:hover {
+  transform: translateY(-2px);
+  box-shadow: 0 10px 28px rgba(22, 163, 74, 0.4);
+}
+
+.rhino-whatsapp-subtitle {
+  font-size: 14px;
+  font-weight: 400;
+  opacity: 0.9;
+}
+
+.rhino-analyze-another-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  background: transparent;
+  color: #d32f2f;
+  border: 2px solid #d32f2f;
+  padding: 12px 32px;
+  border-radius: 10px;
+  font-size: 16px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all 0.2s ease;
+  width: 100%;
+}
+
+.rhino-analyze-another-btn:hover {
+  background: #d32f2f;
+  color: white;
+}
+
+/* Error State */
+.rhino-vision-error {
+  background: #fff5f5;
+  border: 2px solid #ef5350;
+  border-radius: 16px;
+  padding: 40px;
+  text-align: center;
+}
+
+.rhino-error-icon {
+  color: #ef5350;
+  margin: 0 auto 24px;
+}
+
+.rhino-error-title {
+  font-size: 22px;
+  font-weight: 700;
+  color: #1a1a1a;
+  margin-bottom: 16px;
+}
+
+.rhino-error-message {
+  color: #666666;
+  margin-bottom: 24px;
+  line-height: 1.6;
+}
+
+.rhino-error-causes {
+  background: #ffffff;
+  border-radius: 12px;
+  padding: 20px;
+  margin-bottom: 24px;
+  text-align: left;
+}
+
+.rhino-error-causes p {
+  font-weight: 600;
+  color: #1a1a1a;
+  margin-bottom: 12px;
+}
+
+.rhino-error-causes ul {
+  list-style: disc;
+  padding-left: 24px;
+  color: #666666;
+}
+
+.rhino-error-causes li {
+  margin-bottom: 8px;
+}
+
+.rhino-error-actions {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  margin-bottom: 24px;
+}
+
+@media (min-width: 640px) {
+  .rhino-error-actions {
+    flex-direction: row;
+    justify-content: center;
+  }
+}
+
+.rhino-retry-btn,
+.rhino-new-image-btn {
+  padding: 14px 32px;
+  border-radius: 10px;
+  font-size: 16px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all 0.2s ease;
+  border: none;
+}
+
+.rhino-retry-btn {
+  background: linear-gradient(135deg, #d32f2f 0%, #b71c1c 100%);
+  color: white;
+  box-shadow: 0 4px 16px rgba(211, 47, 47, 0.3);
+}
+
+.rhino-retry-btn:hover {
+  transform: translateY(-2px);
+  box-shadow: 0 6px 20px rgba(211, 47, 47, 0.4);
+}
+
+.rhino-new-image-btn {
+  background: transparent;
+  color: #d32f2f;
+  border: 2px solid #d32f2f;
+}
+
+.rhino-new-image-btn:hover {
+  background: #d32f2f;
+  color: white;
+}
+
+.rhino-error-help {
+  font-size: 14px;
+  color: #999999;
+  font-style: italic;
+}
+
+/* ═══════════════════════════════════════════════════════════════
+   RHINO VISION PAGE STYLES
+   ═══════════════════════════════════════════════════════════════ */
+
+/* Hero Section */
+.rhino-vision-hero {
+  background: linear-gradient(135deg, #1a1a1a 0%, #2d2d2d 100%);
+  padding: 60px 0 80px;
+  margin-top: 40px;
+  position: relative;
+  overflow: hidden;
+  min-height: 500px;
+}
+
+/* Background Image with Blur */
+.rhino-vision-hero::before {
+  content: '';
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  background-image: url('/rhino-vision-bg.png');
+  background-size: cover;
+  background-position: center top;
+  background-repeat: no-repeat;
+  opacity: 0.5;
+  z-index: 0;
+}
+
+/* Red Gradient Overlay */
+.rhino-vision-hero::after {
+  content: '';
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  background: linear-gradient(135deg,
+      rgba(211, 47, 47, 0.4) 0%,
+      rgba(26, 26, 26, 0.8) 50%,
+      rgba(45, 45, 45, 0.9) 100%);
+  z-index: 0;
+  pointer-events: none;
+}
+
+.rhino-vision-hero-content {
+  position: relative;
+  z-index: 1;
+  text-align: center;
+  max-width: 800px;
+  margin: 0 auto;
+}
+
+.rhino-vision-hero-badge {
+  display: inline-block;
+  background: rgba(211, 47, 47, 0.2);
+  border: 1px solid rgba(211, 47, 47, 0.5);
+  color: #ef5350;
+  padding: 8px 20px;
+  border-radius: 20px;
+  font-size: 14px;
+  font-weight: 600;
+  margin-bottom: 24px;
+  backdrop-filter: blur(10px);
+}
+
+.rhino-vision-hero-title {
+  font-size: 56px;
+  font-weight: 800;
+  color: #d32f2f;
+  margin-bottom: 20px;
+  line-height: 1.2;
+}
+
+@media (max-width: 768px) {
+  .rhino-vision-hero-title {
+    font-size: 40px;
+  }
+}
+
+.rhino-vision-hero-subtitle {
+  font-size: 24px;
+  color: #cccccc;
+  margin-bottom: 16px;
+  font-weight: 300;
+}
+
+@media (max-width: 768px) {
+  .rhino-vision-hero-subtitle {
+    font-size: 20px;
+  }
+}
+
+.rhino-vision-hero-description {
+  font-size: 16px;
+  color: #999999;
+  line-height: 1.8;
+  max-width: 600px;
+  margin: 0 auto;
+}
+
+/* Features Section */
+.rhino-vision-features {
+  background: #f7f7f7;
+  padding: 80px 0;
+}
+
+.rhino-features-title {
+  font-size: 36px;
+  font-weight: 700;
+  color: #1a1a1a;
+  text-align: center;
+  margin-bottom: 60px;
+}
+
+@media (max-width: 768px) {
+  .rhino-features-title {
+    font-size: 28px;
+    margin-bottom: 40px;
+  }
+}
+
+.rhino-features-grid {
+  display: grid;
+  grid-template-columns: 1fr;
+  gap: 32px;
+}
+
+@media (min-width: 640px) {
+  .rhino-features-grid {
+    grid-template-columns: repeat(2, 1fr);
+  }
+}
+
+@media (min-width: 1024px) {
+  .rhino-features-grid {
+    grid-template-columns: repeat(4, 1fr);
+  }
+}
+
+.rhino-feature-card {
+  background: #ffffff;
+  border: 1px solid #e0e0e0;
+  border-radius: 16px;
+  padding: 32px 24px;
+  text-align: center;
+  transition: all 0.3s ease;
+}
+
+.rhino-feature-card:hover {
+  transform: translateY(-8px);
+  box-shadow: 0 12px 32px rgba(0, 0, 0, 0.1);
+  border-color: #d32f2f;
+}
+
+.rhino-feature-icon {
+  font-size: 48px;
+  margin-bottom: 20px;
+  display: block;
+}
+
+.rhino-feature-card h3 {
+  font-size: 18px;
+  font-weight: 700;
+  color: #1a1a1a;
+  margin-bottom: 12px;
+}
+
+.rhino-feature-card p {
+  font-size: 14px;
+  color: #666666;
+  line-height: 1.6;
 }
