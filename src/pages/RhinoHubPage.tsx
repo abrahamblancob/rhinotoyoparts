@@ -1,7 +1,7 @@
 import { useEffect } from 'react';
 import { Link } from 'react-router-dom';
 import { motion } from 'framer-motion';
-import { ArrowLeft } from 'lucide-react';
+import { ArrowLeft, LogIn } from 'lucide-react';
 import { RhinoHubSection } from '../components/sections/RhinoHubSection';
 import { Footer } from '../components/layout/Footer';
 import { trackEvent } from '../utils/analytics';
@@ -33,6 +33,15 @@ function RhinoHubNavbar() {
               <ArrowLeft size={16} />
               <span className="hidden sm:inline">Volver al inicio</span>
               <span className="sm:hidden">Inicio</span>
+            </Link>
+            <Link
+              to="/hub/login"
+              onClick={() => trackEvent({ action: 'rhinohub_login_click', category: 'rhinohub', label: 'navbar' })}
+              className="inline-flex items-center gap-2 text-sm font-semibold px-4 py-1.5 rounded-lg transition-colors"
+              style={{ backgroundColor: '#D3010A', color: '#fff' }}
+            >
+              <LogIn size={15} />
+              <span>Iniciar sesión</span>
             </Link>
           </div>
         </div>
