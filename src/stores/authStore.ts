@@ -114,7 +114,7 @@ export const useAuthStore = create<AuthState>((set, get) => ({
       .select('role_id, roles(name)')
       .eq('user_id', userId);
 
-    const userRolesList = (userRoles ?? []) as { role_id: string; roles: { name: string } | null }[];
+    const userRolesList = (userRoles ?? []) as unknown as { role_id: string; roles: { name: string } | null }[];
 
     const roleNames = userRolesList.map((ur) => ur.roles?.name ?? '');
 
@@ -128,7 +128,7 @@ export const useAuthStore = create<AuthState>((set, get) => ({
         .select('permissions(module, action)')
         .in('role_id', roleIds);
 
-      const rolePermsList = (rolePerms ?? []) as { permissions: { module: string; action: string } | null }[];
+      const rolePermsList = (rolePerms ?? []) as unknown as { permissions: { module: string; action: string } | null }[];
       perms = rolePermsList.map((rp) => ({
         module: rp.permissions?.module ?? '',
         action: rp.permissions?.action ?? '',
