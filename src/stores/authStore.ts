@@ -114,15 +114,12 @@ export const useAuthStore = create<AuthState>((set, get) => ({
       .select('role_id, roles(name)')
       .eq('user_id', userId);
 
-    const roleNames = (userRoles ?? []).map(
-      (ur: { role_id: string; roles: { name: string } | null }) =>
-        ur.roles?.name ?? ''
-    );
+    const userRolesList = (userRoles ?? []) as { role_id: string; roles: { name: string } | null }[];
+
+    const roleNames = userRolesList.map((ur) => ur.roles?.name ?? '');
 
     // Load permissions via role_permissions
-    const roleIds = (userRoles ?? []).map(
-      (ur: { role_id: string }) => ur.role_id
-    );
+    const roleIds = userRolesList.map((ur) => ur.role_id);
     let perms: UserPermission[] = [];
 
     if (roleIds.length > 0) {
@@ -131,12 +128,11 @@ export const useAuthStore = create<AuthState>((set, get) => ({
         .select('permissions(module, action)')
         .in('role_id', roleIds);
 
-      perms = (rolePerms ?? []).map(
-        (rp: { permissions: { module: string; action: string } | null }) => ({
-          module: rp.permissions?.module ?? '',
-          action: rp.permissions?.action ?? '',
-        })
-      );
+      const rolePermsList = (rolePerms ?? []) as { permissions: { module: string; action: string } | null }[];
+      perms = rolePermsList.map((rp) => ({
+        module: rp.permissions?.module ?? '',
+        action: rp.permissions?.action ?? '',
+      }));
     }
 
     set({

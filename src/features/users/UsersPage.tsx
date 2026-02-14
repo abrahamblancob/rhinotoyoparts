@@ -104,15 +104,17 @@ export function UsersPage() {
       orgMap = Object.fromEntries((orgs ?? []).map((o: { id: string; name: string }) => [o.id, o.name]));
     }
 
-    const mapped: UserWithRole[] = (data ?? []).map((u: Record<string, unknown>) => {
-      const userRoles = u.user_roles as { role_id: string; roles: { name: string; display_name: string } | null }[] | null;
+    const mapped: UserWithRole[] = (data ?? []).map((u) => {
+      const record = u as Record<string, unknown>;
+      const userRoles = record.user_roles as { role_id: string; roles: { name: string; display_name: string } | null }[] | null;
       const firstRole = userRoles?.[0];
+      const profile = record as unknown as Profile;
       return {
-        ...(u as unknown as Profile),
+        ...profile,
         role_name: firstRole?.roles?.name ?? '',
         role_display: firstRole?.roles?.display_name ?? 'Sin rol',
         role_id: firstRole?.role_id ?? '',
-        org_name: (isPlatform || isAggregator) ? orgMap[(u as Profile).org_id] ?? '' : undefined,
+        org_name: (isPlatform || isAggregator) ? orgMap[profile.org_id] ?? '' : undefined,
       };
     });
 
