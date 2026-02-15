@@ -27,6 +27,13 @@ const NAV_CONFIG: Record<OrgType, NavSection[]> = {
       ],
     },
     {
+      title: 'ADMINISTRACIÓN',
+      items: [
+        { label: 'Agregadores', path: '/hub/organizations', icon: '🏢', module: 'organizations' },
+        { label: 'Usuarios', path: '/hub/users', icon: '👥', module: 'users' },
+      ],
+    },
+    {
       title: 'GESTIÓN',
       items: [
         { label: 'Catálogo de Productos', path: '/hub/catalog', icon: '🗂️', module: 'catalog' },
@@ -50,6 +57,13 @@ const NAV_CONFIG: Record<OrgType, NavSection[]> = {
         { label: 'Inventario', path: '/hub/inventory', icon: '📦', module: 'inventory' },
         { label: 'Órdenes de Compra', path: '/hub/orders', icon: '🛒', module: 'orders' },
         { label: 'Carga de Inventario', path: '/hub/inventory/upload', icon: '📤', module: 'upload' },
+      ],
+    },
+    {
+      title: 'ADMINISTRACIÓN',
+      items: [
+        { label: 'Mis Asociados', path: '/hub/organizations', icon: '🏢', module: 'organizations' },
+        { label: 'Usuarios', path: '/hub/users', icon: '👥', module: 'users' },
       ],
     },
     {
