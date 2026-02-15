@@ -6,7 +6,21 @@ import { useAuthStore } from '@/stores/authStore.ts';
 import { StatusBadge } from '@/components/hub/shared/StatusBadge.tsx';
 import { EmptyState } from '@/components/hub/shared/EmptyState.tsx';
 import { StatsCard } from '@/components/hub/shared/StatsCard.tsx';
+import { Modal } from '@/components/hub/shared/Modal.tsx';
 import type { Product } from '@/lib/database.types.ts';
+
+const EMPTY_FORM = {
+  sku: '',
+  name: '',
+  description: '',
+  brand: '',
+  oem_number: '',
+  price: '',
+  cost: '',
+  stock: '',
+  min_stock: '5',
+  status: 'active' as const,
+};
 
 export function InventoryPage() {
   const [products, setProducts] = useState<Product[]>([]);
@@ -16,6 +30,14 @@ export function InventoryPage() {
   const { canWrite, isPlatform } = usePermissions();
   const organization = useAuthStore((s) => s.organization);
   const navigate = useNavigate();
+
+  // Create / Edit product state
+  const [showProduct, setShowProduct] = useState(false);
+  const [editingProduct, setEditingProduct] = useState<Product | null>(null);
+  const [productForm, setProductForm] = useState({ ...EMPTY_FORM });
+  const [productLoading, setProductLoading] = useState(false);
+  const [productError, setProductError] = useState('');
+  const [productSuccess, setProductSuccess] = useState('');
 
   useEffect(() => {
     loadProducts();
@@ -35,6 +57,101 @@ export function InventoryPage() {
     const { data } = await query;
     setProducts((data as Product[]) ?? []);
     setLoading(false);
+  };
+
+  const openCreateModal = () => {
+    setEditingProduct(null);
+    setProductForm({ ...EMPTY_FORM });
+    setProductError('');
+    setProductSuccess('');
+    setShowProduct(true);
+  };
+
+  const openEditModal = (product: Product) => {
+    setEditingProduct(product);
+    setProductForm({
+      sku: product.sku,
+      name: product.name,
+      description: product.description ?? '',
+      brand: product.brand ?? '',
+      oem_number: product.oem_number ?? '',
+      price: String(product.price),
+      cost: product.cost != null ? String(product.cost) : '',
+      stock: String(product.stock),
+      min_stock: String(product.min_stock),
+      status: product.status as 'active',
+    });
+    setProductError('');
+    setProductSuccess('');
+    setShowProduct(true);
+  };
+
+  const handleSaveProduct = async () => {
+    if (!productForm.name.trim()) {
+      setProductError('El nombre del producto es requerido');
+      return;
+    }
+
+    setProductLoading(true);
+    setProductError('');
+
+    const orgId = organization?.id;
+    if (!orgId && !isPlatform) {
+      setProductError('No se pudo determinar la organización');
+      setProductLoading(false);
+      return;
+    }
+
+    const productData = {
+      org_id: editingProduct?.org_id ?? orgId,
+      sku: productForm.sku.trim() || `SKU-${Date.now()}`,
+      name: productForm.name.trim(),
+      description: productForm.description.trim() || null,
+      brand: productForm.brand.trim() || null,
+      oem_number: productForm.oem_number.trim() || null,
+      price: parseFloat(productForm.price) || 0,
+      cost: productForm.cost ? parseFloat(productForm.cost) : null,
+      stock: parseInt(productForm.stock) || 0,
+      min_stock: parseInt(productForm.min_stock) || 5,
+      status: productForm.status,
+    };
+
+    if (editingProduct) {
+      const { error } = await supabase
+        .from('products')
+        .update(productData)
+        .eq('id', editingProduct.id);
+
+      if (error) {
+        setProductError(`Error al actualizar: ${error.message}`);
+        setProductLoading(false);
+        return;
+      }
+      setProductSuccess('Producto actualizado exitosamente');
+    } else {
+      const { error } = await supabase
+        .from('products')
+        .insert(productData);
+
+      if (error) {
+        if (error.message.includes('duplicate') || error.message.includes('unique')) {
+          setProductError('Ya existe un producto con ese SKU en tu organización');
+        } else {
+          setProductError(`Error al crear: ${error.message}`);
+        }
+        setProductLoading(false);
+        return;
+      }
+      setProductSuccess('Producto creado exitosamente');
+    }
+
+    setProductLoading(false);
+    loadProducts();
+    setTimeout(() => {
+      setShowProduct(false);
+      setProductSuccess('');
+      setEditingProduct(null);
+    }, 1500);
   };
 
   const filteredProducts = products.filter((p) =>
@@ -62,7 +179,7 @@ export function InventoryPage() {
                 📤 Carga Masiva
               </button>
               <button
-                onClick={() => {/* TODO: open product create modal */}}
+                onClick={openCreateModal}
                 className="rh-btn rh-btn-primary"
               >
                 + Nuevo Producto
@@ -114,8 +231,8 @@ export function InventoryPage() {
           icon="📦"
           title="No hay productos"
           description="Agrega productos a tu inventario para comenzar a gestionar"
-          actionLabel="Agregar Producto"
-          onAction={() => {}}
+          actionLabel={canWrite('inventory') ? 'Agregar Producto' : undefined}
+          onAction={canWrite('inventory') ? openCreateModal : undefined}
         />
       ) : (
         <div className="rh-table-wrapper">
@@ -132,7 +249,7 @@ export function InventoryPage() {
             </thead>
             <tbody>
               {filteredProducts.map((product) => (
-                <tr key={product.id} className="cursor-pointer">
+                <tr key={product.id} className="cursor-pointer" onClick={() => canWrite('inventory') && openEditModal(product)}>
                   <td>
                     <div>
                       <p className="cell-primary">{product.name}</p>
@@ -165,6 +282,203 @@ export function InventoryPage() {
           </table>
         </div>
       )}
+
+      {/* ── Create / Edit Product Modal ──────────────────────────────── */}
+      <Modal
+        open={showProduct}
+        onClose={() => {
+          setShowProduct(false);
+          setEditingProduct(null);
+          setProductError('');
+          setProductSuccess('');
+        }}
+        title={editingProduct ? 'Editar Producto' : 'Nuevo Producto'}
+        width="600px"
+        footer={
+          productSuccess ? (
+            <button
+              onClick={() => {
+                setShowProduct(false);
+                setProductSuccess('');
+                setEditingProduct(null);
+              }}
+              className="rh-btn rh-btn-primary"
+            >
+              Cerrar
+            </button>
+          ) : (
+            <>
+              <button
+                onClick={() => {
+                  setShowProduct(false);
+                  setEditingProduct(null);
+                  setProductError('');
+                }}
+                className="rh-btn rh-btn-ghost"
+              >
+                Cancelar
+              </button>
+              <button
+                onClick={handleSaveProduct}
+                disabled={productLoading || !productForm.name}
+                className="rh-btn rh-btn-primary"
+              >
+                {productLoading ? 'Guardando...' : editingProduct ? 'Guardar Cambios' : 'Crear Producto'}
+              </button>
+            </>
+          )
+        }
+      >
+        {productSuccess ? (
+          <div className="rh-alert rh-alert-success">
+            <div style={{ fontSize: 32, marginBottom: 12 }}>✅</div>
+            <p style={{ fontWeight: 500 }}>{productSuccess}</p>
+          </div>
+        ) : (
+          <>
+            {productError && (
+              <div className="rh-alert rh-alert-error mb-4">{productError}</div>
+            )}
+
+            <div className="rh-form-grid">
+              {/* Name - full width */}
+              <div className="col-span-2">
+                <div className="rh-field">
+                  <label className="rh-label">Nombre del producto *</label>
+                  <input
+                    type="text"
+                    value={productForm.name}
+                    onChange={(e) => setProductForm((f) => ({ ...f, name: e.target.value }))}
+                    className="rh-input"
+                    placeholder="Pastillas de freno Toyota Hilux"
+                  />
+                </div>
+              </div>
+
+              {/* SKU */}
+              <div className="rh-field">
+                <label className="rh-label">SKU</label>
+                <input
+                  type="text"
+                  value={productForm.sku}
+                  onChange={(e) => setProductForm((f) => ({ ...f, sku: e.target.value }))}
+                  className="rh-input"
+                  placeholder="TOY-04465-001"
+                />
+                <p className="rh-hint">Se genera automáticamente si se deja vacío</p>
+              </div>
+
+              {/* OEM */}
+              <div className="rh-field">
+                <label className="rh-label">Número OEM</label>
+                <input
+                  type="text"
+                  value={productForm.oem_number}
+                  onChange={(e) => setProductForm((f) => ({ ...f, oem_number: e.target.value }))}
+                  className="rh-input"
+                  placeholder="04465-33471"
+                />
+              </div>
+
+              {/* Brand */}
+              <div className="rh-field">
+                <label className="rh-label">Marca</label>
+                <input
+                  type="text"
+                  value={productForm.brand}
+                  onChange={(e) => setProductForm((f) => ({ ...f, brand: e.target.value }))}
+                  className="rh-input"
+                  placeholder="Toyota, Denso, KYB..."
+                />
+              </div>
+
+              {/* Status */}
+              <div className="rh-field">
+                <label className="rh-label">Estado</label>
+                <select
+                  value={productForm.status}
+                  onChange={(e) => setProductForm((f) => ({ ...f, status: e.target.value as 'active' }))}
+                  className="rh-select"
+                >
+                  <option value="active">Activo</option>
+                  <option value="inactive">Inactivo</option>
+                  <option value="out_of_stock">Agotado</option>
+                </select>
+              </div>
+
+              {/* Price */}
+              <div className="rh-field">
+                <label className="rh-label">Precio (USD) *</label>
+                <input
+                  type="number"
+                  step="0.01"
+                  min="0"
+                  value={productForm.price}
+                  onChange={(e) => setProductForm((f) => ({ ...f, price: e.target.value }))}
+                  className="rh-input"
+                  placeholder="25.50"
+                />
+              </div>
+
+              {/* Cost */}
+              <div className="rh-field">
+                <label className="rh-label">Costo (USD)</label>
+                <input
+                  type="number"
+                  step="0.01"
+                  min="0"
+                  value={productForm.cost}
+                  onChange={(e) => setProductForm((f) => ({ ...f, cost: e.target.value }))}
+                  className="rh-input"
+                  placeholder="15.00"
+                />
+              </div>
+
+              {/* Stock */}
+              <div className="rh-field">
+                <label className="rh-label">Stock</label>
+                <input
+                  type="number"
+                  min="0"
+                  value={productForm.stock}
+                  onChange={(e) => setProductForm((f) => ({ ...f, stock: e.target.value }))}
+                  className="rh-input"
+                  placeholder="100"
+                />
+              </div>
+
+              {/* Min Stock */}
+              <div className="rh-field">
+                <label className="rh-label">Stock mínimo</label>
+                <input
+                  type="number"
+                  min="0"
+                  value={productForm.min_stock}
+                  onChange={(e) => setProductForm((f) => ({ ...f, min_stock: e.target.value }))}
+                  className="rh-input"
+                  placeholder="5"
+                />
+                <p className="rh-hint">Alerta cuando el stock esté por debajo</p>
+              </div>
+
+              {/* Description - full width */}
+              <div className="col-span-2">
+                <div className="rh-field">
+                  <label className="rh-label">Descripción</label>
+                  <textarea
+                    value={productForm.description}
+                    onChange={(e) => setProductForm((f) => ({ ...f, description: e.target.value }))}
+                    className="rh-input"
+                    rows={3}
+                    placeholder="Descripción detallada del producto..."
+                    style={{ resize: 'vertical' }}
+                  />
+                </div>
+              </div>
+            </div>
+          </>
+        )}
+      </Modal>
     </div>
   );
 }
