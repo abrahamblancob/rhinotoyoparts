@@ -21,10 +21,6 @@ export function Topbar() {
   return (
     <header className="rh-topbar">
       <h2 className="rh-topbar-title">{title}</h2>
-      <div className="rh-topbar-search">
-        <span className="rh-topbar-search-icon">🔍</span>
-        <input type="text" placeholder="Buscar..." />
-      </div>
     </header>
   );
 }

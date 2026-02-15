@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { supabase } from '@/lib/supabase.ts';
 import { usePermissions } from '@/hooks/usePermissions.ts';
@@ -7,7 +7,10 @@ import { StatusBadge } from '@/components/hub/shared/StatusBadge.tsx';
 import { EmptyState } from '@/components/hub/shared/EmptyState.tsx';
 import { StatsCard } from '@/components/hub/shared/StatsCard.tsx';
 import { Modal } from '@/components/hub/shared/Modal.tsx';
+import { Pagination } from '@/features/inventory/upload/components/Pagination.tsx';
 import type { Product } from '@/lib/database.types.ts';
+
+const PAGE_SIZE = 20;
 
 const EMPTY_FORM = {
   sku: '',
@@ -27,6 +30,9 @@ export function InventoryPage() {
   const [loading, setLoading] = useState(true);
   const [search, setSearch] = useState('');
   const [statusFilter, setStatusFilter] = useState('all');
+  const [currentPage, setCurrentPage] = useState(1);
+  const [sortColumn, setSortColumn] = useState<'price' | 'stock' | null>(null);
+  const [sortDir, setSortDir] = useState<'asc' | 'desc'>('desc');
   const { canWrite, isPlatform } = usePermissions();
   const organization = useAuthStore((s) => s.organization);
   const navigate = useNavigate();
@@ -54,8 +60,11 @@ export function InventoryPage() {
     if (!isPlatform && organization) {
       query = query.eq('org_id', organization.id);
     }
-    if (statusFilter !== 'all') {
+    if (statusFilter === 'active' || statusFilter === 'inactive') {
       query = query.eq('status', statusFilter);
+    }
+    if (statusFilter === 'out_of_stock') {
+      query = query.eq('stock', 0);
     }
 
     const { data } = await query;
@@ -182,6 +191,19 @@ export function InventoryPage() {
     loadProducts();
   };
 
+  const toggleSort = (col: 'price' | 'stock') => {
+    if (sortColumn === col) {
+      setSortDir((d) => (d === 'asc' ? 'desc' : 'asc'));
+    } else {
+      setSortColumn(col);
+      setSortDir('desc');
+    }
+    setCurrentPage(1);
+  };
+
+  const sortIndicator = (col: 'price' | 'stock') =>
+    sortColumn === col ? (sortDir === 'asc' ? ' ↑' : ' ↓') : '';
+
   const filteredProducts = products.filter((p) =>
     !search ||
     p.name.toLowerCase().includes(search.toLowerCase()) ||
@@ -189,9 +211,37 @@ export function InventoryPage() {
     (p.oem_number ?? '').toLowerCase().includes(search.toLowerCase())
   );
 
+  const sortedProducts = sortColumn
+    ? [...filteredProducts].sort((a, b) => {
+        const valA = a[sortColumn];
+        const valB = b[sortColumn];
+        return sortDir === 'asc' ? valA - valB : valB - valA;
+      })
+    : filteredProducts;
+
+  const totalPages = Math.ceil(sortedProducts.length / PAGE_SIZE);
+  const paginatedProducts = sortedProducts.slice(
+    (currentPage - 1) * PAGE_SIZE,
+    currentPage * PAGE_SIZE,
+  );
+
   const totalStock = products.reduce((s, p) => s + p.stock, 0);
   const lowStock = products.filter((p) => p.stock > 0 && p.stock <= p.min_stock).length;
   const outOfStock = products.filter((p) => p.stock === 0).length;
+
+  // Brand distribution for bar chart
+  const brandData = useMemo(() => {
+    const map = new Map<string, number>();
+    for (const p of products) {
+      const brand = p.brand?.trim() || 'Sin marca';
+      map.set(brand, (map.get(brand) ?? 0) + 1);
+    }
+    return Array.from(map.entries())
+      .sort((a, b) => b[1] - a[1])
+      .slice(0, 10);
+  }, [products]);
+
+  const maxBrandCount = brandData.length > 0 ? brandData[0][1] : 1;
 
   return (
     <div>
@@ -225,13 +275,71 @@ export function InventoryPage() {
         <StatsCard title="Agotados" value={outOfStock} icon="🚫" color="#D3010A" />
       </div>
 
+      {/* Brand distribution chart */}
+      {brandData.length > 0 && (
+        <div className="rh-card mb-6" style={{ padding: '20px 24px' }}>
+          <h3 className="rh-card-title" style={{ marginBottom: 16, display: 'flex', alignItems: 'center', gap: 8 }}>
+            📊 Productos por Marca
+            <span style={{ fontSize: 12, fontWeight: 400, color: '#94A3B8' }}>
+              (Top {brandData.length})
+            </span>
+          </h3>
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
+            {brandData.map(([brand, count]) => (
+              <div key={brand} style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
+                <span
+                  style={{
+                    width: 100,
+                    fontSize: 13,
+                    fontWeight: 600,
+                    color: '#1E293B',
+                    textAlign: 'right',
+                    flexShrink: 0,
+                    overflow: 'hidden',
+                    textOverflow: 'ellipsis',
+                    whiteSpace: 'nowrap',
+                  }}
+                  title={brand}
+                >
+                  {brand}
+                </span>
+                <div style={{ flex: 1, backgroundColor: '#F1F5F9', borderRadius: 6, height: 24, overflow: 'hidden' }}>
+                  <div
+                    style={{
+                      width: `${(count / maxBrandCount) * 100}%`,
+                      height: '100%',
+                      backgroundColor: '#10B981',
+                      borderRadius: 6,
+                      minWidth: 2,
+                      transition: 'width 0.3s ease',
+                    }}
+                  />
+                </div>
+                <span
+                  style={{
+                    width: 40,
+                    fontSize: 13,
+                    fontWeight: 700,
+                    color: '#10B981',
+                    textAlign: 'right',
+                    flexShrink: 0,
+                  }}
+                >
+                  {count}
+                </span>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
+
       {/* Filters */}
-      <div className="rh-filters">
+      <div className="rh-filters" style={{ marginTop: 24 }}>
         <input
           type="text"
           placeholder="Buscar por nombre, SKU o OEM..."
           value={search}
-          onChange={(e) => setSearch(e.target.value)}
+          onChange={(e) => { setSearch(e.target.value); setCurrentPage(1); }}
           className="rh-search"
         />
         <div className="flex gap-2">
@@ -243,7 +351,7 @@ export function InventoryPage() {
           ].map((f) => (
             <button
               key={f.key}
-              onClick={() => setStatusFilter(f.key)}
+              onClick={() => { setStatusFilter(f.key); setCurrentPage(1); }}
               className={`rh-filter-pill ${statusFilter === f.key ? 'active' : ''}`}
             >
               {f.label}
@@ -270,14 +378,26 @@ export function InventoryPage() {
                 <th>Producto</th>
                 <th>SKU</th>
                 <th>Marca</th>
-                <th className="text-right">Precio</th>
-                <th className="text-right">Stock</th>
+                <th
+                  className="text-right"
+                  style={{ cursor: 'pointer', userSelect: 'none' }}
+                  onClick={() => toggleSort('price')}
+                >
+                  Precio{sortIndicator('price')}
+                </th>
+                <th
+                  className="text-right"
+                  style={{ cursor: 'pointer', userSelect: 'none' }}
+                  onClick={() => toggleSort('stock')}
+                >
+                  Stock{sortIndicator('stock')}
+                </th>
                 <th>Estado</th>
                 {canWrite('inventory') && <th className="text-center">Acciones</th>}
               </tr>
             </thead>
             <tbody>
-              {filteredProducts.map((product) => (
+              {paginatedProducts.map((product) => (
                 <tr key={product.id} className="cursor-pointer" onClick={() => canWrite('inventory') && openEditModal(product)}>
                   <td>
                     <div>
@@ -324,6 +444,13 @@ export function InventoryPage() {
               ))}
             </tbody>
           </table>
+          <Pagination
+            currentPage={currentPage}
+            totalPages={totalPages}
+            totalItems={sortedProducts.length}
+            pageSize={PAGE_SIZE}
+            onPageChange={setCurrentPage}
+          />
         </div>
       )}
 
