@@ -39,11 +39,11 @@ function RhinoHubNavbar() {
             <Link
               to="/hub/login"
               onClick={() => trackEvent({ action: 'rhinohub_login_click', category: 'rhinohub', label: 'navbar' })}
-              className="inline-flex items-center gap-2 text-sm font-medium px-4 py-2 rounded-md transition-all hover:opacity-90"
-              style={{ backgroundColor: '#D3010A', color: '#fff' }}
+              className="rhino-hero-btn-primary"
+              style={{ padding: '10px 24px', fontSize: 14, borderRadius: 10, gap: 8, boxShadow: '0 4px 16px rgba(211, 47, 47, 0.25)' }}
             >
-              <LogIn size={15} />
-              <span>Iniciar sesión</span>
+              <LogIn size={16} />
+              Iniciar sesión
             </Link>
           </div>
         </div>
