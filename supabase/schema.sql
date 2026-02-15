@@ -11,6 +11,7 @@ CREATE TYPE product_status AS ENUM ('active', 'inactive', 'out_of_stock');
 CREATE TYPE invoice_type AS ENUM ('sale', 'commission', 'credit_note');
 CREATE TYPE invoice_status AS ENUM ('draft', 'issued', 'paid', 'overdue', 'cancelled');
 CREATE TYPE upload_status AS ENUM ('pending', 'processing', 'completed', 'failed');
+CREATE TYPE lot_status AS ENUM ('active', 'partial', 'depleted', 'cancelled');
 
 -- ============================================================
 -- 1. ORGANIZATIONS
@@ -222,17 +223,58 @@ CREATE TABLE invoices (
 );
 
 -- ============================================================
--- 15. BULK_UPLOADS
+-- 15. INVENTORY_LOTS (each bulk upload = one lot)
+-- ============================================================
+CREATE TABLE inventory_lots (
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  org_id UUID NOT NULL REFERENCES organizations(id) ON DELETE CASCADE,
+  uploaded_by UUID NOT NULL REFERENCES profiles(id),
+  lot_number TEXT NOT NULL,
+  file_name TEXT,
+  total_products INT DEFAULT 0,
+  total_stock INT DEFAULT 0,
+  total_cost NUMERIC(14,2) DEFAULT 0,
+  total_retail_value NUMERIC(14,2) DEFAULT 0,
+  status lot_status DEFAULT 'active',
+  notes TEXT,
+  created_at TIMESTAMPTZ DEFAULT now(),
+  updated_at TIMESTAMPTZ DEFAULT now()
+);
+
+CREATE UNIQUE INDEX idx_lots_org_number ON inventory_lots(org_id, lot_number);
+
+-- ============================================================
+-- 15b. PRODUCT_LOT_ENTRIES (detail: which products, how many, at what cost)
+-- ============================================================
+CREATE TABLE product_lot_entries (
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  lot_id UUID NOT NULL REFERENCES inventory_lots(id) ON DELETE CASCADE,
+  product_id UUID NOT NULL REFERENCES products(id) ON DELETE CASCADE,
+  initial_stock INT NOT NULL DEFAULT 0,
+  remaining_stock INT NOT NULL DEFAULT 0,
+  unit_cost NUMERIC(12,2) DEFAULT 0,
+  unit_price NUMERIC(12,2) DEFAULT 0,
+  created_at TIMESTAMPTZ DEFAULT now()
+);
+
+CREATE INDEX idx_lot_entries_lot ON product_lot_entries(lot_id);
+CREATE INDEX idx_lot_entries_product ON product_lot_entries(product_id);
+
+-- ============================================================
+-- 16. BULK_UPLOADS (technical upload log)
 -- ============================================================
 CREATE TABLE bulk_uploads (
   id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
   org_id UUID NOT NULL REFERENCES organizations(id) ON DELETE CASCADE,
   uploaded_by UUID NOT NULL REFERENCES profiles(id),
+  lot_id UUID REFERENCES inventory_lots(id) ON DELETE SET NULL,
   file_name TEXT NOT NULL,
   file_url TEXT,
   total_rows INT DEFAULT 0,
   success_rows INT DEFAULT 0,
   error_rows INT DEFAULT 0,
+  total_stock INT DEFAULT 0,
+  inventory_value NUMERIC(14,2) DEFAULT 0,
   status upload_status DEFAULT 'pending',
   errors_json JSONB,
   created_at TIMESTAMPTZ DEFAULT now()
@@ -298,3 +340,4 @@ CREATE TRIGGER trg_profiles_updated BEFORE UPDATE ON profiles FOR EACH ROW EXECU
 CREATE TRIGGER trg_products_updated BEFORE UPDATE ON products FOR EACH ROW EXECUTE FUNCTION update_updated_at();
 CREATE TRIGGER trg_customers_updated BEFORE UPDATE ON customers FOR EACH ROW EXECUTE FUNCTION update_updated_at();
 CREATE TRIGGER trg_orders_updated BEFORE UPDATE ON orders FOR EACH ROW EXECUTE FUNCTION update_updated_at();
+CREATE TRIGGER trg_inventory_lots_updated BEFORE UPDATE ON inventory_lots FOR EACH ROW EXECUTE FUNCTION update_updated_at();

@@ -21,6 +21,7 @@ export function usePermissions() {
   const isPlatform = organization?.type === 'platform';
   const isAggregator = organization?.type === 'aggregator';
   const isAssociate = organization?.type === 'associate';
+  const isPlatformOwner = roles.includes('platform_owner');
 
   return {
     hasPermission,
@@ -29,6 +30,7 @@ export function usePermissions() {
     canDelete,
     canManage,
     isPlatform,
+    isPlatformOwner,
     isAggregator,
     isAssociate,
     orgType: organization?.type,

@@ -13,7 +13,7 @@ import type {
 
 import { parseFile } from './upload/parseFile.ts';
 import { validateRows } from './upload/validateRows.ts';
-import { uploadProducts, logBulkUpload } from './upload/uploadBatch.ts';
+import { uploadProducts, logBulkUpload, createInventoryLot } from './upload/uploadBatch.ts';
 import { smartMapColumns } from './upload/smartMapping.ts';
 import type { SmartMappingResult } from './upload/smartMapping.ts';
 
@@ -25,6 +25,7 @@ import { SummaryView } from './upload/components/SummaryView.tsx';
 import { UploadProgressView } from './upload/components/UploadProgressView.tsx';
 import { ResultsView } from './upload/components/ResultsView.tsx';
 import { ColumnMappingModal } from './upload/components/ColumnMappingModal.tsx';
+import { RecentUploadsTable } from './upload/components/RecentUploadsTable.tsx';
 
 export function InventoryUploadPage() {
   const navigate = useNavigate();
@@ -55,6 +56,9 @@ export function InventoryUploadPage() {
 
   // Error state
   const [fatalError, setFatalError] = useState('');
+
+  // Refresh key to re-fetch recent uploads after a new upload
+  const [uploadsRefreshKey, setUploadsRefreshKey] = useState(0);
 
   // Permission check
   if (!canWrite('inventory')) {
@@ -144,13 +148,28 @@ export function InventoryUploadPage() {
     if (!processingResult || !organization || !user) return;
 
     setStep('uploading');
-    const finalProgress = await uploadProducts(
+    const { progress: finalProgress, insertedProducts } = await uploadProducts(
       processingResult.validRows,
       organization.id,
       setUploadProgress,
     );
 
-    // Log to bulk_uploads table
+    // Calculate inventory totals for logging
+    const totalStock = insertedProducts.reduce((sum, p) => sum + p.stock, 0);
+    const inventoryValue = insertedProducts.reduce(
+      (sum, p) => sum + p.stock * p.price,
+      0,
+    );
+
+    // Create inventory lot with product entries
+    const lotId = await createInventoryLot(
+      organization.id,
+      user.id,
+      fileName,
+      insertedProducts,
+    );
+
+    // Log to bulk_uploads table (linked to lot)
     await logBulkUpload(
       organization.id,
       user.id,
@@ -159,11 +178,42 @@ export function InventoryUploadPage() {
       finalProgress.successCount,
       finalProgress.errorCount,
       finalProgress.errors.length > 0 ? finalProgress.errors : null,
+      totalStock,
+      inventoryValue,
+      lotId,
     );
 
     setUploadProgress(finalProgress);
+    setUploadsRefreshKey((k) => k + 1);
     setStep('results');
   }, [processingResult, organization, user, fileName]);
+
+  // Navigate back to a specific step (preserving state)
+  const handleGoToStep = useCallback(
+    (target: WizardStep) => {
+      // Only allow navigating to steps where we have data
+      if (target === 'file') {
+        setStep('file');
+      } else if (target === 'mapping' && smartMappingResult) {
+        setStep('mapping');
+      } else if (target === 'summary' && processingResult) {
+        setStep('summary');
+      }
+    },
+    [smartMappingResult, processingResult],
+  );
+
+  // Go back from mapping → file (re-select file)
+  const handleBackFromMapping = useCallback(() => {
+    setStep('file');
+  }, []);
+
+  // Go back from summary → mapping (re-edit column assignments)
+  const handleBackFromSummary = useCallback(() => {
+    if (smartMappingResult) {
+      setStep('mapping');
+    }
+  }, [smartMappingResult]);
 
   // Reset wizard to start
   const handleReset = useCallback(() => {
@@ -196,7 +246,7 @@ export function InventoryUploadPage() {
       </div>
 
       {/* Step indicator */}
-      <StepIndicator currentStep={step} />
+      <StepIndicator currentStep={step} onStepClick={handleGoToStep} />
 
       {/* Fatal error */}
       {fatalError && (
@@ -227,8 +277,10 @@ export function InventoryUploadPage() {
       {step === 'mapping' && smartMappingResult && (
         <SmartMappingView
           result={smartMappingResult}
+          rawRows={rawRows}
           onAccept={handleAcceptMapping}
           onCancel={handleReset}
+          onBack={handleBackFromMapping}
         />
       )}
 
@@ -241,6 +293,7 @@ export function InventoryUploadPage() {
           onConfirm={handleConfirmUpload}
           onCancel={handleReset}
           onEditMappings={() => setShowMappingModal(true)}
+          onBack={handleBackFromSummary}
         />
       )}
 
@@ -256,6 +309,13 @@ export function InventoryUploadPage() {
           fileName={fileName}
           onUploadAnother={handleReset}
         />
+      )}
+
+      {/* Recent uploads history — visible on file selection and results steps */}
+      {(step === 'file' || step === 'results') && organization && (
+        <div style={{ marginTop: 32 }}>
+          <RecentUploadsTable orgId={organization.id} refreshKey={uploadsRefreshKey} />
+        </div>
       )}
 
       {/* Column mapping modal (shared by mapping and summary steps) */}

@@ -200,6 +200,40 @@ CREATE POLICY "invoices_update" ON invoices FOR UPDATE TO authenticated
   USING (org_id IN (SELECT get_user_org_ids()));
 
 -- ============================================================
+-- INVENTORY_LOTS
+-- ============================================================
+ALTER TABLE inventory_lots ENABLE ROW LEVEL SECURITY;
+
+CREATE POLICY "lots_select" ON inventory_lots FOR SELECT TO authenticated
+  USING (org_id IN (SELECT get_user_org_ids()));
+
+CREATE POLICY "lots_insert" ON inventory_lots FOR INSERT TO authenticated
+  WITH CHECK (org_id IN (SELECT get_user_org_ids()));
+
+CREATE POLICY "lots_update" ON inventory_lots FOR UPDATE TO authenticated
+  USING (org_id IN (SELECT get_user_org_ids()));
+
+CREATE POLICY "lots_delete" ON inventory_lots FOR DELETE TO authenticated
+  USING (org_id IN (SELECT get_user_org_ids()));
+
+-- ============================================================
+-- PRODUCT_LOT_ENTRIES
+-- ============================================================
+ALTER TABLE product_lot_entries ENABLE ROW LEVEL SECURITY;
+
+CREATE POLICY "lot_entries_select" ON product_lot_entries FOR SELECT TO authenticated
+  USING (lot_id IN (SELECT id FROM inventory_lots WHERE org_id IN (SELECT get_user_org_ids())));
+
+CREATE POLICY "lot_entries_insert" ON product_lot_entries FOR INSERT TO authenticated
+  WITH CHECK (lot_id IN (SELECT id FROM inventory_lots WHERE org_id IN (SELECT get_user_org_ids())));
+
+CREATE POLICY "lot_entries_update" ON product_lot_entries FOR UPDATE TO authenticated
+  USING (lot_id IN (SELECT id FROM inventory_lots WHERE org_id IN (SELECT get_user_org_ids())));
+
+CREATE POLICY "lot_entries_delete" ON product_lot_entries FOR DELETE TO authenticated
+  USING (lot_id IN (SELECT id FROM inventory_lots WHERE org_id IN (SELECT get_user_org_ids())));
+
+-- ============================================================
 -- BULK_UPLOADS
 -- ============================================================
 CREATE POLICY "bulk_uploads_select" ON bulk_uploads FOR SELECT TO authenticated

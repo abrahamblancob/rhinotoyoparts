@@ -9,11 +9,15 @@ const STEPS: { key: WizardStep; label: string; icon: string }[] = [
   { key: 'results', label: 'Resultados', icon: '6' },
 ];
 
+/** Steps the user can navigate back to by clicking in the step bar */
+const NAVIGABLE_STEPS: Set<WizardStep> = new Set(['file', 'mapping', 'summary']);
+
 interface Props {
   currentStep: WizardStep;
+  onStepClick?: (step: WizardStep) => void;
 }
 
-export function StepIndicator({ currentStep }: Props) {
+export function StepIndicator({ currentStep, onStepClick }: Props) {
   const currentIndex = STEPS.findIndex((s) => s.key === currentStep);
 
   return (
@@ -21,8 +25,19 @@ export function StepIndicator({ currentStep }: Props) {
       {STEPS.map((step, i) => {
         const state =
           i < currentIndex ? 'completed' : i === currentIndex ? 'active' : 'pending';
+        const canClick =
+          state === 'completed' &&
+          NAVIGABLE_STEPS.has(step.key) &&
+          onStepClick != null;
+
         return (
-          <div key={step.key} className={`rh-wizard-step ${state}`}>
+          <div
+            key={step.key}
+            className={`rh-wizard-step ${state}${canClick ? ' clickable' : ''}`}
+            onClick={canClick ? () => onStepClick(step.key) : undefined}
+            style={canClick ? { cursor: 'pointer' } : undefined}
+            title={canClick ? `Volver a ${step.label}` : undefined}
+          >
             <div className="rh-wizard-step-circle">
               {state === 'completed' ? '\u2713' : step.icon}
             </div>

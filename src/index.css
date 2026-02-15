@@ -2224,6 +2224,16 @@ select.rh-select:disabled {
   color: #10B981;
 }
 
+.rh-wizard-step.clickable:hover .rh-wizard-step-circle {
+  transform: scale(1.15);
+  box-shadow: 0 2px 8px rgba(16, 185, 129, 0.35);
+  transition: transform 0.15s ease, box-shadow 0.15s ease;
+}
+
+.rh-wizard-step.clickable:hover .rh-wizard-step-label {
+  text-decoration: underline;
+}
+
 .rh-wizard-step-line {
   width: 40px;
   height: 2px;
