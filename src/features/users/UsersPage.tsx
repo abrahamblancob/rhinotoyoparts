@@ -26,7 +26,7 @@ export function UsersPage() {
   const [loading, setLoading] = useState(true);
   const [showCreate, setShowCreate] = useState(false);
   const [search, setSearch] = useState('');
-  const { canWrite, isPlatform, isAggregator } = usePermissions();
+  const { canWrite, canManage, isPlatform, isAggregator } = usePermissions();
   const organization = useAuthStore((s) => s.organization);
 
   // Create user form
@@ -55,6 +55,10 @@ export function UsersPage() {
   // Resend invitation state
   const [resendLoading, setResendLoading] = useState<string | null>(null);
   const [resendMsg, setResendMsg] = useState('');
+
+  // Delete user state
+  const [deleteTarget, setDeleteTarget] = useState<UserWithRole | null>(null);
+  const [deleteLoading, setDeleteLoading] = useState(false);
 
   // Available roles and orgs for the form
   const [availableRoles, setAvailableRoles] = useState<Role[]>([]);
@@ -381,6 +385,49 @@ export function UsersPage() {
     setTimeout(() => setResendMsg(''), 3000);
   };
 
+  // ── Delete User Handler ─────────────────────────────────
+  const handleDeleteUser = async () => {
+    if (!deleteTarget) return;
+    setDeleteLoading(true);
+
+    const { data: { session } } = await supabase.auth.getSession();
+    if (!session?.access_token) {
+      setResendMsg('Sesión expirada');
+      setDeleteLoading(false);
+      setDeleteTarget(null);
+      return;
+    }
+
+    const supabaseUrl = import.meta.env.VITE_SUPABASE_URL as string;
+    const supabaseAnonKey = import.meta.env.VITE_SUPABASE_ANON_KEY as string;
+
+    try {
+      const res = await fetch(`${supabaseUrl}/functions/v1/delete-user`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${session.access_token}`,
+          'apikey': supabaseAnonKey,
+        },
+        body: JSON.stringify({ user_id: deleteTarget.id }),
+      });
+
+      const data = await res.json();
+      if (!res.ok) {
+        setResendMsg(data?.error || 'Error al eliminar usuario');
+      } else {
+        setResendMsg(data?.message || 'Usuario eliminado');
+        loadUsers();
+      }
+    } catch {
+      setResendMsg('Error de conexión');
+    }
+
+    setDeleteLoading(false);
+    setDeleteTarget(null);
+    setTimeout(() => setResendMsg(''), 3000);
+  };
+
   const showOrgSelector = isPlatform || isAggregator;
   const currentUserId = useAuthStore.getState().user?.id;
 
@@ -511,6 +558,16 @@ export function UsersPage() {
                               title="Enviar reset de contraseña"
                             >
                               {resendLoading === user.id ? '⏳' : '🔑'} Reset
+                            </button>
+                          )}
+                          {canManage('users') && user.id !== currentUserId && (
+                            <button
+                              onClick={() => setDeleteTarget(user)}
+                              className="rh-btn rh-btn-ghost"
+                              style={{ padding: '4px 10px', fontSize: 13, color: '#DC2626' }}
+                              title="Eliminar usuario"
+                            >
+                              🗑️ Eliminar
                             </button>
                           )}
                         </div>
@@ -801,6 +858,48 @@ export function UsersPage() {
                 </div>
               </div>
             </div>
+          </div>
+        )}
+      </Modal>
+
+      {/* ── Delete Confirmation Modal ──────────────────────────────── */}
+      <Modal
+        open={!!deleteTarget}
+        onClose={() => setDeleteTarget(null)}
+        title="Eliminar Usuario"
+        width="440px"
+        footer={
+          <>
+            <button
+              onClick={() => setDeleteTarget(null)}
+              className="rh-btn rh-btn-ghost"
+              disabled={deleteLoading}
+            >
+              Cancelar
+            </button>
+            <button
+              onClick={handleDeleteUser}
+              disabled={deleteLoading}
+              className="rh-btn"
+              style={{ backgroundColor: '#DC2626', color: '#fff', border: 'none' }}
+            >
+              {deleteLoading ? 'Eliminando...' : 'Sí, Eliminar'}
+            </button>
+          </>
+        }
+      >
+        {deleteTarget && (
+          <div style={{ textAlign: 'center', padding: '8px 0' }}>
+            <div style={{ fontSize: 40, marginBottom: 12 }}>⚠️</div>
+            <p style={{ fontWeight: 500, marginBottom: 8 }}>
+              ¿Estás seguro que deseas eliminar a este usuario?
+            </p>
+            <p style={{ color: '#8A8886', fontSize: 14, marginBottom: 16 }}>
+              <strong>{deleteTarget.full_name}</strong> ({deleteTarget.email})
+            </p>
+            <p style={{ color: '#DC2626', fontSize: 13 }}>
+              Esta acción es irreversible. Se eliminará el usuario, su perfil y todos sus roles.
+            </p>
           </div>
         )}
       </Modal>

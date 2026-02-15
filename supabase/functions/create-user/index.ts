@@ -153,7 +153,7 @@ Deno.serve(async (req) => {
 
     // Step 4: Send password reset email so user can set their own password
     // resetPasswordForEmail() uses Supabase's built-in email system and actually sends the email
-    const siteUrl = req.headers.get('origin') ?? Deno.env.get('SITE_URL') ?? supabaseUrl
+    const siteUrl = Deno.env.get('SITE_URL') || 'https://www.rhinotoyoparts.com'
     const redirectUrl = `${siteUrl}/hub/reset-password`
 
     // Use an anon client to call resetPasswordForEmail — this triggers Supabase's email sender

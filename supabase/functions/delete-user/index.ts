@@ -1,5 +1,6 @@
-// Supabase Edge Function: resend-invitation
-// Resends the password reset email for a pending user.
+// Supabase Edge Function: delete-user
+// Deletes a user from auth and their profile/roles.
+// Only platform users with users:manage permission can delete.
 
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2'
 
@@ -52,11 +53,16 @@ Deno.serve(async (req) => {
       return jsonResponse({ error: 'No autorizado' }, 401)
     }
 
+    // Prevent self-deletion
+    if (callingUser.id === user_id) {
+      return jsonResponse({ error: 'No puedes eliminarte a ti mismo' }, 400)
+    }
+
     const supabaseAdmin = createClient(supabaseUrl, supabaseServiceKey, {
       auth: { autoRefreshToken: false, persistSession: false },
     })
 
-    // Verify calling user has users:write or users:manage permission
+    // Verify calling user has users:manage permission or is platform owner
     const { data: callerRoles } = await supabaseAdmin
       .from('user_roles')
       .select('role_id')
@@ -81,18 +87,17 @@ Deno.serve(async (req) => {
         .in('role_id', roleIds)
       const ok = (perms ?? []).some(
         (rp: { permissions: { module: string; action: string } | null }) =>
-          rp.permissions?.module === 'users' &&
-          (rp.permissions?.action === 'write' || rp.permissions?.action === 'manage')
+          rp.permissions?.module === 'users' && rp.permissions?.action === 'manage'
       )
       if (!ok) {
-        return jsonResponse({ error: 'Sin permisos para gestionar usuarios' }, 403)
+        return jsonResponse({ error: 'Se requiere permiso users:manage para eliminar usuarios' }, 403)
       }
     }
 
-    // Get the target user's email
+    // Get target user info before deleting
     const { data: targetProfile } = await supabaseAdmin
       .from('profiles')
-      .select('email, full_name')
+      .select('full_name, email')
       .eq('id', user_id as string)
       .single()
 
@@ -100,25 +105,30 @@ Deno.serve(async (req) => {
       return jsonResponse({ error: 'Usuario no encontrado' }, 404)
     }
 
-    // Send password reset email
-    const siteUrl = Deno.env.get('SITE_URL') || 'https://www.rhinotoyoparts.com'
-    const redirectUrl = `${siteUrl}/hub/reset-password`
+    // Delete user roles
+    await supabaseAdmin
+      .from('user_roles')
+      .delete()
+      .eq('user_id', user_id as string)
 
-    const anonClient = createClient(supabaseUrl, supabaseAnonKey)
-    const { error: emailError } = await anonClient.auth.resetPasswordForEmail(
-      targetProfile.email,
-      { redirectTo: redirectUrl }
-    )
+    // Delete profile
+    await supabaseAdmin
+      .from('profiles')
+      .delete()
+      .eq('id', user_id as string)
 
-    if (emailError) {
+    // Delete auth user
+    const { error: deleteError } = await supabaseAdmin.auth.admin.deleteUser(user_id as string)
+
+    if (deleteError) {
       return jsonResponse({
-        error: `Error al enviar correo: ${emailError.message}`,
+        error: `Error al eliminar usuario de auth: ${deleteError.message}`,
       }, 400)
     }
 
     return jsonResponse({
       success: true,
-      message: `Correo de recuperación enviado a ${targetProfile.email}`,
+      message: `Usuario ${targetProfile.full_name} (${targetProfile.email}) eliminado exitosamente`,
     })
 
   } catch (err) {
