@@ -39,6 +39,10 @@ export function InventoryPage() {
   const [productError, setProductError] = useState('');
   const [productSuccess, setProductSuccess] = useState('');
 
+  // Delete product state
+  const [deleteTarget, setDeleteTarget] = useState<Product | null>(null);
+  const [deleteLoading, setDeleteLoading] = useState(false);
+
   useEffect(() => {
     loadProducts();
   }, [statusFilter]);
@@ -154,6 +158,30 @@ export function InventoryPage() {
     }, 1500);
   };
 
+  const handleDeleteProduct = async () => {
+    if (!deleteTarget) return;
+    setDeleteLoading(true);
+
+    const { error } = await supabase
+      .from('products')
+      .delete()
+      .eq('id', deleteTarget.id);
+
+    if (error) {
+      setDeleteLoading(false);
+      setDeleteTarget(null);
+      setProductError(`Error al eliminar: ${error.message}`);
+      return;
+    }
+
+    setDeleteLoading(false);
+    setDeleteTarget(null);
+    // Close edit modal if open
+    setShowProduct(false);
+    setEditingProduct(null);
+    loadProducts();
+  };
+
   const filteredProducts = products.filter((p) =>
     !search ||
     p.name.toLowerCase().includes(search.toLowerCase()) ||
@@ -245,6 +273,7 @@ export function InventoryPage() {
                 <th className="text-right">Precio</th>
                 <th className="text-right">Stock</th>
                 <th>Estado</th>
+                {canWrite('inventory') && <th className="text-center">Acciones</th>}
               </tr>
             </thead>
             <tbody>
@@ -276,6 +305,21 @@ export function InventoryPage() {
                   <td>
                     <StatusBadge status={product.status} />
                   </td>
+                  {canWrite('inventory') && (
+                    <td className="text-center">
+                      <button
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          setDeleteTarget(product);
+                        }}
+                        className="rh-btn rh-btn-ghost"
+                        style={{ color: '#D3010A', padding: '4px 8px', fontSize: 13 }}
+                        title="Eliminar producto"
+                      >
+                        🗑️
+                      </button>
+                    </td>
+                  )}
                 </tr>
               ))}
             </tbody>
@@ -307,25 +351,36 @@ export function InventoryPage() {
               Cerrar
             </button>
           ) : (
-            <>
-              <button
-                onClick={() => {
-                  setShowProduct(false);
-                  setEditingProduct(null);
-                  setProductError('');
-                }}
-                className="rh-btn rh-btn-ghost"
-              >
-                Cancelar
-              </button>
-              <button
-                onClick={handleSaveProduct}
-                disabled={productLoading || !productForm.name}
-                className="rh-btn rh-btn-primary"
-              >
-                {productLoading ? 'Guardando...' : editingProduct ? 'Guardar Cambios' : 'Crear Producto'}
-              </button>
-            </>
+            <div style={{ display: 'flex', justifyContent: editingProduct ? 'space-between' : 'flex-end', width: '100%', alignItems: 'center' }}>
+              {editingProduct && canWrite('inventory') && (
+                <button
+                  onClick={() => setDeleteTarget(editingProduct)}
+                  className="rh-btn rh-btn-ghost"
+                  style={{ color: '#D3010A' }}
+                >
+                  🗑️ Eliminar
+                </button>
+              )}
+              <div style={{ display: 'flex', gap: 8 }}>
+                <button
+                  onClick={() => {
+                    setShowProduct(false);
+                    setEditingProduct(null);
+                    setProductError('');
+                  }}
+                  className="rh-btn rh-btn-ghost"
+                >
+                  Cancelar
+                </button>
+                <button
+                  onClick={handleSaveProduct}
+                  disabled={productLoading || !productForm.name}
+                  className="rh-btn rh-btn-primary"
+                >
+                  {productLoading ? 'Guardando...' : editingProduct ? 'Guardar Cambios' : 'Crear Producto'}
+                </button>
+              </div>
+            </div>
           )
         }
       >
@@ -478,6 +533,48 @@ export function InventoryPage() {
             </div>
           </>
         )}
+      </Modal>
+
+      {/* ── Delete Confirmation Modal ──────────────────────────────── */}
+      <Modal
+        open={!!deleteTarget}
+        onClose={() => !deleteLoading && setDeleteTarget(null)}
+        title="Eliminar Producto"
+        width="460px"
+        footer={
+          <>
+            <button
+              onClick={() => setDeleteTarget(null)}
+              disabled={deleteLoading}
+              className="rh-btn rh-btn-ghost"
+            >
+              Cancelar
+            </button>
+            <button
+              onClick={handleDeleteProduct}
+              disabled={deleteLoading}
+              className="rh-btn"
+              style={{ background: '#D3010A', color: '#fff' }}
+            >
+              {deleteLoading ? 'Eliminando...' : 'Sí, Eliminar'}
+            </button>
+          </>
+        }
+      >
+        <div style={{ textAlign: 'center', padding: '8px 0' }}>
+          <div style={{ fontSize: 40, marginBottom: 12 }}>⚠️</div>
+          <p style={{ fontWeight: 500, marginBottom: 8 }}>
+            ¿Estás seguro de que deseas eliminar este producto?
+          </p>
+          {deleteTarget && (
+            <p style={{ color: '#94A3B8', fontSize: 14 }}>
+              <strong>{deleteTarget.name}</strong> (SKU: {deleteTarget.sku})
+            </p>
+          )}
+          <p style={{ color: '#F59E0B', fontSize: 13, marginTop: 12 }}>
+            Esta acción no se puede deshacer.
+          </p>
+        </div>
       </Modal>
     </div>
   );
