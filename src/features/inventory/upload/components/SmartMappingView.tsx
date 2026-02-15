@@ -1,3 +1,4 @@
+import { useState } from 'react';
 import type { SmartMappingResult } from '../smartMapping.ts';
 import type { ColumnMapping } from '../types.ts';
 import { PRODUCT_FIELDS } from '../constants.ts';
@@ -6,197 +7,228 @@ interface Props {
   result: SmartMappingResult;
   onAccept: (mappings: ColumnMapping[]) => void;
   onCancel: () => void;
-  onEditMappings: () => void;
 }
 
 export function SmartMappingView({
   result,
   onAccept,
   onCancel,
-  onEditMappings,
 }: Props) {
-  const mappedCount = result.mappings.filter((m) => m.productField).length;
-  const requiredFields = PRODUCT_FIELDS.filter((f) => f.required).map((f) => f.key);
+  const [mappings, setMappings] = useState<ColumnMapping[]>(result.mappings);
+
+  const handleChange = (index: number, field: string | null) => {
+    setMappings((prev) =>
+      prev.map((m, i) =>
+        i === index ? { ...m, productField: field, autoDetected: false } : m,
+      ),
+    );
+  };
+
+  // Check required fields
   const mappedFields = new Set(
-    result.mappings.filter((m) => m.productField).map((m) => m.productField!),
+    mappings.filter((m) => m.productField).map((m) => m.productField!),
   );
-  const missingRequired = requiredFields.filter((f) => !mappedFields.has(f));
+  const requiredKeys = PRODUCT_FIELDS.filter((f) => f.required).map((f) => f.key);
+  const missingRequired = requiredKeys.filter((f) => !mappedFields.has(f));
+  const canContinue = missingRequired.length === 0;
 
   return (
-    <div className="rh-card" style={{ padding: 24 }}>
-      {/* Header */}
-      <div style={{ textAlign: 'center', marginBottom: 24 }}>
-        <div style={{ fontSize: 40, marginBottom: 12 }}>
-          {result.usedAI ? '🤖' : '🔍'}
-        </div>
+    <div className="rh-card" style={{ padding: '32px 28px', maxWidth: 700, margin: '0 auto' }}>
+      {/* Friendly header */}
+      <div style={{ textAlign: 'center', marginBottom: 28 }}>
+        <div style={{ fontSize: 44, marginBottom: 12 }}>📋</div>
         <h3
           style={{
-            fontSize: 18,
-            fontWeight: 600,
+            fontSize: 20,
+            fontWeight: 700,
             color: '#242321',
-            marginBottom: 4,
+            marginBottom: 10,
+            lineHeight: 1.3,
           }}
         >
-          {result.usedAI
-            ? 'Mapeo Inteligente (IA)'
-            : 'Mapeo Automatico'}
+          Necesitamos tu ayuda para entender tu archivo
         </h3>
-        <p style={{ fontSize: 14, color: '#8A8886' }}>
-          {result.usedAI
-            ? 'La IA analizo las columnas de tu archivo y sugirio el siguiente mapeo'
-            : 'Se analizaron los nombres y contenidos de las columnas'}
+        <p
+          style={{
+            fontSize: 14,
+            color: '#8A8886',
+            lineHeight: 1.7,
+            maxWidth: 520,
+            margin: '0 auto',
+          }}
+        >
+          Hemos analizado tu archivo y las columnas no coinciden del todo con los
+          datos que necesitamos, pero <strong style={{ color: '#242321' }}>podemos ayudarte a procesarlo</strong> si
+          eliges el significado de cada campo.
+        </p>
+        <p
+          style={{
+            fontSize: 13,
+            color: '#10B981',
+            marginTop: 10,
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            gap: 6,
+          }}
+        >
+          🔒 Hasta este momento es un proceso local y nada se ha subido. Tranquilo, estamos aqui para ayudarte.
         </p>
       </div>
 
-      {/* Mapped columns */}
-      {result.explanations.length > 0 && (
-        <div style={{ marginBottom: 20 }}>
-          <h4
-            style={{
-              fontSize: 14,
-              fontWeight: 600,
-              color: '#242321',
-              marginBottom: 12,
-            }}
-          >
-            Columnas mapeadas ({mappedCount})
-          </h4>
-          <div
-            style={{
-              display: 'flex',
-              flexDirection: 'column',
-              gap: 8,
-            }}
-          >
-            {result.explanations.map((exp) => {
-              const fieldLabel =
-                PRODUCT_FIELDS.find((f) => f.key === exp.productField)?.label ??
-                exp.productField;
-              return (
-                <div
-                  key={exp.fileHeader}
+      {/* Mapping table */}
+      <div
+        style={{
+          border: '1px solid #E8E6E4',
+          borderRadius: 12,
+          overflow: 'hidden',
+          marginBottom: 20,
+        }}
+      >
+        {/* Table header */}
+        <div
+          style={{
+            display: 'flex',
+            padding: '12px 16px',
+            backgroundColor: '#F9F8F7',
+            borderBottom: '1px solid #E8E6E4',
+            fontSize: 12,
+            fontWeight: 600,
+            color: '#8A8886',
+            textTransform: 'uppercase',
+            letterSpacing: 0.5,
+          }}
+        >
+          <div style={{ flex: 1 }}>Columna de tu archivo</div>
+          <div style={{ width: 32 }} />
+          <div style={{ flex: 1 }}>Corresponde a...</div>
+        </div>
+
+        {/* Mapping rows */}
+        {mappings.map((m, i) => {
+          const isAssigned = !!m.productField;
+          const wasAutoDetected = result.mappings[i]?.productField === m.productField && m.productField !== null;
+
+          return (
+            <div
+              key={i}
+              style={{
+                display: 'flex',
+                alignItems: 'center',
+                padding: '14px 16px',
+                borderBottom: i < mappings.length - 1 ? '1px solid #F1F0EF' : 'none',
+                backgroundColor: isAssigned ? '#FAFFFE' : '#FFFFFF',
+                transition: 'background-color 0.2s',
+              }}
+            >
+              {/* File column name */}
+              <div style={{ flex: 1, display: 'flex', alignItems: 'center', gap: 8 }}>
+                <span
                   style={{
-                    display: 'flex',
-                    alignItems: 'center',
-                    gap: 12,
-                    padding: '10px 16px',
-                    backgroundColor: '#F0FDF4',
-                    borderRadius: 8,
-                    border: '1px solid #BBF7D0',
+                    fontSize: 14,
+                    fontWeight: 600,
+                    color: '#242321',
                   }}
                 >
-                  <span style={{ color: '#10B981', fontSize: 16 }}>✓</span>
-                  <div style={{ flex: 1 }}>
-                    <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-                      <code
-                        style={{
-                          fontSize: 13,
-                          fontWeight: 600,
-                          color: '#242321',
-                          backgroundColor: '#E8E6E4',
-                          padding: '2px 8px',
-                          borderRadius: 4,
-                        }}
-                      >
-                        {exp.fileHeader}
-                      </code>
-                      <span style={{ color: '#8A8886' }}>→</span>
-                      <span
-                        style={{
-                          fontSize: 13,
-                          fontWeight: 600,
-                          color: '#10B981',
-                        }}
-                      >
-                        {fieldLabel}
-                      </span>
-                    </div>
-                    <p
-                      style={{
-                        fontSize: 12,
-                        color: '#8A8886',
-                        marginTop: 2,
-                      }}
-                    >
-                      {exp.reason}
-                    </p>
-                  </div>
-                </div>
-              );
-            })}
-          </div>
-        </div>
-      )}
+                  {m.fileHeader}
+                </span>
+                {wasAutoDetected && (
+                  <span
+                    style={{
+                      fontSize: 10,
+                      padding: '2px 6px',
+                      borderRadius: 4,
+                      backgroundColor: result.usedAI ? '#EDE9FE' : '#E0F2FE',
+                      color: result.usedAI ? '#7C3AED' : '#0284C7',
+                      fontWeight: 600,
+                    }}
+                  >
+                    {result.usedAI ? 'IA' : 'auto'}
+                  </span>
+                )}
+              </div>
 
-      {/* Unmapped columns */}
-      {result.unmappedHeaders.length > 0 && (
-        <div style={{ marginBottom: 20 }}>
-          <h4
-            style={{
-              fontSize: 14,
-              fontWeight: 600,
-              color: '#8A8886',
-              marginBottom: 12,
-            }}
-          >
-            Columnas ignoradas ({result.unmappedHeaders.length})
-          </h4>
-          <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8 }}>
-            {result.unmappedHeaders.map((h) => (
-              <span
-                key={h}
+              {/* Arrow */}
+              <div
                 style={{
-                  fontSize: 13,
-                  padding: '4px 12px',
-                  backgroundColor: '#F1F0EF',
-                  borderRadius: 6,
-                  color: '#8A8886',
+                  width: 32,
+                  textAlign: 'center',
+                  color: isAssigned ? '#10B981' : '#D1D0CE',
+                  fontSize: 16,
                 }}
               >
-                {h}
-              </span>
-            ))}
-          </div>
-        </div>
-      )}
+                →
+              </div>
 
-      {/* Missing required fields warning */}
+              {/* Select dropdown */}
+              <div style={{ flex: 1 }}>
+                <select
+                  className="rh-select"
+                  value={m.productField ?? ''}
+                  onChange={(e) => handleChange(i, e.target.value || null)}
+                  style={{
+                    width: '100%',
+                    borderColor: isAssigned ? '#BBF7D0' : '#E8E6E4',
+                    backgroundColor: isAssigned ? '#F0FDF4' : '#FFFFFF',
+                    fontSize: 13,
+                  }}
+                >
+                  <option value="">— No usar esta columna —</option>
+                  {PRODUCT_FIELDS.map((f) => (
+                    <option key={f.key} value={f.key}>
+                      {f.label} {f.required ? '(requerido)' : ''}
+                    </option>
+                  ))}
+                </select>
+              </div>
+            </div>
+          );
+        })}
+      </div>
+
+      {/* Required fields indicator */}
       {missingRequired.length > 0 && (
-        <div className="rh-alert rh-alert-warning mb-4">
-          <strong>Campos requeridos sin mapear:</strong>{' '}
+        <div
+          className="rh-alert rh-alert-warning"
+          style={{ marginBottom: 20, fontSize: 14 }}
+        >
+          <strong>Aun faltan campos requeridos:</strong>{' '}
           {missingRequired
             .map((f) => PRODUCT_FIELDS.find((p) => p.key === f)?.label ?? f)
             .join(', ')}
-          . Usa "Editar mapeo" para asignarlos manualmente.
+          . Asignalos en la lista de arriba para continuar.
         </div>
       )}
 
-      {/* Actions */}
+      {canContinue && (
+        <div
+          className="rh-alert rh-alert-success"
+          style={{ marginBottom: 20, fontSize: 14 }}
+        >
+          ✅ Todos los campos requeridos estan asignados. Puedes continuar.
+        </div>
+      )}
+
+      {/* Action buttons */}
       <div
         style={{
           display: 'flex',
           justifyContent: 'space-between',
           alignItems: 'center',
-          marginTop: 24,
-          paddingTop: 16,
-          borderTop: '1px solid #E8E6E4',
+          paddingTop: 8,
         }}
       >
         <button onClick={onCancel} className="rh-btn rh-btn-ghost">
           Cancelar
         </button>
-        <div style={{ display: 'flex', gap: 8 }}>
-          <button onClick={onEditMappings} className="rh-btn rh-btn-outline">
-            Editar mapeo
-          </button>
-          <button
-            onClick={() => onAccept(result.mappings)}
-            className="rh-btn rh-btn-primary"
-            disabled={missingRequired.length > 0}
-          >
-            Continuar con este mapeo
-          </button>
-        </div>
+        <button
+          onClick={() => onAccept(mappings)}
+          className="rh-btn rh-btn-primary"
+          disabled={!canContinue}
+          style={{ padding: '12px 32px' }}
+        >
+          Continuar
+        </button>
       </div>
     </div>
   );

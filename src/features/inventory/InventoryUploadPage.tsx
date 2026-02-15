@@ -125,37 +125,6 @@ export function InventoryUploadPage() {
     [rawRows],
   );
 
-  // Re-validate after manual mapping edit (from summary or mapping view)
-  const handleMappingsChanged = useCallback(
-    async (newMappings: ColumnMapping[]) => {
-      setColumnMappings(newMappings);
-      setShowMappingModal(false);
-
-      // Re-run smart mapping display with new mappings
-      const unmappedHeaders = newMappings
-        .filter((m) => !m.productField)
-        .map((m) => m.fileHeader);
-      const explanations = newMappings
-        .filter((m) => m.productField)
-        .map((m) => ({
-          fileHeader: m.fileHeader,
-          productField: m.productField!,
-          reason: m.autoDetected
-            ? 'Nombre de columna reconocido automaticamente'
-            : 'Asignado manualmente',
-        }));
-
-      setSmartMappingResult({
-        mappings: newMappings,
-        explanations,
-        usedAI: false,
-        unmappedHeaders,
-      });
-      setStep('mapping');
-    },
-    [],
-  );
-
   // Re-validate from summary (when user edits mapping from summary view)
   const handleMappingsChangedFromSummary = useCallback(
     async (newMappings: ColumnMapping[]) => {
@@ -260,7 +229,6 @@ export function InventoryUploadPage() {
           result={smartMappingResult}
           onAccept={handleAcceptMapping}
           onCancel={handleReset}
-          onEditMappings={() => setShowMappingModal(true)}
         />
       )}
 
@@ -295,11 +263,7 @@ export function InventoryUploadPage() {
         open={showMappingModal}
         onClose={() => setShowMappingModal(false)}
         mappings={columnMappings}
-        onSave={
-          step === 'summary'
-            ? handleMappingsChangedFromSummary
-            : handleMappingsChanged
-        }
+        onSave={handleMappingsChangedFromSummary}
       />
     </div>
   );
