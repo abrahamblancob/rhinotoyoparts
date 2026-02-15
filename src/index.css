@@ -2251,6 +2251,11 @@ select.rh-select:disabled {
   transition: width 0.3s ease;
 }
 
+@keyframes rh-pulse {
+  0%, 100% { opacity: 0.4; }
+  50% { opacity: 1; }
+}
+
 /* Responsive wizard */
 @media (max-width: 768px) {
   .rh-wizard-step-label {

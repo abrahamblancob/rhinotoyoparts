@@ -14,10 +14,13 @@ import type {
 import { parseFile } from './upload/parseFile.ts';
 import { validateRows } from './upload/validateRows.ts';
 import { uploadProducts, logBulkUpload } from './upload/uploadBatch.ts';
+import { smartMapColumns } from './upload/smartMapping.ts';
+import type { SmartMappingResult } from './upload/smartMapping.ts';
 
 import { StepIndicator } from './upload/components/StepIndicator.tsx';
 import { FileDropzone } from './upload/components/FileDropzone.tsx';
 import { ProcessingView } from './upload/components/ProcessingView.tsx';
+import { SmartMappingView } from './upload/components/SmartMappingView.tsx';
 import { SummaryView } from './upload/components/SummaryView.tsx';
 import { UploadProgressView } from './upload/components/UploadProgressView.tsx';
 import { ResultsView } from './upload/components/ResultsView.tsx';
@@ -36,11 +39,12 @@ export function InventoryUploadPage() {
   // Processing state
   const [parseProgress, setParseProgress] = useState(0);
   const [validateProgress, setValidateProgress] = useState(0);
-  const [processingPhase, setProcessingPhase] = useState<'parsing' | 'validating'>('parsing');
+  const [processingPhase, setProcessingPhase] = useState<'parsing' | 'mapping' | 'validating'>('parsing');
 
   // Data state
   const [rawRows, setRawRows] = useState<RawRow[]>([]);
   const [columnMappings, setColumnMappings] = useState<ColumnMapping[]>([]);
+  const [smartMappingResult, setSmartMappingResult] = useState<SmartMappingResult | null>(null);
   const [processingResult, setProcessingResult] = useState<ProcessingResult | null>(null);
 
   // Upload state
@@ -61,6 +65,7 @@ export function InventoryUploadPage() {
     );
   }
 
+  // Step 1: File selected → parse → smart mapping → show mapping view
   const handleFileSelected = useCallback(
     async (file: File) => {
       setFileName(file.name);
@@ -70,7 +75,7 @@ export function InventoryUploadPage() {
       setFatalError('');
 
       try {
-        // Step 1: Parse file
+        // Parse file
         const parseResult = await parseFile(file, setParseProgress);
         setRawRows(parseResult.rows);
         setColumnMappings(parseResult.columnMappings);
@@ -83,16 +88,16 @@ export function InventoryUploadPage() {
           return;
         }
 
-        // Step 2: Validate rows
-        setProcessingPhase('validating');
-        setValidateProgress(0);
-        const result = await validateRows(
+        // Smart mapping (AI or heuristics)
+        setProcessingPhase('mapping');
+        const mappingResult = await smartMapColumns(
+          parseResult.headers,
           parseResult.rows,
           parseResult.columnMappings,
-          setValidateProgress,
         );
-        setProcessingResult(result);
-        setStep('summary');
+        setSmartMappingResult(mappingResult);
+        setColumnMappings(mappingResult.mappings);
+        setStep('mapping');
       } catch (err) {
         setFatalError(
           err instanceof Error
@@ -105,10 +110,56 @@ export function InventoryUploadPage() {
     [],
   );
 
+  // Step 2: User accepts mapping → validate → show summary
+  const handleAcceptMapping = useCallback(
+    async (acceptedMappings: ColumnMapping[]) => {
+      setColumnMappings(acceptedMappings);
+      setStep('processing');
+      setProcessingPhase('validating');
+      setValidateProgress(0);
+
+      const result = await validateRows(rawRows, acceptedMappings, setValidateProgress);
+      setProcessingResult(result);
+      setStep('summary');
+    },
+    [rawRows],
+  );
+
+  // Re-validate after manual mapping edit (from summary or mapping view)
   const handleMappingsChanged = useCallback(
     async (newMappings: ColumnMapping[]) => {
       setColumnMappings(newMappings);
-      // Re-validate with new mappings
+      setShowMappingModal(false);
+
+      // Re-run smart mapping display with new mappings
+      const unmappedHeaders = newMappings
+        .filter((m) => !m.productField)
+        .map((m) => m.fileHeader);
+      const explanations = newMappings
+        .filter((m) => m.productField)
+        .map((m) => ({
+          fileHeader: m.fileHeader,
+          productField: m.productField!,
+          reason: m.autoDetected
+            ? 'Nombre de columna reconocido automaticamente'
+            : 'Asignado manualmente',
+        }));
+
+      setSmartMappingResult({
+        mappings: newMappings,
+        explanations,
+        usedAI: false,
+        unmappedHeaders,
+      });
+      setStep('mapping');
+    },
+    [],
+  );
+
+  // Re-validate from summary (when user edits mapping from summary view)
+  const handleMappingsChangedFromSummary = useCallback(
+    async (newMappings: ColumnMapping[]) => {
+      setColumnMappings(newMappings);
       setStep('processing');
       setProcessingPhase('validating');
       setValidateProgress(0);
@@ -119,6 +170,7 @@ export function InventoryUploadPage() {
     [rawRows],
   );
 
+  // Step 3: User confirms upload → batch insert → show results
   const handleConfirmUpload = useCallback(async () => {
     if (!processingResult || !organization || !user) return;
 
@@ -144,11 +196,13 @@ export function InventoryUploadPage() {
     setStep('results');
   }, [processingResult, organization, user, fileName]);
 
+  // Reset wizard to start
   const handleReset = useCallback(() => {
     setStep('file');
     setFileName('');
     setRawRows([]);
     setColumnMappings([]);
+    setSmartMappingResult(null);
     setProcessingResult(null);
     setUploadProgress(null);
     setFatalError('');
@@ -180,21 +234,37 @@ export function InventoryUploadPage() {
         <div className="rh-alert rh-alert-error mb-4">{fatalError}</div>
       )}
 
-      {/* Step content */}
+      {/* Step 1: File selection */}
       {step === 'file' && (
         <FileDropzone onFileSelected={handleFileSelected} />
       )}
 
+      {/* Processing indicator (parsing / mapping / validating) */}
       {step === 'processing' && (
         <ProcessingView
           phase={processingPhase}
           progress={
-            processingPhase === 'parsing' ? parseProgress : validateProgress
+            processingPhase === 'parsing'
+              ? parseProgress
+              : processingPhase === 'validating'
+                ? validateProgress
+                : 0
           }
           fileName={fileName}
         />
       )}
 
+      {/* Step 2: Smart mapping review */}
+      {step === 'mapping' && smartMappingResult && (
+        <SmartMappingView
+          result={smartMappingResult}
+          onAccept={handleAcceptMapping}
+          onCancel={handleReset}
+          onEditMappings={() => setShowMappingModal(true)}
+        />
+      )}
+
+      {/* Step 3: Summary with preview */}
       {step === 'summary' && processingResult && (
         <SummaryView
           result={processingResult}
@@ -206,10 +276,12 @@ export function InventoryUploadPage() {
         />
       )}
 
+      {/* Step 4: Upload progress */}
       {step === 'uploading' && uploadProgress && (
         <UploadProgressView progress={uploadProgress} />
       )}
 
+      {/* Step 5: Results */}
       {step === 'results' && uploadProgress && (
         <ResultsView
           progress={uploadProgress}
@@ -218,12 +290,16 @@ export function InventoryUploadPage() {
         />
       )}
 
-      {/* Column mapping modal */}
+      {/* Column mapping modal (shared by mapping and summary steps) */}
       <ColumnMappingModal
         open={showMappingModal}
         onClose={() => setShowMappingModal(false)}
         mappings={columnMappings}
-        onSave={handleMappingsChanged}
+        onSave={
+          step === 'summary'
+            ? handleMappingsChangedFromSummary
+            : handleMappingsChanged
+        }
       />
     </div>
   );

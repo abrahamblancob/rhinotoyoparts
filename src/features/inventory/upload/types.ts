@@ -54,4 +54,4 @@ export interface UploadProgress {
 }
 
 /** Wizard step */
-export type WizardStep = 'file' | 'processing' | 'summary' | 'uploading' | 'results';
+export type WizardStep = 'file' | 'processing' | 'mapping' | 'summary' | 'uploading' | 'results';

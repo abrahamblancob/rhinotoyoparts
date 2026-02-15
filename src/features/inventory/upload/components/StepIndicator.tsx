@@ -2,10 +2,11 @@ import type { WizardStep } from '../types.ts';
 
 const STEPS: { key: WizardStep; label: string; icon: string }[] = [
   { key: 'file', label: 'Archivo', icon: '1' },
-  { key: 'processing', label: 'Procesamiento', icon: '2' },
-  { key: 'summary', label: 'Resumen', icon: '3' },
-  { key: 'uploading', label: 'Carga', icon: '4' },
-  { key: 'results', label: 'Resultados', icon: '5' },
+  { key: 'processing', label: 'Lectura', icon: '2' },
+  { key: 'mapping', label: 'Mapeo', icon: '3' },
+  { key: 'summary', label: 'Resumen', icon: '4' },
+  { key: 'uploading', label: 'Carga', icon: '5' },
+  { key: 'results', label: 'Resultados', icon: '6' },
 ];
 
 interface Props {
