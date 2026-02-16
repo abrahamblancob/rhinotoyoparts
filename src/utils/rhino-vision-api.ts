@@ -58,7 +58,7 @@ export function getWhatsAppBuyUrl(
     whatsapp: string,
     productName: string,
     sku: string,
-    price: number,
+    _price?: number,
 ): string {
     const cleanNumber = whatsapp.replace(/[^0-9]/g, '');
     const message = encodeURIComponent(
