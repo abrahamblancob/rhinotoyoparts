@@ -3412,6 +3412,341 @@ select.rh-select:disabled {
   margin: 0 auto;
 }
 
+/* ═══════════════════════════════════════════════════════════════
+   RHINO VISION v2 — Results + Products UI
+   ═══════════════════════════════════════════════════════════════ */
+
+.rv2-analysis-card {
+  background: #ffffff;
+  border: 1px solid #e5e7eb;
+  border-radius: 16px;
+  overflow: hidden;
+  box-shadow: 0 4px 24px rgba(0, 0, 0, 0.06);
+}
+
+.rv2-analysis-header {
+  padding: 28px 28px 20px;
+  border-bottom: 1px solid #f0f0f0;
+}
+
+.rv2-analysis-badge-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 12px;
+}
+
+.rv2-badge-success {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  background: #dcfce7;
+  color: #15803d;
+  font-size: 13px;
+  font-weight: 600;
+  padding: 5px 14px;
+  border-radius: 20px;
+}
+
+.rv2-confidence {
+  font-size: 13px;
+  color: #6b7280;
+  font-weight: 500;
+}
+
+.rv2-part-name {
+  font-size: 24px;
+  font-weight: 700;
+  color: #111827;
+  margin-bottom: 6px;
+}
+
+.rv2-oem {
+  font-size: 14px;
+  color: #d32f2f;
+  font-weight: 600;
+  font-family: monospace;
+  margin-bottom: 12px;
+}
+
+.rv2-details-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-bottom: 12px;
+}
+
+.rv2-detail-tag {
+  background: #f3f4f6;
+  color: #374151;
+  font-size: 12px;
+  font-weight: 500;
+  padding: 4px 12px;
+  border-radius: 8px;
+}
+
+.rv2-compatible {
+  font-size: 13px;
+  color: #6b7280;
+  line-height: 1.6;
+}
+
+/* Products section */
+.rv2-products-section {
+  padding: 24px 28px;
+}
+
+.rv2-products-header {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  font-size: 15px;
+  font-weight: 600;
+  color: #111827;
+  margin-bottom: 16px;
+}
+
+.rv2-products-header svg {
+  color: #d32f2f;
+}
+
+.rv2-products-list {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.rv2-product-card {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  padding: 16px 20px;
+  background: #fafafa;
+  border: 1px solid #e5e7eb;
+  border-radius: 12px;
+  transition: border-color 0.2s;
+}
+
+.rv2-product-card:hover {
+  border-color: #d32f2f;
+}
+
+.rv2-product-info {
+  flex: 1;
+  min-width: 0;
+}
+
+.rv2-product-name {
+  font-size: 15px;
+  font-weight: 600;
+  color: #111827;
+  margin-bottom: 4px;
+}
+
+.rv2-product-meta {
+  display: flex;
+  gap: 12px;
+  font-size: 12px;
+  color: #6b7280;
+  margin-bottom: 8px;
+}
+
+.rv2-product-pricing {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  margin-bottom: 4px;
+}
+
+.rv2-price {
+  font-size: 20px;
+  font-weight: 700;
+  color: #15803d;
+}
+
+.rv2-stock {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  font-size: 13px;
+  color: #6b7280;
+}
+
+.rv2-seller {
+  font-size: 12px;
+  color: #9ca3af;
+}
+
+.rv2-buy-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  background: #25d366;
+  color: #ffffff;
+  font-size: 14px;
+  font-weight: 600;
+  padding: 10px 20px;
+  border-radius: 10px;
+  border: none;
+  cursor: pointer;
+  white-space: nowrap;
+  transition: all 0.2s;
+  box-shadow: 0 2px 8px rgba(37, 211, 102, 0.3);
+}
+
+.rv2-buy-btn:hover {
+  background: #1fb855;
+  transform: translateY(-1px);
+  box-shadow: 0 4px 12px rgba(37, 211, 102, 0.4);
+}
+
+/* No match section */
+.rv2-no-match-section {
+  padding: 28px;
+  text-align: center;
+}
+
+.rv2-no-match-title {
+  font-size: 18px;
+  font-weight: 600;
+  color: #374151;
+  margin-bottom: 8px;
+}
+
+.rv2-no-match-subtitle {
+  font-size: 14px;
+  color: #6b7280;
+  margin-bottom: 20px;
+}
+
+.rv2-no-match-section .rv2-buy-btn {
+  margin-bottom: 24px;
+}
+
+.rv2-email-notify {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 10px;
+  padding: 16px;
+  background: #f9fafb;
+  border: 1px solid #e5e7eb;
+  border-radius: 12px;
+  font-size: 13px;
+  color: #6b7280;
+}
+
+.rv2-email-form {
+  display: flex;
+  gap: 8px;
+  width: 100%;
+  max-width: 400px;
+}
+
+.rv2-email-input {
+  flex: 1;
+  padding: 8px 14px;
+  border: 1px solid #d1d5db;
+  border-radius: 8px;
+  font-size: 14px;
+  outline: none;
+  transition: border-color 0.2s;
+}
+
+.rv2-email-input:focus {
+  border-color: #d32f2f;
+}
+
+.rv2-email-btn {
+  background: #d32f2f;
+  color: white;
+  font-size: 13px;
+  font-weight: 600;
+  padding: 8px 16px;
+  border: none;
+  border-radius: 8px;
+  cursor: pointer;
+  transition: background 0.2s;
+}
+
+.rv2-email-btn:hover {
+  background: #b71c1c;
+}
+
+.rv2-email-btn:disabled {
+  background: #9ca3af;
+  cursor: not-allowed;
+}
+
+.rv2-email-success {
+  color: #15803d;
+  font-size: 14px;
+  font-weight: 500;
+  padding: 12px;
+}
+
+/* Actions */
+.rv2-actions {
+  display: flex;
+  justify-content: center;
+  margin-top: 20px;
+}
+
+.rv2-new-search-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  background: transparent;
+  color: #d32f2f;
+  font-size: 15px;
+  font-weight: 600;
+  padding: 12px 28px;
+  border: 2px solid #d32f2f;
+  border-radius: 12px;
+  cursor: pointer;
+  transition: all 0.2s;
+}
+
+.rv2-new-search-btn:hover {
+  background: #d32f2f;
+  color: white;
+}
+
+/* Mobile responsive */
+@media (max-width: 639px) {
+  .rv2-analysis-header {
+    padding: 20px 16px 16px;
+  }
+
+  .rv2-part-name {
+    font-size: 20px;
+  }
+
+  .rv2-products-section {
+    padding: 16px;
+  }
+
+  .rv2-product-card {
+    flex-direction: column;
+    align-items: stretch;
+    padding: 14px;
+  }
+
+  .rv2-buy-btn {
+    justify-content: center;
+    width: 100%;
+  }
+
+  .rv2-email-form {
+    flex-direction: column;
+  }
+
+  .rv2-no-match-section {
+    padding: 20px 16px;
+  }
+}
+
 /* Features Section */
 .rhino-vision-features {
   background: #f7f7f7;

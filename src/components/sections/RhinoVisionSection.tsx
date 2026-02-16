@@ -1,29 +1,30 @@
 import { useState } from 'react';
 import { motion } from 'framer-motion';
-import { Loader2, AlertTriangle } from 'lucide-react';
+import { Loader2, AlertTriangle, ShoppingCart, MessageCircle, Search, Package, Mail } from 'lucide-react';
 import { SectionWrapper } from '../ui/SectionWrapper';
 import { SectionTitle } from '../ui/SectionTitle';
 import { ImageUploader, ImagePreview } from '../ui/ImageUploader';
-import { PartResultCard } from '../ui/PartResultCard';
-import { analyzePartImage, imageToBase64, getImageDataUrl } from '../../utils/gemini-vision';
+import { analyzePartWithVision, getWhatsAppBuyUrl, getWhatsAppRequestUrl } from '../../utils/rhino-vision-api';
+import { imageToBase64 } from '../../utils/gemini-vision';
 import {
     trackImageUpload,
     trackAnalysisStarted,
-    trackPartAnalysis,
     trackAnalysisError,
-    trackLowConfidenceResult,
     trackRetryAnalysis
 } from '../../utils/analytics';
-import type { PartAnalysisResult } from '../../types/vision';
+import { trackEvent } from '../../utils/analytics';
+import type { VisionSearchResponse, ProductMatch } from '../../types/vision';
 
-type ViewState = 'upload' | 'preview' | 'analyzing' | 'results' | 'error';
+type ViewState = 'upload' | 'preview' | 'analyzing' | 'results' | 'no_match' | 'error';
 
 export function RhinoVisionSection() {
     const [viewState, setViewState] = useState<ViewState>('upload');
     const [selectedFile, setSelectedFile] = useState<File | null>(null);
     const [imageDataUrl, setImageDataUrl] = useState<string>('');
-    const [analysisResult, setAnalysisResult] = useState<PartAnalysisResult | null>(null);
+    const [visionResult, setVisionResult] = useState<VisionSearchResponse | null>(null);
     const [errorMessage, setErrorMessage] = useState<string>('');
+    const [requestEmail, setRequestEmail] = useState('');
+    const [emailSent, setEmailSent] = useState(false);
 
     const handleImageSelected = (file: File, dataUrl: string) => {
         setSelectedFile(file);
@@ -47,24 +48,29 @@ export function RhinoVisionSection() {
 
         try {
             const base64 = await imageToBase64(selectedFile);
-            const fullDataUrl = await getImageDataUrl(selectedFile);
 
-            const result = await analyzePartImage({
-                imageBase64: base64,
-                mimeType: selectedFile.type
+            const result = await analyzePartWithVision(base64, selectedFile.type || 'image/jpeg');
+            setVisionResult(result);
+
+            if (!result.analysis.identified || result.analysis.confidence < 25) {
+                setErrorMessage('No se pudo identificar el repuesto con suficiente confianza. Intenta con una imagen más clara.');
+                setViewState('error');
+                return;
+            }
+
+            if (result.has_results) {
+                setViewState('results');
+            } else {
+                setViewState('no_match');
+            }
+
+            trackEvent({
+                action: 'rhino_vision_analysis_complete',
+                category: 'rhino_vision',
+                label: result.analysis.part_name,
+                value: result.total_matches,
             });
 
-            result.imageUrl = fullDataUrl;
-            setAnalysisResult(result);
-            setViewState('results');
-
-            // Track successful analysis
-            trackPartAnalysis(result.partType, result.category, result.condition, result.confidence);
-
-            // Track low confidence results separately
-            if (result.confidence < 60) {
-                trackLowConfidenceResult(result.partType, result.confidence);
-            }
         } catch (error) {
             console.error('Error analyzing image:', error);
             const errorMsg = error instanceof Error ? error.message : 'Error desconocido al analizar la imagen';
@@ -77,8 +83,10 @@ export function RhinoVisionSection() {
     const handleAnalyzeAnother = () => {
         setSelectedFile(null);
         setImageDataUrl('');
-        setAnalysisResult(null);
+        setVisionResult(null);
         setErrorMessage('');
+        setRequestEmail('');
+        setEmailSent(false);
         setViewState('upload');
     };
 
@@ -88,11 +96,46 @@ export function RhinoVisionSection() {
         trackRetryAnalysis();
     };
 
+    const handleWhatsAppBuy = (product: ProductMatch) => {
+        if (!product.org_whatsapp) return;
+        trackEvent({
+            action: 'rhino_vision_whatsapp_buy',
+            category: 'rhino_vision',
+            label: product.name,
+            value: product.price,
+        });
+        window.open(getWhatsAppBuyUrl(product.org_whatsapp, product.name, product.sku, product.price), '_blank');
+    };
+
+    const handleWhatsAppRequest = () => {
+        if (!visionResult) return;
+        const { part_name, oem_number, category } = visionResult.analysis;
+        trackEvent({
+            action: 'rhino_vision_whatsapp_request',
+            category: 'rhino_vision',
+            label: part_name,
+        });
+        window.open(getWhatsAppRequestUrl(part_name, oem_number, category), '_blank');
+    };
+
+    const handleEmailNotify = () => {
+        if (!requestEmail || !visionResult) return;
+        // TODO: Send to product_requests table via Edge Function
+        setEmailSent(true);
+        trackEvent({
+            action: 'rhino_vision_email_notify',
+            category: 'rhino_vision',
+            label: visionResult.analysis.part_name,
+        });
+    };
+
+    const analysis = visionResult?.analysis;
+
     return (
         <SectionWrapper id="rhino-vision">
             <SectionTitle
                 title="Rhino Vision"
-                subtitle="Identifica repuestos Toyota con IA. Sube una foto y descubre compatibilidad al instante."
+                subtitle="Identifica repuestos Toyota con IA. Sube una foto y te conectamos con proveedores."
             />
 
             <div className="rhino-vision-container">
@@ -119,22 +162,22 @@ export function RhinoVisionSection() {
                                 <li>
                                     <span className="rhino-step-number">2</span>
                                     <div>
-                                        <strong>Nuestra IA lo analizará</strong>
-                                        <p>Identificación automática en segundos</p>
+                                        <strong>Nuestra IA lo identifica</strong>
+                                        <p>Nombre, marca, OEM y compatibilidad Toyota</p>
                                     </div>
                                 </li>
                                 <li>
                                     <span className="rhino-step-number">3</span>
                                     <div>
-                                        <strong>Recibe información</strong>
-                                        <p>Tipo de pieza y compatibilidad Toyota</p>
+                                        <strong>Buscamos en proveedores</strong>
+                                        <p>Encontramos quién lo tiene en stock y a qué precio</p>
                                     </div>
                                 </li>
                                 <li>
                                     <span className="rhino-step-number">4</span>
                                     <div>
-                                        <strong>Contacta por WhatsApp</strong>
-                                        <p>Contacta con uno de nuestros vendedores</p>
+                                        <strong>Compra por WhatsApp</strong>
+                                        <p>Contacta directo al proveedor para comprarlo</p>
                                     </div>
                                 </li>
                             </ol>
@@ -163,7 +206,7 @@ export function RhinoVisionSection() {
                             <div className="rhino-ready-content">
                                 <h3>¿Listo para analizar?</h3>
                                 <p>
-                                    La IA identificará el repuesto y te dará información sobre compatibilidad con modelos Toyota.
+                                    La IA identificará el repuesto y buscará proveedores que lo tengan disponible.
                                 </p>
                                 <p className="rhino-ready-note">
                                     Asegúrate de que la imagen sea clara y el repuesto esté bien iluminado para mejores resultados.
@@ -191,18 +234,159 @@ export function RhinoVisionSection() {
                                 <div className="rhino-progress-fill" />
                             </div>
                             <p className="rhino-analyzing-text">
-                                Nuestra IA está identificando el repuesto y buscando compatibilidad con modelos Toyota
+                                Rhino Vision está identificando tu repuesto y buscando proveedores disponibles
                             </p>
                         </div>
                     </motion.div>
                 )}
 
-                {/* Estado: Results */}
-                {viewState === 'results' && analysisResult && (
-                    <PartResultCard
-                        result={analysisResult}
-                        onAnalyzeAnother={handleAnalyzeAnother}
-                    />
+                {/* Estado: Results (con productos) */}
+                {viewState === 'results' && analysis && visionResult && (
+                    <motion.div
+                        initial={{ opacity: 0, y: 20 }}
+                        animate={{ opacity: 1, y: 0 }}
+                        transition={{ duration: 0.5 }}
+                    >
+                        {/* AI Analysis Card */}
+                        <div className="rv2-analysis-card">
+                            <div className="rv2-analysis-header">
+                                <div className="rv2-analysis-badge-row">
+                                    <span className="rv2-badge-success">Repuesto Identificado</span>
+                                    <span className="rv2-confidence">Confianza: {analysis.confidence}%</span>
+                                </div>
+                                <h3 className="rv2-part-name">{analysis.part_name}</h3>
+                                {analysis.oem_number && (
+                                    <p className="rv2-oem">OEM: {analysis.oem_number}</p>
+                                )}
+                                <div className="rv2-details-row">
+                                    <span className="rv2-detail-tag">{analysis.category}</span>
+                                    <span className="rv2-detail-tag">{analysis.brand_guess}</span>
+                                    <span className="rv2-detail-tag">{analysis.condition}</span>
+                                </div>
+                                {analysis.compatible_models.length > 0 && (
+                                    <p className="rv2-compatible">
+                                        Compatible con: {analysis.compatible_models.join(', ')}
+                                    </p>
+                                )}
+                            </div>
+
+                            {/* Products found */}
+                            <div className="rv2-products-section">
+                                <div className="rv2-products-header">
+                                    <ShoppingCart size={20} />
+                                    <span>{visionResult.total_matches} {visionResult.total_matches === 1 ? 'proveedor tiene' : 'proveedores tienen'} este repuesto</span>
+                                </div>
+
+                                <div className="rv2-products-list">
+                                    {visionResult.products.map((product) => (
+                                        <div key={product.id} className="rv2-product-card">
+                                            <div className="rv2-product-info">
+                                                <h4 className="rv2-product-name">{product.name}</h4>
+                                                <p className="rv2-product-meta">
+                                                    {product.brand && <span>{product.brand}</span>}
+                                                    <span>SKU: {product.sku}</span>
+                                                </p>
+                                                <div className="rv2-product-pricing">
+                                                    <span className="rv2-price">${product.price.toFixed(2)}</span>
+                                                    <span className="rv2-stock">
+                                                        <Package size={14} />
+                                                        {product.stock} en stock
+                                                    </span>
+                                                </div>
+                                                <p className="rv2-seller">Vendedor: {product.org_name}</p>
+                                            </div>
+                                            {product.org_whatsapp && (
+                                                <button
+                                                    className="rv2-buy-btn"
+                                                    onClick={() => handleWhatsAppBuy(product)}
+                                                >
+                                                    <MessageCircle size={18} />
+                                                    Comprar por WhatsApp
+                                                </button>
+                                            )}
+                                        </div>
+                                    ))}
+                                </div>
+                            </div>
+                        </div>
+
+                        <div className="rv2-actions">
+                            <button onClick={handleAnalyzeAnother} className="rv2-new-search-btn">
+                                <Search size={18} />
+                                Buscar otro repuesto
+                            </button>
+                        </div>
+                    </motion.div>
+                )}
+
+                {/* Estado: No Match */}
+                {viewState === 'no_match' && analysis && (
+                    <motion.div
+                        initial={{ opacity: 0, y: 20 }}
+                        animate={{ opacity: 1, y: 0 }}
+                        transition={{ duration: 0.5 }}
+                    >
+                        <div className="rv2-analysis-card">
+                            <div className="rv2-analysis-header">
+                                <div className="rv2-analysis-badge-row">
+                                    <span className="rv2-badge-success">Repuesto Identificado</span>
+                                    <span className="rv2-confidence">Confianza: {analysis.confidence}%</span>
+                                </div>
+                                <h3 className="rv2-part-name">{analysis.part_name}</h3>
+                                {analysis.oem_number && (
+                                    <p className="rv2-oem">OEM: {analysis.oem_number}</p>
+                                )}
+                                {analysis.compatible_models.length > 0 && (
+                                    <p className="rv2-compatible">
+                                        Compatible con: {analysis.compatible_models.join(', ')}
+                                    </p>
+                                )}
+                            </div>
+
+                            {/* No stock section */}
+                            <div className="rv2-no-match-section">
+                                <p className="rv2-no-match-title">No encontramos este repuesto en stock actualmente</p>
+                                <p className="rv2-no-match-subtitle">Pero podemos ayudarte a conseguirlo:</p>
+
+                                <button className="rv2-buy-btn" onClick={handleWhatsAppRequest}>
+                                    <MessageCircle size={18} />
+                                    Solicitar por WhatsApp
+                                </button>
+
+                                {!emailSent ? (
+                                    <div className="rv2-email-notify">
+                                        <Mail size={16} />
+                                        <span>Déjanos tu email y te avisamos cuando esté disponible</span>
+                                        <div className="rv2-email-form">
+                                            <input
+                                                type="email"
+                                                placeholder="tu@email.com"
+                                                value={requestEmail}
+                                                onChange={(e) => setRequestEmail(e.target.value)}
+                                                className="rv2-email-input"
+                                            />
+                                            <button
+                                                onClick={handleEmailNotify}
+                                                disabled={!requestEmail}
+                                                className="rv2-email-btn"
+                                            >
+                                                Notificarme
+                                            </button>
+                                        </div>
+                                    </div>
+                                ) : (
+                                    <p className="rv2-email-success">Te notificaremos cuando esté disponible.</p>
+                                )}
+                            </div>
+                        </div>
+
+                        <div className="rv2-actions">
+                            <button onClick={handleAnalyzeAnother} className="rv2-new-search-btn">
+                                <Search size={18} />
+                                Buscar otro repuesto
+                            </button>
+                        </div>
+                    </motion.div>
                 )}
 
                 {/* Estado: Error */}
@@ -234,10 +418,6 @@ export function RhinoVisionSection() {
                                 Subir otra imagen
                             </button>
                         </div>
-
-                        <p className="rhino-error-help">
-                            ¿Necesitas ayuda? Contáctanos por WhatsApp para asistencia personalizada
-                        </p>
                     </motion.div>
                 )}
             </div>
