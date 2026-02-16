@@ -1,10 +1,11 @@
-import { supabase } from '../lib/supabase';
 import type { VisionSearchResponse } from '../types/vision';
 
+const SUPABASE_URL = import.meta.env.VITE_SUPABASE_URL;
+const SUPABASE_ANON_KEY = import.meta.env.VITE_SUPABASE_ANON_KEY;
+
 /**
- * Calls the Rhino Vision Edge Function.
- * Sends the image to Claude Vision via the backend (API key stays server-side)
- * and searches for matching products in the DB.
+ * Calls the Rhino Vision Edge Function via direct fetch.
+ * This gives us full control over error handling (supabase.functions.invoke hides error details).
  */
 export async function analyzePartWithVision(
     imageBase64: string,
@@ -14,16 +15,31 @@ export async function analyzePartWithVision(
     console.log('📝 MIME type:', mimeType);
     console.log('📝 Base64 size:', imageBase64.length, 'chars');
 
-    const { data, error } = await supabase.functions.invoke('rhino-vision', {
-        body: {
+    const response = await fetch(`${SUPABASE_URL}/functions/v1/rhino-vision`, {
+        method: 'POST',
+        headers: {
+            'Content-Type': 'application/json',
+            'Authorization': `Bearer ${SUPABASE_ANON_KEY}`,
+            'apikey': SUPABASE_ANON_KEY,
+        },
+        body: JSON.stringify({
             image_base64: imageBase64,
             mime_type: mimeType,
-        },
+        }),
     });
 
-    if (error) {
-        console.error('❌ Edge Function error:', error);
-        throw new Error(error.message || 'Error al conectar con Rhino Vision');
+    let data;
+    try {
+        data = await response.json();
+    } catch {
+        console.error('❌ Response is not JSON, status:', response.status);
+        throw new Error(`Error del servidor (${response.status})`);
+    }
+
+    if (!response.ok) {
+        const errorMsg = data?.error || `Error del servidor (${response.status})`;
+        console.error('❌ Edge Function error:', response.status, errorMsg);
+        throw new Error(errorMsg);
     }
 
     if (data?.error) {
@@ -36,7 +52,7 @@ export async function analyzePartWithVision(
 }
 
 /**
- * Generate a WhatsApp message URL for buying a product.
+ * Generate a WhatsApp message URL for buying a product found in stock.
  */
 export function getWhatsAppBuyUrl(
     whatsapp: string,
@@ -46,13 +62,13 @@ export function getWhatsAppBuyUrl(
 ): string {
     const cleanNumber = whatsapp.replace(/[^0-9]/g, '');
     const message = encodeURIComponent(
-        `¡Hola! Vi en Rhino Vision que tienen *${productName}* (SKU: ${sku}) a $${price.toFixed(2)}. Me interesa comprarlo.`
+        `¡Hola! Encontré *${productName}* (SKU: ${sku}) a través de *Rhino Vision*. Me interesa comprarlo.`
     );
     return `https://wa.me/${cleanNumber}?text=${message}`;
 }
 
 /**
- * Generate a WhatsApp message URL for requesting a product not in stock.
+ * Generate a WhatsApp message URL for requesting a product not found in stock.
  */
 export function getWhatsAppRequestUrl(
     partName: string,
@@ -63,7 +79,7 @@ export function getWhatsAppRequestUrl(
     const defaultNumber = '584241396324'; // Diego
     const oemText = oemNumber ? ` (OEM: ${oemNumber})` : '';
     const message = encodeURIComponent(
-        `¡Hola! Estoy buscando *${partName}*${oemText} - ${category}. ¿Pueden ayudarme a conseguirlo?`
+        `¡Hola! Busqué *${partName}*${oemText} (${category}) en *Rhino Vision* pero no está disponible. ¿Pueden ayudarme a conseguirlo?`
     );
     return `https://wa.me/${defaultNumber}?text=${message}`;
 }

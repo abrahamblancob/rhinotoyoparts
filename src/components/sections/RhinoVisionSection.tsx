@@ -1,6 +1,6 @@
 import { useState } from 'react';
 import { motion } from 'framer-motion';
-import { Loader2, AlertTriangle, ShoppingCart, MessageCircle, Search, Package, Mail } from 'lucide-react';
+import { Loader2, AlertTriangle, ShoppingCart, MessageCircle, Search, Package } from 'lucide-react';
 import { SectionWrapper } from '../ui/SectionWrapper';
 import { SectionTitle } from '../ui/SectionTitle';
 import { ImageUploader, ImagePreview } from '../ui/ImageUploader';
@@ -23,8 +23,6 @@ export function RhinoVisionSection() {
     const [imageDataUrl, setImageDataUrl] = useState<string>('');
     const [visionResult, setVisionResult] = useState<VisionSearchResponse | null>(null);
     const [errorMessage, setErrorMessage] = useState<string>('');
-    const [requestEmail, setRequestEmail] = useState('');
-    const [emailSent, setEmailSent] = useState(false);
 
     const handleImageSelected = (file: File, dataUrl: string) => {
         setSelectedFile(file);
@@ -85,8 +83,6 @@ export function RhinoVisionSection() {
         setImageDataUrl('');
         setVisionResult(null);
         setErrorMessage('');
-        setRequestEmail('');
-        setEmailSent(false);
         setViewState('upload');
     };
 
@@ -116,17 +112,6 @@ export function RhinoVisionSection() {
             label: part_name,
         });
         window.open(getWhatsAppRequestUrl(part_name, oem_number, category), '_blank');
-    };
-
-    const handleEmailNotify = () => {
-        if (!requestEmail || !visionResult) return;
-        // TODO: Send to product_requests table via Edge Function
-        setEmailSent(true);
-        trackEvent({
-            action: 'rhino_vision_email_notify',
-            category: 'rhino_vision',
-            label: visionResult.analysis.part_name,
-        });
     };
 
     const analysis = visionResult?.analysis;
@@ -352,31 +337,6 @@ export function RhinoVisionSection() {
                                     <MessageCircle size={18} />
                                     Solicitar por WhatsApp
                                 </button>
-
-                                {!emailSent ? (
-                                    <div className="rv2-email-notify">
-                                        <Mail size={16} />
-                                        <span>Déjanos tu email y te avisamos cuando esté disponible</span>
-                                        <div className="rv2-email-form">
-                                            <input
-                                                type="email"
-                                                placeholder="tu@email.com"
-                                                value={requestEmail}
-                                                onChange={(e) => setRequestEmail(e.target.value)}
-                                                className="rv2-email-input"
-                                            />
-                                            <button
-                                                onClick={handleEmailNotify}
-                                                disabled={!requestEmail}
-                                                className="rv2-email-btn"
-                                            >
-                                                Notificarme
-                                            </button>
-                                        </div>
-                                    </div>
-                                ) : (
-                                    <p className="rv2-email-success">Te notificaremos cuando esté disponible.</p>
-                                )}
                             </div>
                         </div>
 

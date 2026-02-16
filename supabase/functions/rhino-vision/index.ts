@@ -1,5 +1,5 @@
 // Supabase Edge Function: rhino-vision
-// Receives an image, analyzes it with Claude Vision API,
+// Receives an image, analyzes it with Gemini Vision API,
 // searches matching products in DB, and returns results.
 // API key never exposed to frontend.
 
@@ -17,9 +17,9 @@ function jsonResponse(body: Record<string, unknown>, status = 200) {
   })
 }
 
-// ---------- Claude Vision Analysis ----------
+// ---------- Gemini Vision Analysis ----------
 
-interface ClaudeAnalysis {
+interface PartAnalysis {
   identified: boolean
   part_name: string
   oem_number: string | null
@@ -31,11 +31,11 @@ interface ClaudeAnalysis {
   search_keywords: string[]
 }
 
-async function analyzeWithClaude(imageBase64: string, mimeType: string): Promise<ClaudeAnalysis> {
-  const apiKey = Deno.env.get('ANTHROPIC_API_KEY')
-  if (!apiKey) throw new Error('ANTHROPIC_API_KEY not configured')
+async function analyzeWithGemini(imageBase64: string, mimeType: string): Promise<PartAnalysis> {
+  const apiKey = Deno.env.get('GEMINI_API_KEY')
+  if (!apiKey) throw new Error('GEMINI_API_KEY not configured')
 
-  const systemPrompt = `Eres un experto en repuestos automotrices Toyota con 20 años de experiencia.
+  const prompt = `Eres un experto en repuestos automotrices Toyota con 20 años de experiencia.
 Analiza la imagen del repuesto y responde SOLO con JSON válido (sin markdown, sin texto adicional).
 
 Estructura requerida:
@@ -54,63 +54,109 @@ Estructura requerida:
 Reglas:
 - Si no puedes identificar la pieza, pon identified: false y confidence: 0
 - Sé específico con el número OEM si es visible en la pieza o empaque
-- Incluye en search_keywords: nombre corto, nombre largo, OEM parcial, sinónimos
-- Prioriza modelos Toyota vendidos en Venezuela/Latinoamérica: Hilux, Corolla, Fortuner, 4Runner, Prado, RAV4, Yaris, Camry, Land Cruiser`
+- MUY IMPORTANTE para search_keywords: incluye MUCHAS variaciones del nombre como lo buscaría un vendedor de repuestos. Por ejemplo para un cilindro maestro de freno incluye: "cilindro maestro", "bomba de freno", "master cylinder", "bomba freno", "cilindro freno", "brake master". Incluye el nombre en español e inglés, abreviaciones y sinónimos comunes en el mercado automotriz latinoamericano
+- Prioriza modelos Toyota vendidos en Venezuela/Latinoamérica: Hilux, Corolla, Fortuner, 4Runner, Prado, RAV4, Yaris, Camry, Land Cruiser
 
-  const response = await fetch('https://api.anthropic.com/v1/messages', {
-    method: 'POST',
-    headers: {
-      'Content-Type': 'application/json',
-      'x-api-key': apiKey,
-      'anthropic-version': '2023-06-01',
-    },
-    body: JSON.stringify({
-      model: 'claude-sonnet-4-20250514',
-      max_tokens: 1024,
-      system: systemPrompt,
-      messages: [{
-        role: 'user',
-        content: [
-          {
-            type: 'image',
-            source: {
-              type: 'base64',
-              media_type: mimeType,
-              data: imageBase64,
+Identifica este repuesto automotriz. Responde SOLO con JSON.`
+
+  const response = await fetch(
+    `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=${apiKey}`,
+    {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        contents: [{
+          parts: [
+            { text: prompt },
+            {
+              inline_data: {
+                mime_type: mimeType,
+                data: imageBase64,
+              },
             },
-          },
-          {
-            type: 'text',
-            text: 'Identifica este repuesto automotriz. Responde SOLO con JSON.',
-          },
-        ],
-      }],
-    }),
-  })
+          ],
+        }],
+        generationConfig: {
+          temperature: 0.4,
+          topK: 32,
+          topP: 1,
+          maxOutputTokens: 4096,
+          responseMimeType: 'application/json',
+        },
+      }),
+    }
+  )
 
   if (!response.ok) {
-    const err = await response.json().catch(() => ({}))
-    console.error('Claude API error:', err)
-    throw new Error(err.error?.message || `Claude API error: ${response.status}`)
+    const errText = await response.text().catch(() => '{}')
+    console.error('Gemini API error:', response.status, errText)
+    let errMsg = `Gemini API error: ${response.status}`
+    try {
+      const errJson = JSON.parse(errText)
+      errMsg = errJson.error?.message || errMsg
+    } catch { /* use default */ }
+    throw new Error(errMsg)
   }
 
   const data = await response.json()
-  const textContent = data.content?.[0]?.text || ''
 
-  // Extract JSON from response
-  let jsonText = textContent
-  const codeBlock = textContent.match(/```(?:json)?\s*(\{[\s\S]*?\})\s*```/)
-  if (codeBlock) {
-    jsonText = codeBlock[1]
-  } else {
-    const first = textContent.indexOf('{')
-    const last = textContent.lastIndexOf('}')
-    if (first !== -1 && last > first) {
-      jsonText = textContent.substring(first, last + 1)
+  // Gemini 2.5 Flash may return multiple parts (thinking + text)
+  // We need to find the text part that contains our JSON
+  const parts = data.candidates?.[0]?.content?.parts || []
+  console.log('Gemini response parts count:', parts.length)
+
+  // Collect all text parts (skip thought parts)
+  let textContent = ''
+  for (const part of parts) {
+    if (part.text && !part.thought) {
+      textContent += part.text
     }
   }
 
-  return JSON.parse(jsonText)
+  // If no non-thought text, try any text part
+  if (!textContent) {
+    for (const part of parts) {
+      if (part.text) {
+        textContent += part.text
+      }
+    }
+  }
+
+  console.log('Raw Gemini text (first 500 chars):', textContent.substring(0, 500))
+
+  if (!textContent) {
+    console.error('Full Gemini response:', JSON.stringify(data).substring(0, 1000))
+    throw new Error('Gemini no devolvió contenido de texto')
+  }
+
+  // With responseMimeType: 'application/json', Gemini should return pure JSON
+  // But add fallback extraction just in case
+  let jsonText = textContent.trim()
+
+  // If it starts with ``` remove markdown code block wrapper
+  if (jsonText.startsWith('```')) {
+    jsonText = jsonText.replace(/^```(?:json)?\s*/, '').replace(/\s*```$/, '')
+  }
+
+  // If still not starting with {, extract from first { to last }
+  if (!jsonText.startsWith('{')) {
+    const first = jsonText.indexOf('{')
+    const last = jsonText.lastIndexOf('}')
+    if (first !== -1 && last > first) {
+      jsonText = jsonText.substring(first, last + 1)
+    }
+  }
+
+  // Clean trailing commas
+  jsonText = jsonText.replace(/,\s*([\]}])/g, '$1')
+
+  try {
+    return JSON.parse(jsonText)
+  } catch (e) {
+    console.error('Failed to parse JSON. Text:', jsonText.substring(0, 500))
+    console.error('Parse error:', e)
+    throw new Error('La IA devolvió una respuesta inválida. Intenta de nuevo.')
+  }
 }
 
 // ---------- Product Search (3 levels) ----------
@@ -131,57 +177,34 @@ interface ProductMatch {
 
 async function searchProducts(
   supabase: ReturnType<typeof createClient>,
-  analysis: ClaudeAnalysis,
+  analysis: PartAnalysis,
 ): Promise<ProductMatch[]> {
-  // Level 1: Exact match by OEM/SKU
-  if (analysis.oem_number) {
-    const { data: exactMatches } = await supabase
-      .from('products')
-      .select(`
-        id, name, sku, oem_number, brand, price, stock, image_url, compatible_models,
-        organizations!inner(name, whatsapp)
-      `)
-      .or(`sku.ilike.%${analysis.oem_number}%,oem_number.ilike.%${analysis.oem_number}%`)
-      .eq('status', 'active')
-      .gt('stock', 0)
-      .limit(10)
+  console.log('🔎 Searching products with smart match...')
+  console.log('  Name:', analysis.part_name)
+  console.log('  Keywords:', analysis.search_keywords)
+  console.log('  Category:', analysis.category)
+  console.log('  OEM:', analysis.oem_number)
 
-    if (exactMatches && exactMatches.length > 0) {
-      console.log(`Level 1 (OEM): ${exactMatches.length} matches`)
-      return mapProducts(exactMatches)
-    }
-  }
-
-  // Level 2: Fuzzy match by name + category keywords
-  const nameSearch = analysis.part_name.split(' ').slice(0, 3).join(' ')
-  const { data: fuzzyMatches } = await supabase
-    .from('products')
-    .select(`
-      id, name, sku, oem_number, brand, price, stock, image_url, compatible_models,
-      organizations!inner(name, whatsapp)
-    `)
-    .ilike('name', `%${nameSearch}%`)
-    .eq('status', 'active')
-    .gt('stock', 0)
-    .limit(10)
-
-  if (fuzzyMatches && fuzzyMatches.length > 0) {
-    console.log(`Level 2 (fuzzy name): ${fuzzyMatches.length} matches`)
-    return mapProducts(fuzzyMatches)
-  }
-
-  // Level 3: Full-text search by keywords
-  const keywords = analysis.search_keywords.join(' ')
-  const { data: ftsMatches } = await supabase.rpc('search_products_fts', {
-    search_query: keywords,
+  const { data: matches, error } = await supabase.rpc('search_products_smart', {
+    search_name: analysis.part_name,
+    search_keywords: analysis.search_keywords,
+    search_category: analysis.category,
+    search_oem: analysis.oem_number,
   })
 
-  if (ftsMatches && ftsMatches.length > 0) {
-    console.log(`Level 3 (FTS): ${ftsMatches.length} matches`)
-    return ftsMatches as ProductMatch[]
+  if (error) {
+    console.error('Smart search error:', error)
+    return []
   }
 
-  console.log('No matches found at any level')
+  if (matches && matches.length > 0) {
+    console.log(`Smart search: ${matches.length} matches found`)
+    // deno-lint-ignore no-explicit-any
+    matches.forEach((m: any) => console.log(`  - ${m.name} (score: ${m.match_score})`))
+    return matches as ProductMatch[]
+  }
+
+  console.log('No matches found')
   return []
 }
 
@@ -229,11 +252,11 @@ Deno.serve(async (req) => {
       return jsonResponse({ error: 'Imagen demasiado grande. Máximo 4MB.' }, 400)
     }
 
-    console.log('🔍 Analyzing image with Claude Vision...')
+    console.log('🔍 Analyzing image with Gemini Vision...')
 
-    // Step 1: Analyze with Claude
-    const analysis = await analyzeWithClaude(base64Str, mime_type as string)
-    console.log('✅ Claude analysis:', JSON.stringify(analysis))
+    // Step 1: Analyze with Gemini
+    const analysis = await analyzeWithGemini(base64Str, mime_type as string)
+    console.log('✅ Gemini analysis:', JSON.stringify(analysis))
 
     if (!analysis.identified || analysis.confidence < 25) {
       return jsonResponse({
