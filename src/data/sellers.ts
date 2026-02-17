@@ -7,7 +7,7 @@ export const sellers: Seller[] = [
     role: 'CEO',
     description:
       'Experto en motores y repuestos Toyota con mas de 15 años de experiencia en el mercado.',
-    imageUrl: '/sellers/seller-placeholder.webp',
+    imageUrl: 'https://omeoiefgckiilgwhczra.supabase.co/storage/v1/object/public/assets/diego-rendiles.jpeg',
     whatsappNumber: '584241396324',
   },
   {
@@ -16,7 +16,7 @@ export const sellers: Seller[] = [
     role: 'COO',
     description:
       'Experto en logistica y mercadeo, garantizando la mejor experiencia para nuestros clientes.',
-    imageUrl: '/sellers/seller-placeholder.webp',
+    imageUrl: 'https://omeoiefgckiilgwhczra.supabase.co/storage/v1/object/public/assets/enrique-rendiles.jpeg',
     whatsappNumber: '584242121072',
   },
   {
@@ -34,7 +34,7 @@ export const sellers: Seller[] = [
     role: 'Especialista en Ventas',
     description:
       'Experto en ventas y marketing, brindando asesoria personalizada para cada cliente.',
-    imageUrl: '/sellers/seller-placeholder.webp',
+    imageUrl: 'https://omeoiefgckiilgwhczra.supabase.co/storage/v1/object/public/assets/Giuseppe-Giannitti.jpeg',
     whatsappNumber: '584121169448',
   },
 ];
