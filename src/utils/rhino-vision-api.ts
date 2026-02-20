@@ -1,7 +1,21 @@
 import type { VisionSearchResponse } from '../types/vision';
+import { ENV } from '../config/env';
 
-const SUPABASE_URL = import.meta.env.VITE_SUPABASE_URL;
-const SUPABASE_ANON_KEY = import.meta.env.VITE_SUPABASE_ANON_KEY;
+/**
+ * Convert a File to base64 string (without data URL prefix).
+ */
+export function imageToBase64(file: File): Promise<string> {
+    return new Promise((resolve, reject) => {
+        const reader = new FileReader();
+        reader.onload = () => {
+            const result = reader.result as string;
+            const base64 = result.split(',')[1];
+            resolve(base64);
+        };
+        reader.onerror = reject;
+        reader.readAsDataURL(file);
+    });
+}
 
 /**
  * Calls the Rhino Vision Edge Function via direct fetch.
@@ -11,16 +25,12 @@ export async function analyzePartWithVision(
     imageBase64: string,
     mimeType: string,
 ): Promise<VisionSearchResponse> {
-    console.log('🦏 Calling Rhino Vision Edge Function...');
-    console.log('📝 MIME type:', mimeType);
-    console.log('📝 Base64 size:', imageBase64.length, 'chars');
-
-    const response = await fetch(`${SUPABASE_URL}/functions/v1/rhino-vision`, {
+    const response = await fetch(`${ENV.SUPABASE_URL}/functions/v1/rhino-vision`, {
         method: 'POST',
         headers: {
             'Content-Type': 'application/json',
-            'Authorization': `Bearer ${SUPABASE_ANON_KEY}`,
-            'apikey': SUPABASE_ANON_KEY,
+            'Authorization': `Bearer ${ENV.SUPABASE_ANON_KEY}`,
+            'apikey': ENV.SUPABASE_ANON_KEY!,
         },
         body: JSON.stringify({
             image_base64: imageBase64,
@@ -32,22 +42,21 @@ export async function analyzePartWithVision(
     try {
         data = await response.json();
     } catch {
-        console.error('❌ Response is not JSON, status:', response.status);
+        console.error('Response is not JSON, status:', response.status);
         throw new Error(`Error del servidor (${response.status})`);
     }
 
     if (!response.ok) {
         const errorMsg = data?.error || `Error del servidor (${response.status})`;
-        console.error('❌ Edge Function error:', response.status, errorMsg);
+        console.error('Edge Function error:', response.status, errorMsg);
         throw new Error(errorMsg);
     }
 
     if (data?.error) {
-        console.error('❌ API error:', data.error);
+        console.error('API error:', data.error);
         throw new Error(data.error);
     }
 
-    console.log('✅ Rhino Vision response:', data);
     return data as VisionSearchResponse;
 }
 

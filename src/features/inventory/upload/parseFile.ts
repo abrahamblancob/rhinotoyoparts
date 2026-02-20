@@ -1,4 +1,3 @@
-import * as XLSX from 'xlsx';
 import Papa from 'papaparse';
 import type { RawRow, ColumnMapping } from './types.ts';
 import { HEADER_ALIASES } from './constants.ts';
@@ -40,8 +39,12 @@ async function parseExcel(
 
   await reportProgress(5);
 
-  // Stage 1: Read file into ArrayBuffer (5% → 25%)
+  // Stage 1: Read file into ArrayBuffer (5% → 20%)
   const arrayBuffer = await file.arrayBuffer();
+  await reportProgress(20);
+
+  // Stage 1.5: Dynamic import of XLSX (only loaded when needed)
+  const XLSX = await import('xlsx');
   await reportProgress(25);
 
   // Stage 2: Parse workbook (25% → 50%)

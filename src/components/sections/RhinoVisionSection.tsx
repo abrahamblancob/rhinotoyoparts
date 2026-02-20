@@ -4,8 +4,7 @@ import { Loader2, AlertTriangle, ShoppingCart, MessageCircle, Search, Package } 
 import { SectionWrapper } from '../ui/SectionWrapper';
 import { SectionTitle } from '../ui/SectionTitle';
 import { ImageUploader, ImagePreview } from '../ui/ImageUploader';
-import { analyzePartWithVision, getWhatsAppBuyUrl, getWhatsAppRequestUrl } from '../../utils/rhino-vision-api';
-import { imageToBase64 } from '../../utils/gemini-vision';
+import { analyzePartWithVision, getWhatsAppBuyUrl, getWhatsAppRequestUrl, imageToBase64 } from '../../utils/rhino-vision-api';
 import {
     trackImageUpload,
     trackAnalysisStarted,

@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react';
 import { supabase } from '@/lib/supabase.ts';
+import { callEdgeFunction } from '@/lib/edgeFunction.ts';
 import { usePermissions } from '@/hooks/usePermissions.ts';
 import { useAuthStore } from '@/stores/authStore.ts';
 import { StatusBadge } from '@/components/hub/shared/StatusBadge.tsx';
@@ -237,44 +238,17 @@ export function UsersPage() {
       return;
     }
 
-    const { data: { session } } = await supabase.auth.getSession();
-    if (!session?.access_token) {
-      setCreateError('Sesión expirada. Por favor, inicia sesión de nuevo.');
-      setCreateLoading(false);
-      return;
-    }
-
-    const supabaseUrl = import.meta.env.VITE_SUPABASE_URL as string;
-    const supabaseAnonKey = import.meta.env.VITE_SUPABASE_ANON_KEY as string;
-
-    let fnData: { error?: string; success?: boolean; message?: string; user_id?: string } | null = null;
+    let fnData: { error?: string; success?: boolean; message?: string; user_id?: string };
     try {
-      const res = await fetch(`${supabaseUrl}/functions/v1/create-user`, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          'Authorization': `Bearer ${session.access_token}`,
-          'apikey': supabaseAnonKey,
-        },
-        body: JSON.stringify({
-          email: createForm.email,
-          full_name: createForm.full_name,
-          phone: createForm.phone || null,
-          org_id: targetOrgId,
-          role_id: createForm.role_id,
-        }),
+      fnData = await callEdgeFunction<typeof fnData>('create-user', {
+        email: createForm.email,
+        full_name: createForm.full_name,
+        phone: createForm.phone || null,
+        org_id: targetOrgId,
+        role_id: createForm.role_id,
       });
-
-      fnData = await res.json();
-
-      if (!res.ok) {
-        setCreateError(fnData?.error || `Error ${res.status}: ${res.statusText}`);
-        setCreateLoading(false);
-        if (fnData?.user_id) loadUsers();
-        return;
-      }
     } catch (err) {
-      setCreateError(`Error de conexión: ${(err as Error).message}`);
+      setCreateError((err as Error).message);
       setCreateLoading(false);
       return;
     }
@@ -350,35 +324,11 @@ export function UsersPage() {
     setResendLoading(userId);
     setResendMsg('');
 
-    const { data: { session } } = await supabase.auth.getSession();
-    if (!session?.access_token) {
-      setResendMsg('Sesión expirada');
-      setResendLoading(null);
-      return;
-    }
-
-    const supabaseUrl = import.meta.env.VITE_SUPABASE_URL as string;
-    const supabaseAnonKey = import.meta.env.VITE_SUPABASE_ANON_KEY as string;
-
     try {
-      const res = await fetch(`${supabaseUrl}/functions/v1/resend-invitation`, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          'Authorization': `Bearer ${session.access_token}`,
-          'apikey': supabaseAnonKey,
-        },
-        body: JSON.stringify({ user_id: userId }),
-      });
-
-      const data = await res.json();
-      if (!res.ok) {
-        setResendMsg(data?.error || 'Error al reenviar');
-      } else {
-        setResendMsg(data?.message || 'Correo enviado');
-      }
-    } catch {
-      setResendMsg('Error de conexión');
+      const data = await callEdgeFunction<{ message?: string }>('resend-invitation', { user_id: userId });
+      setResendMsg(data?.message || 'Correo enviado');
+    } catch (err) {
+      setResendMsg((err as Error).message);
     }
 
     setResendLoading(null);
@@ -390,37 +340,12 @@ export function UsersPage() {
     if (!deleteTarget) return;
     setDeleteLoading(true);
 
-    const { data: { session } } = await supabase.auth.getSession();
-    if (!session?.access_token) {
-      setResendMsg('Sesión expirada');
-      setDeleteLoading(false);
-      setDeleteTarget(null);
-      return;
-    }
-
-    const supabaseUrl = import.meta.env.VITE_SUPABASE_URL as string;
-    const supabaseAnonKey = import.meta.env.VITE_SUPABASE_ANON_KEY as string;
-
     try {
-      const res = await fetch(`${supabaseUrl}/functions/v1/delete-user`, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          'Authorization': `Bearer ${session.access_token}`,
-          'apikey': supabaseAnonKey,
-        },
-        body: JSON.stringify({ user_id: deleteTarget.id }),
-      });
-
-      const data = await res.json();
-      if (!res.ok) {
-        setResendMsg(data?.error || 'Error al eliminar usuario');
-      } else {
-        setResendMsg(data?.message || 'Usuario eliminado');
-        loadUsers();
-      }
-    } catch {
-      setResendMsg('Error de conexión');
+      const data = await callEdgeFunction<{ message?: string }>('delete-user', { user_id: deleteTarget.id });
+      setResendMsg(data?.message || 'Usuario eliminado');
+      loadUsers();
+    } catch (err) {
+      setResendMsg((err as Error).message);
     }
 
     setDeleteLoading(false);
@@ -429,7 +354,7 @@ export function UsersPage() {
   };
 
   const showOrgSelector = isPlatform || isAggregator;
-  const currentUserId = useAuthStore.getState().user?.id;
+  const currentUserId = useAuthStore((s) => s.user?.id);
 
   return (
     <div>

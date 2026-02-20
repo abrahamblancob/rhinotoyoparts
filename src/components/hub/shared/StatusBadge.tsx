@@ -1,3 +1,5 @@
+import { memo } from 'react';
+
 const STATUS_STYLES: Record<string, { bg: string; text: string; label: string }> = {
   active: { bg: '#10B98115', text: '#10B981', label: 'Activo' },
   inactive: { bg: '#8A888615', text: '#8A8886', label: 'Inactivo' },
@@ -20,7 +22,7 @@ interface StatusBadgeProps {
   label?: string;
 }
 
-export function StatusBadge({ status, label }: StatusBadgeProps) {
+export const StatusBadge = memo(function StatusBadge({ status, label }: StatusBadgeProps) {
   const style = STATUS_STYLES[status] ?? { bg: '#8A888615', text: '#8A8886', label: status };
   return (
     <span
@@ -30,4 +32,4 @@ export function StatusBadge({ status, label }: StatusBadgeProps) {
       {label ?? style.label}
     </span>
   );
-}
+});

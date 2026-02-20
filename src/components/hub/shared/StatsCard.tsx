@@ -1,3 +1,5 @@
+import { memo } from 'react';
+
 interface StatsCardProps {
   title: string;
   value: string | number;
@@ -6,7 +8,7 @@ interface StatsCardProps {
   color?: string;
 }
 
-export function StatsCard({ title, value, icon, trend, color = '#D3010A' }: StatsCardProps) {
+export const StatsCard = memo(function StatsCard({ title, value, icon, trend, color = '#D3010A' }: StatsCardProps) {
   return (
     <div className="rh-stat-card">
       <div className="rh-stat-card-header">
@@ -32,4 +34,4 @@ export function StatsCard({ title, value, icon, trend, color = '#D3010A' }: Stat
       <p className="rh-stat-card-label">{title}</p>
     </div>
   );
-}
+});

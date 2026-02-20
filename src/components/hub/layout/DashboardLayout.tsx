@@ -2,6 +2,7 @@ import { useState } from 'react';
 import type { ReactNode } from 'react';
 import { Sidebar } from './Sidebar.tsx';
 import { Topbar } from './Topbar.tsx';
+import { ErrorBoundary } from '@/components/ErrorBoundary.tsx';
 
 interface DashboardLayoutProps {
   children: ReactNode;
@@ -16,7 +17,9 @@ export function DashboardLayout({ children }: DashboardLayoutProps) {
       <div className={`rh-layout-main ${sidebarCollapsed ? 'sidebar-collapsed' : ''}`}>
         <Topbar />
         <main className="rh-layout-content">
-          {children}
+          <ErrorBoundary>
+            {children}
+          </ErrorBoundary>
         </main>
       </div>
     </div>

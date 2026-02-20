@@ -1,6 +1,7 @@
 import { useState, useEffect, type FormEvent } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { supabase } from '@/lib/supabase.ts';
+import { Spinner } from '@/components/ui/Spinner.tsx';
 
 export function ResetPasswordPage() {
   const [password, setPassword] = useState('');
@@ -45,8 +46,20 @@ export function ResetPasswordPage() {
     e.preventDefault();
     setError('');
 
-    if (password.length < 6) {
-      setError('La contraseña debe tener al menos 6 caracteres');
+    if (password.length < 8) {
+      setError('La contraseña debe tener al menos 8 caracteres');
+      return;
+    }
+    if (!/[A-Z]/.test(password)) {
+      setError('La contraseña debe incluir al menos una letra mayúscula');
+      return;
+    }
+    if (!/[0-9]/.test(password)) {
+      setError('La contraseña debe incluir al menos un número');
+      return;
+    }
+    if (!/[^A-Za-z0-9]/.test(password)) {
+      setError('La contraseña debe incluir al menos un carácter especial');
       return;
     }
 
@@ -103,10 +116,7 @@ export function ResetPasswordPage() {
         <div className="rhino-hub-login-card">
           {checking ? (
             <div style={{ textAlign: 'center', padding: '20px 0' }}>
-              <svg className="animate-spin" width="24" height="24" viewBox="0 0 24 24" style={{ margin: '0 auto 12px', display: 'block', color: '#D3010A' }}>
-                <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" fill="none" />
-                <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z" />
-              </svg>
+              <Spinner size={24} color="#D3010A" className="mx-auto mb-3 block" />
               <p style={{ color: '#8A8886', fontSize: 14 }}>Verificando enlace...</p>
             </div>
           ) : !sessionReady ? (
@@ -153,9 +163,9 @@ export function ResetPasswordPage() {
                     value={password}
                     onChange={(e) => setPassword(e.target.value)}
                     required
-                    minLength={6}
+                    minLength={8}
                     className="rhino-hub-input"
-                    placeholder="Mínimo 6 caracteres"
+                    placeholder="Mín. 8 caracteres, mayúscula, número y especial"
                     autoFocus
                   />
                 </div>
@@ -180,10 +190,7 @@ export function ResetPasswordPage() {
                 >
                   {loading ? (
                     <span style={{ display: 'inline-flex', alignItems: 'center', gap: 8 }}>
-                      <svg className="animate-spin" width="16" height="16" viewBox="0 0 24 24">
-                        <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" fill="none" />
-                        <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z" />
-                      </svg>
+                      <Spinner size={16} />
                       Guardando...
                     </span>
                   ) : (
