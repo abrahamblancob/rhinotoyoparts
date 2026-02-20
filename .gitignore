@@ -42,4 +42,5 @@ claude.md
 .cursorrules
 .claude_output
 supabase/.temp/
+supabase/execute-sql.mjs
 nul

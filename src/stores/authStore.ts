@@ -51,7 +51,7 @@ export const useAuthStore = create<AuthState>((set, get) => ({
         .from('profiles')
         .update({ last_login: new Date().toISOString(), is_active: true })
         .eq('id', data.user.id)
-        .then();
+        .then(undefined, (err: unknown) => console.error('Failed to update last_login:', err));
     }
     set({ loading: false });
     return { error: null };
@@ -71,64 +71,51 @@ export const useAuthStore = create<AuthState>((set, get) => ({
   loadSession: async () => {
     set({ loading: true });
     const {
-      data: { session },
-    } = await supabase.auth.getSession();
-    if (session?.user) {
-      const u = { id: session.user.id, email: session.user.email ?? '' };
+      data: { user: verifiedUser },
+    } = await supabase.auth.getUser();
+    if (verifiedUser) {
+      const u = { id: verifiedUser.id, email: verifiedUser.email ?? '' };
       set({ user: u });
-      await get().loadPermissions(session.user.id);
+      await get().loadPermissions(verifiedUser.id);
 
       // Update last_login and ensure user is active
       supabase
         .from('profiles')
         .update({ last_login: new Date().toISOString(), is_active: true })
-        .eq('id', session.user.id)
-        .then();
+        .eq('id', verifiedUser.id)
+        .then(undefined, (err: unknown) => console.error('Failed to update last_login:', err));
     }
     set({ loading: false, initialized: true });
   },
 
   loadPermissions: async (userId: string) => {
-    // Load profile
-    const { data: profile } = await supabase
-      .from('profiles')
-      .select('*')
-      .eq('id', userId)
-      .single();
+    // Load profile and user roles in parallel (independent queries)
+    const [profileRes, userRolesRes] = await Promise.all([
+      supabase.from('profiles').select('*').eq('id', userId).single(),
+      supabase.from('user_roles').select('role_id, roles(name)').eq('user_id', userId),
+    ]);
 
+    const profile = profileRes.data;
     if (!profile) {
       set({ loading: false, initialized: true });
       return;
     }
 
-    // Load organization
-    const { data: org } = await supabase
-      .from('organizations')
-      .select('*')
-      .eq('id', profile.org_id)
-      .single();
-
-    // Load roles
-    const { data: userRoles } = await supabase
-      .from('user_roles')
-      .select('role_id, roles(name)')
-      .eq('user_id', userId);
-
-    const userRolesList = (userRoles ?? []) as unknown as { role_id: string; roles: { name: string } | null }[];
-
+    const userRolesList = (userRolesRes.data ?? []) as unknown as { role_id: string; roles: { name: string } | null }[];
     const roleNames = userRolesList.map((ur) => ur.roles?.name ?? '');
-
-    // Load permissions via role_permissions
     const roleIds = userRolesList.map((ur) => ur.role_id);
+
+    // Load organization and role permissions in parallel (both depend on previous results)
+    const [orgRes, permsResult] = await Promise.all([
+      supabase.from('organizations').select('*').eq('id', profile.org_id).single(),
+      roleIds.length > 0
+        ? supabase.from('role_permissions').select('permissions(module, action)').in('role_id', roleIds)
+        : Promise.resolve({ data: null }),
+    ]);
+
     let perms: UserPermission[] = [];
-
-    if (roleIds.length > 0) {
-      const { data: rolePerms } = await supabase
-        .from('role_permissions')
-        .select('permissions(module, action)')
-        .in('role_id', roleIds);
-
-      const rolePermsList = (rolePerms ?? []) as unknown as { permissions: { module: string; action: string } | null }[];
+    if (permsResult.data) {
+      const rolePermsList = permsResult.data as unknown as { permissions: { module: string; action: string } | null }[];
       perms = rolePermsList.map((rp) => ({
         module: rp.permissions?.module ?? '',
         action: rp.permissions?.action ?? '',
@@ -137,7 +124,7 @@ export const useAuthStore = create<AuthState>((set, get) => ({
 
     set({
       profile: profile as Profile,
-      organization: org as Organization,
+      organization: orgRes.data as Organization,
       roles: roleNames,
       permissions: perms,
     });

@@ -1,3 +1,4 @@
+import { memo } from 'react';
 import { motion } from 'framer-motion';
 import { QRCodeSVG } from 'qrcode.react';
 import { User } from 'lucide-react';
@@ -10,7 +11,7 @@ interface SellerCardProps {
   index: number;
 }
 
-export function SellerCard({ seller, index }: SellerCardProps) {
+export const SellerCard = memo(function SellerCard({ seller, index }: SellerCardProps) {
   const whatsappLink = useWhatsappLink(
     seller.whatsappNumber,
     `Hola ${seller.name}, me comunico desde la web de Rhino Toyo Parts. Me interesa consultar sobre repuestos.`,
@@ -89,4 +90,4 @@ export function SellerCard({ seller, index }: SellerCardProps) {
       </p>
     </motion.div>
   );
-}
+});

@@ -4,18 +4,7 @@
 // API key never exposed to frontend.
 
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2'
-
-const corsHeaders = {
-  'Access-Control-Allow-Origin': '*',
-  'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
-}
-
-function jsonResponse(body: Record<string, unknown>, status = 200) {
-  return new Response(JSON.stringify(body), {
-    status,
-    headers: { ...corsHeaders, 'Content-Type': 'application/json' },
-  })
-}
+import { getCorsHeaders } from '../_shared/cors.ts'
 
 // ---------- Gemini Vision Analysis ----------
 
@@ -228,6 +217,15 @@ function mapProducts(rows: any[]): ProductMatch[] {
 // ---------- Main Handler ----------
 
 Deno.serve(async (req) => {
+  const corsHeaders = getCorsHeaders(req)
+
+  function jsonResponse(body: Record<string, unknown>, status = 200) {
+    return new Response(JSON.stringify(body), {
+      status,
+      headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+    })
+  }
+
   if (req.method === 'OPTIONS') {
     return new Response('ok', { headers: corsHeaders })
   }
@@ -244,6 +242,29 @@ Deno.serve(async (req) => {
     const { image_base64, mime_type } = body
     if (!image_base64 || !mime_type) {
       return jsonResponse({ error: 'Faltan campos: image_base64 y mime_type' }, 400)
+    }
+
+    // Validate MIME type
+    const validMimes = ['image/jpeg', 'image/png', 'image/webp', 'image/gif']
+    if (!validMimes.includes(mime_type as string)) {
+      return jsonResponse({ error: 'Tipo de imagen no soportado. Usa JPEG, PNG o WebP.' }, 400)
+    }
+
+    // Verify JWT — require authenticated user
+    const authHeader = req.headers.get('Authorization')
+    if (!authHeader) {
+      return jsonResponse({ error: 'No autorizado' }, 401)
+    }
+
+    const supabaseUrl = Deno.env.get('SUPABASE_URL') ?? ''
+    const supabaseAnonKey = Deno.env.get('SUPABASE_ANON_KEY') ?? ''
+
+    const supabaseUser = createClient(supabaseUrl, supabaseAnonKey, {
+      global: { headers: { Authorization: authHeader } },
+    })
+    const { data: { user }, error: authError } = await supabaseUser.auth.getUser()
+    if (authError || !user) {
+      return jsonResponse({ error: 'No autorizado - sesión inválida' }, 401)
     }
 
     // Validate image size (base64 ≈ 1.33x original, limit ~4MB original = ~5.3MB base64)
@@ -267,15 +288,17 @@ Deno.serve(async (req) => {
       })
     }
 
-    // Step 2: Search products in DB
-    const supabaseUrl = Deno.env.get('SUPABASE_URL')!
-    const serviceRoleKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!
-    const supabase = createClient(supabaseUrl, serviceRoleKey)
+    // Step 2: Search products in DB (use anon key — products_public_read RLS allows anon SELECT on active products)
+    const supabase = createClient(supabaseUrl, supabaseAnonKey)
 
     const products = await searchProducts(supabase, analysis)
 
-    // Step 3: Log the search (fire and forget)
-    supabase.from('vision_searches').insert({
+    // Step 3: Log the search (fire and forget — use service role to bypass RLS for analytics table)
+    const serviceRoleKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY') ?? ''
+    const supabaseAdmin = createClient(supabaseUrl, serviceRoleKey, {
+      auth: { autoRefreshToken: false, persistSession: false },
+    })
+    supabaseAdmin.from('vision_searches').insert({
       part_name: analysis.part_name,
       oem_number: analysis.oem_number,
       category: analysis.category,

@@ -1,3 +1,4 @@
+import { useCallback, useMemo } from 'react';
 import { useAuthStore } from '@/stores/authStore.ts';
 
 export function usePermissions() {
@@ -5,25 +6,25 @@ export function usePermissions() {
   const roles = useAuthStore((s) => s.roles);
   const organization = useAuthStore((s) => s.organization);
 
-  const hasPermission = (module: string, action: string): boolean => {
+  const hasPermission = useCallback((module: string, action: string): boolean => {
     // Platform owners have all permissions
     if (roles.includes('platform_owner')) return true;
     return permissions.some(
       (p) => p.module === module && p.action === action
     );
-  };
+  }, [roles, permissions]);
 
-  const canRead = (module: string) => hasPermission(module, 'read');
-  const canWrite = (module: string) => hasPermission(module, 'write');
-  const canDelete = (module: string) => hasPermission(module, 'delete');
-  const canManage = (module: string) => hasPermission(module, 'manage');
+  const canRead = useCallback((module: string) => hasPermission(module, 'read'), [hasPermission]);
+  const canWrite = useCallback((module: string) => hasPermission(module, 'write'), [hasPermission]);
+  const canDelete = useCallback((module: string) => hasPermission(module, 'delete'), [hasPermission]);
+  const canManage = useCallback((module: string) => hasPermission(module, 'manage'), [hasPermission]);
 
   const isPlatform = organization?.type === 'platform';
   const isAggregator = organization?.type === 'aggregator';
   const isAssociate = organization?.type === 'associate';
   const isPlatformOwner = roles.includes('platform_owner');
 
-  return {
+  return useMemo(() => ({
     hasPermission,
     canRead,
     canWrite,
@@ -34,5 +35,5 @@ export function usePermissions() {
     isAggregator,
     isAssociate,
     orgType: organization?.type,
-  };
+  }), [hasPermission, canRead, canWrite, canDelete, canManage, isPlatform, isPlatformOwner, isAggregator, isAssociate, organization?.type]);
 }
