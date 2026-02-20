@@ -1,8 +1,7 @@
 import type { ColumnMapping, RawRow } from './types.ts';
 import { HEADER_ALIASES, PRODUCT_FIELDS } from './constants.ts';
-import { ENV } from '@/config/env.ts';
 
-const GEMINI_API_KEY = ENV.GEMINI_API_KEY;
+const GEMINI_API_KEY = import.meta.env.VITE_GEMINI_API_KEY as string | undefined;
 const GEMINI_API_URL =
   'https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent';
 
