@@ -4,6 +4,7 @@ import { AuthGuard } from '@/features/auth/AuthGuard.tsx';
 import { LoginPage } from '@/features/auth/LoginPage.tsx';
 import { ResetPasswordPage } from '@/features/auth/ResetPasswordPage.tsx';
 import { DashboardLayout } from '@/components/hub/layout/DashboardLayout.tsx';
+import { usePermissions } from '@/hooks/usePermissions.ts';
 
 const DashboardPage = lazy(() => import('@/features/dashboard/DashboardPage.tsx').then(m => ({ default: m.DashboardPage })));
 const OrgListPage = lazy(() => import('@/features/organizations/OrgListPage.tsx').then(m => ({ default: m.OrgListPage })));
@@ -18,6 +19,18 @@ const DispatchesPage = lazy(() => import('@/features/dispatches/DispatchesPage.t
 const BillingPage = lazy(() => import('@/features/billing/BillingPage.tsx').then(m => ({ default: m.BillingPage })));
 const AuditPage = lazy(() => import('@/features/audit/AuditPage.tsx').then(m => ({ default: m.AuditPage })));
 const SettingsPage = lazy(() => import('@/features/settings/SettingsPage.tsx').then(m => ({ default: m.SettingsPage })));
+
+/** Redirects vendedor/despachador away from Dashboard to their relevant page */
+function SmartIndex() {
+  const { roles, isDispatcher } = usePermissions();
+  const isEditor = roles.includes('associate_editor');
+
+  if (isDispatcher) return <Navigate to="/hub/dispatches" replace />;
+  if (isEditor) return <Navigate to="/hub/orders" replace />;
+
+  // All other roles see the Dashboard
+  return <DashboardPage />;
+}
 
 function HubLoading() {
   return (
@@ -47,7 +60,7 @@ export function HubRouter() {
             <DashboardLayout>
               <Suspense fallback={<HubLoading />}>
                 <Routes>
-                  <Route index element={<DashboardPage />} />
+                  <Route index element={<SmartIndex />} />
                   <Route path="organizations" element={<OrgListPage />} />
                   <Route path="users" element={<UsersPage />} />
                   <Route path="inventory" element={<InventoryPage />} />

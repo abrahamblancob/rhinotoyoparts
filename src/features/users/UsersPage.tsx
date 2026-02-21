@@ -7,6 +7,7 @@ import { StatusBadge } from '@/components/hub/shared/StatusBadge.tsx';
 import { EmptyState } from '@/components/hub/shared/EmptyState.tsx';
 import { Modal } from '@/components/hub/shared/Modal.tsx';
 import type { Profile, Organization, Role } from '@/lib/database.types.ts';
+import { RolesPermissionsPanel } from './RolesPermissionsPanel.tsx';
 
 interface UserWithRole extends Profile {
   role_name?: string;
@@ -27,7 +28,7 @@ export function UsersPage() {
   const [loading, setLoading] = useState(true);
   const [showCreate, setShowCreate] = useState(false);
   const [search, setSearch] = useState('');
-  const { canWrite, canManage, isPlatform, isAggregator } = usePermissions();
+  const { canWrite, canManage, isPlatform, isAggregator, roles: userRoles } = usePermissions();
   const organization = useAuthStore((s) => s.organization);
 
   // Create user form
@@ -828,6 +829,11 @@ export function UsersPage() {
           </div>
         )}
       </Modal>
+
+      {/* ── Roles & Permissions Matrix (admin only) ──────────────── */}
+      {(userRoles.includes('platform_owner') || userRoles.includes('platform_support') || userRoles.includes('aggregator_admin') || userRoles.includes('associate_admin')) && (
+        <RolesPermissionsPanel />
+      )}
     </div>
   );
 }
