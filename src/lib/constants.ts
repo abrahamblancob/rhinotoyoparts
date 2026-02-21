@@ -34,6 +34,7 @@ export const MODULES = [
   'audit',
   'settings',
   'upload',
+  'dispatches',
 ] as const;
 
 export const ACTIONS = ['read', 'write', 'delete', 'manage'] as const;
@@ -48,15 +49,22 @@ export const ROLES = {
   ASSOCIATE_ADMIN: 'associate_admin',
   ASSOCIATE_EDITOR: 'associate_editor',
   ASSOCIATE_VIEWER: 'associate_viewer',
+  ASSOCIATE_DISPATCHER: 'associate_dispatcher',
 } as const;
 
 export const ORDER_STATUSES = [
+  'draft',
   'pending',
   'confirmed',
+  'assigned',
+  'preparing',
+  'ready_to_ship',
   'processing',
   'shipped',
+  'in_transit',
   'delivered',
   'cancelled',
+  'returned',
 ] as const;
 
 export const PRODUCT_STATUSES = [

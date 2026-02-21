@@ -3,6 +3,7 @@ import { StatsCard } from '@/components/hub/shared/StatsCard.tsx';
 import { usePermissions } from '@/hooks/usePermissions.ts';
 import { supabase } from '@/lib/supabase.ts';
 import { useAuthStore } from '@/stores/authStore.ts';
+import { OrderPipelineWidget } from './OrderPipelineWidget.tsx';
 
 export function DashboardPage() {
   const { isPlatform, isAggregator } = usePermissions();
@@ -91,6 +92,13 @@ export function DashboardPage() {
           color="#D3010A"
         />
       </div>
+
+      {/* Order Pipeline (visible for aggregator and platform) */}
+      {(isPlatform || isAggregator) && (
+        <div style={{ marginBottom: 20 }}>
+          <OrderPipelineWidget />
+        </div>
+      )}
 
       {/* Sales Chart + Recent Activity */}
       <div style={{ display: 'grid', gridTemplateColumns: '1fr 380px', gap: 20, marginBottom: 20 }}>

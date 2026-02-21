@@ -8,6 +8,8 @@ interface NavItem {
   path: string;
   icon: string;
   module: string;
+  /** Hide this item from users with any of these roles */
+  hideForRoles?: string[];
 }
 
 interface NavSection {
@@ -86,9 +88,11 @@ const NAV_CONFIG: Record<OrgType, NavSection[]> = {
     {
       title: 'PRINCIPAL',
       items: [
-        { label: 'Dashboard', path: '/hub', icon: '📊', module: 'dashboard' },
+        { label: 'Dashboard', path: '/hub', icon: '📊', module: 'dashboard', hideForRoles: ['associate_editor', 'associate_dispatcher'] },
         { label: 'Inventario', path: '/hub/inventory', icon: '📦', module: 'inventory' },
         { label: 'Órdenes de Compra', path: '/hub/orders', icon: '🛒', module: 'orders' },
+        { label: 'Clientes', path: '/hub/customers', icon: '👤', module: 'customers' },
+        { label: 'Mis Despachos', path: '/hub/dispatches', icon: '🚚', module: 'dispatches' },
         { label: 'Carga de Inventario', path: '/hub/inventory/upload', icon: '📤', module: 'upload' },
       ],
     },
@@ -119,7 +123,7 @@ export function Sidebar({ collapsed, onToggle }: SidebarProps) {
   const profile = useAuthStore((s) => s.profile);
   const organization = useAuthStore((s) => s.organization);
   const logout = useAuthStore((s) => s.logout);
-  const { canRead, orgType } = usePermissions();
+  const { canRead, orgType, roles } = usePermissions();
   const navigate = useNavigate();
 
   const sections = NAV_CONFIG[orgType ?? 'associate'] ?? [];
@@ -154,7 +158,10 @@ export function Sidebar({ collapsed, onToggle }: SidebarProps) {
 
       <nav className="rh-sidebar-nav">
         {sections.map((section) => {
-          const visibleItems = section.items.filter((item) => canRead(item.module));
+          const visibleItems = section.items.filter((item) => {
+            if (item.hideForRoles?.some((r) => roles.includes(r))) return false;
+            return canRead(item.module);
+          });
           if (visibleItems.length === 0) return null;
 
           return (
