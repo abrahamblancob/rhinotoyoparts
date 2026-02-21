@@ -50,7 +50,6 @@ export function OrdersPage() {
   const totalRevenue = orders.reduce((s, o) => s + Number(o.total), 0);
   const pendingCount = orders.filter((o) => ['draft', 'pending', 'confirmed'].includes(o.status)).length;
   const inProgressCount = orders.filter((o) => ['assigned', 'preparing', 'ready_to_ship', 'processing'].includes(o.status)).length;
-  const shippedCount = orders.filter((o) => ['shipped', 'in_transit'].includes(o.status)).length;
 
   const statuses = ['all', 'draft', 'pending', 'confirmed', 'assigned', 'preparing', 'ready_to_ship', 'shipped', 'in_transit', 'delivered', 'cancelled'];
   const statusLabels: Record<string, string> = {
