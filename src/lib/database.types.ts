@@ -121,6 +121,18 @@ export interface Order {
   total: number;
   notes: string | null;
   created_by: string;
+  assigned_to: string | null;
+  assigned_at: string | null;
+  confirmed_at: string | null;
+  shipped_at: string | null;
+  delivered_at: string | null;
+  cancelled_at: string | null;
+  cancel_reason: string | null;
+  tracking_number: string | null;
+  carrier_id: string | null;
+  shipping_address: Record<string, string> | null;
+  customer_phone: string | null;
+  source: 'manual' | 'whatsapp' | 'rhino_vision' | 'catalog';
   created_at: string;
   updated_at: string;
 }
@@ -137,10 +149,25 @@ export interface OrderItem {
 export interface OrderStatusHistory {
   id: string;
   order_id: string;
+  org_id: string;
   from_status: OrderStatus | null;
   to_status: OrderStatus;
   changed_by: string;
   note: string | null;
+  metadata: Record<string, unknown>;
+  created_at: string;
+}
+
+export interface OrderAssignment {
+  id: string;
+  order_id: string;
+  org_id: string;
+  assigned_to: string;
+  assigned_by: string;
+  status: 'active' | 'reassigned' | 'completed';
+  accepted_at: string | null;
+  completed_at: string | null;
+  notes: string | null;
   created_at: string;
 }
 

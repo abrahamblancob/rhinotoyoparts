@@ -23,6 +23,7 @@ export function usePermissions() {
   const isAggregator = organization?.type === 'aggregator';
   const isAssociate = organization?.type === 'associate';
   const isPlatformOwner = roles.includes('platform_owner');
+  const isDispatcher = roles.includes('associate_dispatcher');
 
   return useMemo(() => ({
     hasPermission,
@@ -34,6 +35,8 @@ export function usePermissions() {
     isPlatformOwner,
     isAggregator,
     isAssociate,
+    isDispatcher,
+    roles,
     orgType: organization?.type,
-  }), [hasPermission, canRead, canWrite, canDelete, canManage, isPlatform, isPlatformOwner, isAggregator, isAssociate, organization?.type]);
+  }), [hasPermission, canRead, canWrite, canDelete, canManage, isPlatform, isPlatformOwner, isAggregator, isAssociate, isDispatcher, roles, organization?.type]);
 }

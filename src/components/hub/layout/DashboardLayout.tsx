@@ -3,6 +3,8 @@ import type { ReactNode } from 'react';
 import { Sidebar } from './Sidebar.tsx';
 import { Topbar } from './Topbar.tsx';
 import { ErrorBoundary } from '@/components/ErrorBoundary.tsx';
+import { ToastContainer, showToast } from '@/components/hub/shared/ToastNotification.tsx';
+import { useOrderNotifications } from '@/hooks/useOrderNotifications.ts';
 
 interface DashboardLayoutProps {
   children: ReactNode;
@@ -10,6 +12,9 @@ interface DashboardLayoutProps {
 
 export function DashboardLayout({ children }: DashboardLayoutProps) {
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
+
+  // Subscribe to real-time order status changes
+  useOrderNotifications((msg) => showToast(msg));
 
   return (
     <div className="rh-layout">
@@ -22,6 +27,7 @@ export function DashboardLayout({ children }: DashboardLayoutProps) {
           </ErrorBoundary>
         </main>
       </div>
+      <ToastContainer />
     </div>
   );
 }

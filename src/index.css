@@ -3747,6 +3747,18 @@ select.rh-select:disabled {
   }
 }
 
+/* Toast notification animation */
+@keyframes slideIn {
+  from {
+    transform: translateX(100%);
+    opacity: 0;
+  }
+  to {
+    transform: translateX(0);
+    opacity: 1;
+  }
+}
+
 /* Features Section */
 .rhino-vision-features {
   background: #f7f7f7;

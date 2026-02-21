@@ -89,6 +89,8 @@ const NAV_CONFIG: Record<OrgType, NavSection[]> = {
         { label: 'Dashboard', path: '/hub', icon: '📊', module: 'dashboard' },
         { label: 'Inventario', path: '/hub/inventory', icon: '📦', module: 'inventory' },
         { label: 'Órdenes de Compra', path: '/hub/orders', icon: '🛒', module: 'orders' },
+        { label: 'Clientes', path: '/hub/customers', icon: '👤', module: 'customers' },
+        { label: 'Mis Despachos', path: '/hub/dispatches', icon: '🚚', module: 'dispatches' },
         { label: 'Carga de Inventario', path: '/hub/inventory/upload', icon: '📤', module: 'upload' },
       ],
     },
