@@ -7,6 +7,7 @@ const HomePage = lazy(() => import('./components/pages/HomePage').then(m => ({ d
 const RhinoVisionPage = lazy(() => import('./components/pages/RhinoVisionPage').then(m => ({ default: m.RhinoVisionPage })));
 const RhinoHubPage = lazy(() => import('./pages/RhinoHubPage').then(m => ({ default: m.RhinoHubPage })));
 const HubRouter = lazy(() => import('./features/hub/HubRouter').then(m => ({ default: m.HubRouter })));
+const PublicTrackingPage = lazy(() => import('./pages/PublicTrackingPage').then(m => ({ default: m.PublicTrackingPage })));
 
 function AppLoading() {
   return (
@@ -32,6 +33,8 @@ function App() {
               <Route path="/" element={<HomePage />} />
               <Route path="/rhinovision" element={<RhinoVisionPage />} />
               <Route path="/rhinohub" element={<RhinoHubPage />} />
+              <Route path="/tracking" element={<PublicTrackingPage />} />
+              <Route path="/tracking/:code" element={<PublicTrackingPage />} />
               <Route path="/hub/*" element={<HubRouter />} />
             </Routes>
           </Suspense>

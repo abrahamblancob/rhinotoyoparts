@@ -6,6 +6,7 @@ import { usePermissions } from '@/hooks/usePermissions.ts';
 import { StatusBadge } from '@/components/hub/shared/StatusBadge.tsx';
 import { Modal } from '@/components/hub/shared/Modal.tsx';
 import type { Order, OrderItem, OrderStatusHistory, Customer, Profile, Carrier } from '@/lib/database.types.ts';
+import { WhatsAppShareButton } from '@/components/orders/WhatsAppShareButton.tsx';
 
 interface OrderItemWithProduct extends OrderItem {
   products: { name: string; sku: string; image_url: string | null } | null;
@@ -377,6 +378,23 @@ export function OrderDetailPage() {
                   <div><span style={{ color: '#64748B' }}>Despachado:</span> {new Date(order.shipped_at).toLocaleString('es-VE')}</div>
                 )}
               </div>
+            </div>
+          )}
+
+          {/* WhatsApp share + tracking link */}
+          {order.tracking_code && (
+            <div className="rh-card" style={{ padding: 20 }}>
+              <h3 className="rh-card-title" style={{ marginBottom: 8 }}>Tracking Público</h3>
+              <div style={{ fontSize: 13, color: '#64748B', marginBottom: 12 }}>
+                Código: <strong style={{ fontFamily: 'monospace', fontSize: 15, color: '#1E293B' }}>{order.tracking_code}</strong>
+              </div>
+              <WhatsAppShareButton
+                trackingCode={order.tracking_code}
+                receiverName={order.receiver_name ?? customer?.name ?? null}
+                customerPhone={order.customer_phone ?? customer?.phone ?? null}
+                items={items.map((i) => ({ name: i.products?.name ?? 'Producto', quantity: i.quantity }))}
+                orderStatus={order.status}
+              />
             </div>
           )}
 
