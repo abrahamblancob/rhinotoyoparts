@@ -133,6 +133,15 @@ export interface Order {
   shipping_address: Record<string, string> | null;
   customer_phone: string | null;
   source: 'manual' | 'whatsapp' | 'rhino_vision' | 'catalog';
+  tracking_code: string | null;
+  tracking_is_public: boolean;
+  estimated_duration_min: number | null;
+  delivery_latitude: number | null;
+  delivery_longitude: number | null;
+  dispatcher_current_lat: number | null;
+  dispatcher_current_lng: number | null;
+  dispatcher_last_update: string | null;
+  receiver_name: string | null;
   created_at: string;
   updated_at: string;
 }
