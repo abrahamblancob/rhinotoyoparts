@@ -1,5 +1,12 @@
 import { useEffect, useRef, useState } from 'react';
 
+/* eslint-disable @typescript-eslint/no-explicit-any */
+declare global {
+  interface Window {
+    google?: any;
+  }
+}
+
 interface TrackingMapProps {
   dispatcherLat: number;
   dispatcherLng: number;
@@ -20,9 +27,9 @@ export function TrackingMap({
   estimatedMinutes,
 }: TrackingMapProps) {
   const mapRef = useRef<HTMLDivElement>(null);
-  const mapInstance = useRef<google.maps.Map | null>(null);
-  const markerRef = useRef<google.maps.marker.AdvancedMarkerElement | null>(null);
-  const destMarkerRef = useRef<google.maps.marker.AdvancedMarkerElement | null>(null);
+  const mapInstance = useRef<any>(null);
+  const markerRef = useRef<any>(null);
+  const destMarkerRef = useRef<any>(null);
   const [mapLoaded, setMapLoaded] = useState(false);
 
   // Load Google Maps script dynamically
@@ -48,9 +55,10 @@ export function TrackingMap({
   useEffect(() => {
     if (!mapLoaded || !mapRef.current || !window.google?.maps) return;
 
+    const g = window.google;
     const center = { lat: dispatcherLat, lng: dispatcherLng };
 
-    const map = new google.maps.Map(mapRef.current, {
+    const map = new g.maps.Map(mapRef.current, {
       center,
       zoom: 14,
       disableDefaultUI: true,
@@ -69,8 +77,8 @@ export function TrackingMap({
     motoEl.style.cssText = 'font-size:28px;filter:drop-shadow(0 2px 4px rgba(0,0,0,0.3));';
     motoEl.textContent = '🏍️';
 
-    if (google.maps.marker?.AdvancedMarkerElement) {
-      const marker = new google.maps.marker.AdvancedMarkerElement({
+    if (g.maps.marker?.AdvancedMarkerElement) {
+      const marker = new g.maps.marker.AdvancedMarkerElement({
         map,
         position: center,
         content: motoEl,
@@ -85,8 +93,8 @@ export function TrackingMap({
       destEl.style.cssText = 'font-size:24px;filter:drop-shadow(0 2px 4px rgba(0,0,0,0.3));';
       destEl.textContent = '📍';
 
-      if (google.maps.marker?.AdvancedMarkerElement) {
-        const destMarker = new google.maps.marker.AdvancedMarkerElement({
+      if (g.maps.marker?.AdvancedMarkerElement) {
+        const destMarker = new g.maps.marker.AdvancedMarkerElement({
           map,
           position: { lat: deliveryLat, lng: deliveryLng },
           content: destEl,
@@ -96,7 +104,7 @@ export function TrackingMap({
       }
 
       // Fit bounds to show both markers
-      const bounds = new google.maps.LatLngBounds();
+      const bounds = new g.maps.LatLngBounds();
       bounds.extend(center);
       bounds.extend({ lat: deliveryLat, lng: deliveryLng });
       map.fitBounds(bounds, { top: 50, bottom: 50, left: 50, right: 50 });
