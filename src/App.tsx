@@ -10,6 +10,7 @@ const HubRouter = lazy(() => import('./features/hub/HubRouter').then(m => ({ def
 const PublicTrackingPage = lazy(() => import('./pages/PublicTrackingPage').then(m => ({ default: m.PublicTrackingPage })));
 const PrivacyPage = lazy(() => import('./pages/PrivacyPage').then(m => ({ default: m.PrivacyPage })));
 const DeleteAccountPage = lazy(() => import('./pages/DeleteAccountPage').then(m => ({ default: m.DeleteAccountPage })));
+const TermsPage = lazy(() => import('./pages/TermsPage').then(m => ({ default: m.TermsPage })));
 
 function AppLoading() {
   return (
@@ -40,6 +41,7 @@ function App() {
               <Route path="/hub/*" element={<HubRouter />} />
               <Route path="/privacy" element={<PrivacyPage />} />
               <Route path="/delete-account" element={<DeleteAccountPage />} />
+              <Route path="/terms" element={<TermsPage />} />
             </Routes>
           </Suspense>
         </div>
