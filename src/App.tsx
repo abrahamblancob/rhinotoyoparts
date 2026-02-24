@@ -9,6 +9,7 @@ const RhinoHubPage = lazy(() => import('./pages/RhinoHubPage').then(m => ({ defa
 const HubRouter = lazy(() => import('./features/hub/HubRouter').then(m => ({ default: m.HubRouter })));
 const PublicTrackingPage = lazy(() => import('./pages/PublicTrackingPage').then(m => ({ default: m.PublicTrackingPage })));
 const PrivacyPage = lazy(() => import('./pages/PrivacyPage').then(m => ({ default: m.PrivacyPage })));
+const DeleteAccountPage = lazy(() => import('./pages/DeleteAccountPage').then(m => ({ default: m.DeleteAccountPage })));
 
 function AppLoading() {
   return (
@@ -38,6 +39,7 @@ function App() {
               <Route path="/tracking/:code" element={<PublicTrackingPage />} />
               <Route path="/hub/*" element={<HubRouter />} />
               <Route path="/privacy" element={<PrivacyPage />} />
+              <Route path="/delete-account" element={<DeleteAccountPage />} />
             </Routes>
           </Suspense>
         </div>
