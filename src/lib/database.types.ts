@@ -142,6 +142,18 @@ export interface Order {
   dispatcher_current_lng: number | null;
   dispatcher_last_update: string | null;
   receiver_name: string | null;
+  pickup_latitude: number | null;
+  pickup_longitude: number | null;
+  estimated_distance_km: number | null;
+  actual_pickup_at: string | null;
+  actual_delivery_at: string | null;
+  receiver_phone: string | null;
+  receiver_id_number: string | null;
+  receiver_relationship: string | null;
+  delivery_notes: string | null;
+  requires_id_check: boolean;
+  shipping_address_id: string | null;
+  delivery_photo_url: string | null;
   created_at: string;
   updated_at: string;
 }
