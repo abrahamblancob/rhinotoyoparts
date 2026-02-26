@@ -58,6 +58,7 @@ export function OrderDetailPage() {
 
   const [updating, setUpdating] = useState(false);
   const [dispatcherName, setDispatcherName] = useState<string>('Despachador');
+  const [orderQr, setOrderQr] = useState<{ qr_code: string; scanned_at: string | null; scanned_by: string | null; is_valid: boolean } | null>(null);
   const channelRef = useRef<ReturnType<typeof supabase.channel> | null>(null);
 
   const loadOrder = useCallback(async () => {
@@ -84,6 +85,18 @@ export function OrderDetailPage() {
     if (orderData?.assigned_to) {
       const { data: dp } = await supabase.from('profiles').select('full_name').eq('id', orderData.assigned_to).single();
       if (dp) setDispatcherName((dp as { full_name: string }).full_name);
+    }
+
+    // Load order QR code for dispatcher
+    if (orderData?.tracking_code) {
+      const { data: qr } = await supabase
+        .from('order_qr_codes')
+        .select('qr_code, scanned_at, scanned_by, is_valid')
+        .eq('order_id', orderId)
+        .order('created_at', { ascending: false })
+        .limit(1)
+        .single();
+      setOrderQr(qr as { qr_code: string; scanned_at: string | null; scanned_by: string | null; is_valid: boolean } | null);
     }
 
     setLoading(false);
@@ -474,17 +487,16 @@ export function OrderDetailPage() {
             </div>
           )}
 
-          {/* WhatsApp share + tracking link + QR */}
-          {order.tracking_code && (
+          {/* QR de despacho para el despachador */}
+          {orderQr && (
             <div className="rh-card" style={{ padding: 20 }}>
-              <h3 className="rh-card-title" style={{ marginBottom: 12 }}>Tracking Público</h3>
+              <h3 className="rh-card-title" style={{ marginBottom: 12 }}>QR de Orden</h3>
               <div style={{ display: 'flex', gap: 20, alignItems: 'flex-start' }}>
-                {/* QR Code */}
                 <div style={{
                   background: '#fff',
-                  padding: 12,
+                  padding: 16,
                   borderRadius: 12,
-                  border: '2px solid #E2E8F0',
+                  border: orderQr.scanned_at ? '2px solid #10B981' : '2px solid #E2E8F0',
                   display: 'flex',
                   flexDirection: 'column',
                   alignItems: 'center',
@@ -492,31 +504,82 @@ export function OrderDetailPage() {
                   flexShrink: 0,
                 }}>
                   <QRCodeSVG
-                    value={`${window.location.origin}/tracking/${order.tracking_code}`}
-                    size={140}
+                    value={orderQr.qr_code}
+                    size={160}
                     level="M"
                     bgColor="#FFFFFF"
                     fgColor="#1E293B"
                   />
-                  <span style={{ fontSize: 11, color: '#64748B', fontWeight: 500 }}>Escanear para rastrear</span>
+                  <span style={{
+                    fontFamily: 'monospace',
+                    fontSize: 12,
+                    fontWeight: 600,
+                    color: '#1E293B',
+                    letterSpacing: 0.5,
+                  }}>
+                    {orderQr.qr_code}
+                  </span>
                 </div>
-                {/* Info + actions */}
                 <div style={{ flex: 1, display: 'flex', flexDirection: 'column', gap: 10 }}>
-                  <div style={{ fontSize: 13, color: '#64748B' }}>
-                    Código: <strong style={{ fontFamily: 'monospace', fontSize: 15, color: '#1E293B' }}>{order.tracking_code}</strong>
-                  </div>
-                  <div style={{ fontSize: 12, color: '#94A3B8', wordBreak: 'break-all' }}>
-                    {window.location.origin}/tracking/{order.tracking_code}
-                  </div>
-                  <WhatsAppShareButton
-                    trackingCode={order.tracking_code}
-                    receiverName={order.receiver_name ?? customer?.name ?? null}
-                    customerPhone={order.customer_phone ?? customer?.phone ?? null}
-                    items={items.map((i) => ({ name: i.products?.name ?? 'Producto', quantity: i.quantity }))}
-                    orderStatus={order.status}
-                  />
+                  <p style={{ fontSize: 13, color: '#64748B', margin: 0 }}>
+                    El despachador escanea este código desde <strong>Rhino Móvil</strong> para tomar la orden.
+                  </p>
+                  {orderQr.scanned_at ? (
+                    <div style={{
+                      display: 'flex',
+                      alignItems: 'center',
+                      gap: 8,
+                      padding: '8px 12px',
+                      background: '#ECFDF5',
+                      borderRadius: 8,
+                      fontSize: 13,
+                    }}>
+                      <span style={{ fontSize: 16 }}>✅</span>
+                      <div>
+                        <div style={{ fontWeight: 600, color: '#059669' }}>Escaneado</div>
+                        <div style={{ fontSize: 12, color: '#64748B' }}>
+                          {new Date(orderQr.scanned_at).toLocaleString('es-VE')}
+                        </div>
+                      </div>
+                    </div>
+                  ) : (
+                    <div style={{
+                      display: 'flex',
+                      alignItems: 'center',
+                      gap: 8,
+                      padding: '8px 12px',
+                      background: '#FFF7ED',
+                      borderRadius: 8,
+                      fontSize: 13,
+                    }}>
+                      <span style={{ fontSize: 16 }}>⏳</span>
+                      <div>
+                        <div style={{ fontWeight: 600, color: '#D97706' }}>Pendiente de escaneo</div>
+                        <div style={{ fontSize: 12, color: '#64748B' }}>
+                          El despachador aún no ha tomado esta orden
+                        </div>
+                      </div>
+                    </div>
+                  )}
                 </div>
               </div>
+            </div>
+          )}
+
+          {/* WhatsApp share + tracking link */}
+          {order.tracking_code && (
+            <div className="rh-card" style={{ padding: 20 }}>
+              <h3 className="rh-card-title" style={{ marginBottom: 8 }}>Tracking Público</h3>
+              <div style={{ fontSize: 13, color: '#64748B', marginBottom: 12 }}>
+                Código: <strong style={{ fontFamily: 'monospace', fontSize: 15, color: '#1E293B' }}>{order.tracking_code}</strong>
+              </div>
+              <WhatsAppShareButton
+                trackingCode={order.tracking_code}
+                receiverName={order.receiver_name ?? customer?.name ?? null}
+                customerPhone={order.customer_phone ?? customer?.phone ?? null}
+                items={items.map((i) => ({ name: i.products?.name ?? 'Producto', quantity: i.quantity }))}
+                orderStatus={order.status}
+              />
             </div>
           )}
 
