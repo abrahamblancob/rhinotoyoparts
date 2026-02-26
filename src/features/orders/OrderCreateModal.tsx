@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useState, useRef, useCallback } from 'react';
 import { supabase } from '@/lib/supabase.ts';
 import { useAuthStore } from '@/stores/authStore.ts';
 import { Modal } from '@/components/hub/shared/Modal.tsx';
@@ -19,22 +19,25 @@ export function OrderCreateModal({ open, onClose, onCreated }: OrderCreateModalP
   const profile = useAuthStore((s) => s.profile);
   const organization = useAuthStore((s) => s.organization);
 
-  const [source, setSource] = useState<'manual' | 'whatsapp' | 'rhino_vision'>('manual');
-  const [visionRef, setVisionRef] = useState('');
   const [customers, setCustomers] = useState<Customer[]>([]);
   const [customerSearch, setCustomerSearch] = useState('');
   const [selectedCustomer, setSelectedCustomer] = useState<Customer | null>(null);
   const [showNewCustomer, setShowNewCustomer] = useState(false);
-  const [newCustomer, setNewCustomer] = useState({ name: '', phone: '', whatsapp: '', address: '', city: '', state: '' });
+  const [newCustomer, setNewCustomer] = useState({ name: '', phone: '', city: '' });
   const [shippingAddress, setShippingAddress] = useState('');
   const [customerPhone, setCustomerPhone] = useState('');
 
   const [productSearch, setProductSearch] = useState('');
   const [productResults, setProductResults] = useState<Product[]>([]);
+  const [productLoading, setProductLoading] = useState(false);
   const [items, setItems] = useState<OrderItem[]>([]);
   const [notes, setNotes] = useState('');
   const [shippingCost, setShippingCost] = useState(0);
   const [saving, setSaving] = useState(false);
+
+  // Refs for debounce
+  const productDebounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const productSearchRef = useRef('');
 
   useEffect(() => {
     if (open && organization) {
@@ -44,36 +47,68 @@ export function OrderCreateModal({ open, onClose, onCreated }: OrderCreateModalP
     }
   }, [open, organization]);
 
+  // Reset form when modal closes
   useEffect(() => {
     if (!open) {
-      setSource('manual');
-      setVisionRef('');
       setSelectedCustomer(null);
       setShowNewCustomer(false);
-      setNewCustomer({ name: '', phone: '', whatsapp: '', address: '', city: '', state: '' });
+      setNewCustomer({ name: '', phone: '', city: '' });
       setShippingAddress('');
       setCustomerPhone('');
+      setCustomerSearch('');
       setProductSearch('');
       setProductResults([]);
+      setProductLoading(false);
       setItems([]);
       setNotes('');
       setShippingCost(0);
     }
   }, [open]);
 
-  const searchProducts = async (query: string) => {
+  // Debounced product search
+  const searchProducts = useCallback((query: string) => {
     setProductSearch(query);
-    if (query.length < 2 || !organization) return;
-    const { data } = await supabase
-      .from('products')
-      .select('*')
-      .eq('org_id', organization.id)
-      .eq('status', 'active')
-      .gt('stock', 0)
-      .or(`name.ilike.%${query}%,sku.ilike.%${query}%,oem_number.ilike.%${query}%`)
-      .limit(10);
-    setProductResults((data as Product[]) ?? []);
-  };
+    productSearchRef.current = query;
+
+    if (productDebounceRef.current) {
+      clearTimeout(productDebounceRef.current);
+    }
+
+    if (query.length < 2 || !organization) {
+      setProductResults([]);
+      setProductLoading(false);
+      return;
+    }
+
+    setProductLoading(true);
+
+    productDebounceRef.current = setTimeout(async () => {
+      // Check if query is still current
+      if (productSearchRef.current !== query) return;
+
+      const { data } = await supabase
+        .from('products')
+        .select('*')
+        .eq('org_id', organization.id)
+        .eq('status', 'active')
+        .gt('stock', 0)
+        .or(`name.ilike.%${query}%,sku.ilike.%${query}%,oem_number.ilike.%${query}%`)
+        .limit(10);
+
+      // Only update if query hasn't changed while we were fetching
+      if (productSearchRef.current === query) {
+        setProductResults((data as Product[]) ?? []);
+        setProductLoading(false);
+      }
+    }, 250);
+  }, [organization]);
+
+  // Cleanup debounce on unmount
+  useEffect(() => {
+    return () => {
+      if (productDebounceRef.current) clearTimeout(productDebounceRef.current);
+    };
+  }, []);
 
   const addItem = (product: Product) => {
     const existing = items.find((i) => i.product.id === product.id);
@@ -84,6 +119,7 @@ export function OrderCreateModal({ open, onClose, onCreated }: OrderCreateModalP
     }
     setProductSearch('');
     setProductResults([]);
+    setProductLoading(false);
   };
 
   const updateQty = (productId: string, qty: number) => {
@@ -101,8 +137,12 @@ export function OrderCreateModal({ open, onClose, onCreated }: OrderCreateModalP
   const subtotal = items.reduce((s, i) => s + i.product.price * i.quantity, 0);
   const total = subtotal + shippingCost;
 
-  const filteredCustomers = customerSearch
-    ? customers.filter((c) => c.name.toLowerCase().includes(customerSearch.toLowerCase()) || c.phone?.includes(customerSearch) || c.rif?.includes(customerSearch))
+  const filteredCustomers = customerSearch.length >= 2
+    ? customers.filter((c) =>
+        c.name.toLowerCase().includes(customerSearch.toLowerCase()) ||
+        c.phone?.includes(customerSearch) ||
+        c.rif?.includes(customerSearch)
+      )
     : [];
 
   const handleSave = async (asDraft: boolean) => {
@@ -119,10 +159,7 @@ export function OrderCreateModal({ open, onClose, onCreated }: OrderCreateModalP
           org_id: organization.id,
           name: newCustomer.name,
           phone: newCustomer.phone || null,
-          whatsapp: newCustomer.whatsapp || null,
-          address: newCustomer.address || null,
           city: newCustomer.city || null,
-          state: newCustomer.state || null,
         }).select().single();
         if (newC) customerId = newC.id;
       }
@@ -141,7 +178,7 @@ export function OrderCreateModal({ open, onClose, onCreated }: OrderCreateModalP
         total,
         notes: notes || null,
         created_by: profile.id,
-        source,
+        source: 'manual',
         shipping_address: shippingAddress ? { address: shippingAddress } : null,
         customer_phone: customerPhone || selectedCustomer?.phone || newCustomer.phone || null,
         confirmed_at: asDraft ? null : new Date().toISOString(),
@@ -172,7 +209,7 @@ export function OrderCreateModal({ open, onClose, onCreated }: OrderCreateModalP
         to_status: asDraft ? 'draft' : 'confirmed',
         changed_by: profile.id,
         note: asDraft ? 'Orden creada como borrador' : 'Orden creada y confirmada',
-        metadata: { source, vision_ref: visionRef || undefined },
+        metadata: { source: 'manual' },
       });
 
       onCreated();
@@ -185,7 +222,7 @@ export function OrderCreateModal({ open, onClose, onCreated }: OrderCreateModalP
   };
 
   return (
-    <Modal open={open} onClose={onClose} title="Nueva Orden" width="700px" footer={
+    <Modal open={open} onClose={onClose} title="Nueva Orden" width="640px" footer={
       <div style={{ display: 'flex', gap: 8, justifyContent: 'flex-end' }}>
         <button className="rh-btn rh-btn-secondary" onClick={() => handleSave(true)} disabled={saving || items.length === 0}>
           Guardar como borrador
@@ -195,124 +232,131 @@ export function OrderCreateModal({ open, onClose, onCreated }: OrderCreateModalP
         </button>
       </div>
     }>
-      <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
-        {/* Source */}
-        <div>
-          <label className="rh-label">Origen</label>
-          <div style={{ display: 'flex', gap: 8 }}>
-            {(['manual', 'whatsapp', 'rhino_vision'] as const).map((s) => (
-              <button key={s} onClick={() => setSource(s)}
-                className={`rh-filter-pill ${source === s ? 'active' : ''}`}>
-                {s === 'manual' ? 'Manual' : s === 'whatsapp' ? 'WhatsApp' : 'Rhino Vision'}
-              </button>
-            ))}
-          </div>
-        </div>
+      <div style={{ display: 'flex', flexDirection: 'column', gap: 20 }}>
 
-        {source === 'rhino_vision' && (
-          <div>
-            <label className="rh-label">Ref. Rhino Vision</label>
-            <input className="rh-input" placeholder="RV-XXXXXXXX" value={visionRef}
-              onChange={(e) => setVisionRef(e.target.value)} />
-          </div>
-        )}
-
-        {/* Customer */}
+        {/* ── Cliente ── */}
         <div>
-          <label className="rh-label">Cliente</label>
+          <label className="rh-label" style={{ marginBottom: 6, display: 'block' }}>Cliente</label>
           {selectedCustomer ? (
-            <div style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '8px 12px', background: '#F8FAFC', borderRadius: 8 }}>
-              <span style={{ flex: 1, fontWeight: 500 }}>
-                {selectedCustomer.name} {selectedCustomer.phone && `· ${selectedCustomer.phone}`}
+            <div style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '10px 14px', background: '#F0FDF4', borderRadius: 8, border: '1px solid #BBF7D0' }}>
+              <span style={{ fontSize: 16 }}>👤</span>
+              <span style={{ flex: 1, fontWeight: 600, fontSize: 14 }}>
+                {selectedCustomer.name}
+                {selectedCustomer.phone && <span style={{ fontWeight: 400, color: '#64748B', marginLeft: 8 }}>{selectedCustomer.phone}</span>}
               </span>
-              <button onClick={() => setSelectedCustomer(null)} style={{ background: 'none', border: 'none', cursor: 'pointer', color: '#8A8886' }}>&times;</button>
+              <button onClick={() => { setSelectedCustomer(null); setCustomerPhone(''); setShippingAddress(''); }}
+                style={{ background: 'none', border: 'none', cursor: 'pointer', color: '#8A8886', fontSize: 18, lineHeight: 1 }}>&times;</button>
             </div>
           ) : showNewCustomer ? (
-            <div style={{ display: 'flex', flexDirection: 'column', gap: 8, padding: 12, background: '#F8FAFC', borderRadius: 8 }}>
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 8, padding: 14, background: '#F8FAFC', borderRadius: 8, border: '1px solid #E2E8F0' }}>
+              <span style={{ fontSize: 12, fontWeight: 600, color: '#64748B', textTransform: 'uppercase', letterSpacing: 0.5 }}>Nuevo cliente</span>
+              <input className="rh-input" placeholder="Nombre del cliente *"
+                value={newCustomer.name} onChange={(e) => setNewCustomer({ ...newCustomer, name: e.target.value })} />
               <div style={{ display: 'flex', gap: 8 }}>
-                <input className="rh-input" placeholder="Nombre *" style={{ flex: 1 }}
-                  value={newCustomer.name} onChange={(e) => setNewCustomer({ ...newCustomer, name: e.target.value })} />
-                <input className="rh-input" placeholder="Teléfono" style={{ width: 160 }}
+                <input className="rh-input" placeholder="Teléfono" style={{ flex: 1 }}
                   value={newCustomer.phone} onChange={(e) => setNewCustomer({ ...newCustomer, phone: e.target.value })} />
-              </div>
-              <div style={{ display: 'flex', gap: 8 }}>
-                <input className="rh-input" placeholder="WhatsApp" style={{ flex: 1 }}
-                  value={newCustomer.whatsapp} onChange={(e) => setNewCustomer({ ...newCustomer, whatsapp: e.target.value })} />
                 <input className="rh-input" placeholder="Ciudad" style={{ flex: 1 }}
                   value={newCustomer.city} onChange={(e) => setNewCustomer({ ...newCustomer, city: e.target.value })} />
               </div>
-              <input className="rh-input" placeholder="Dirección"
-                value={newCustomer.address} onChange={(e) => setNewCustomer({ ...newCustomer, address: e.target.value })} />
-              <button className="rh-btn rh-btn-secondary" onClick={() => { setShowNewCustomer(false); setNewCustomer({ name: '', phone: '', whatsapp: '', address: '', city: '', state: '' }); }}
-                style={{ alignSelf: 'flex-start', fontSize: 13 }}>Cancelar</button>
+              <button className="rh-btn rh-btn-secondary" onClick={() => { setShowNewCustomer(false); setNewCustomer({ name: '', phone: '', city: '' }); }}
+                style={{ alignSelf: 'flex-start', fontSize: 12, padding: '4px 12px' }}>Cancelar</button>
             </div>
           ) : (
             <div style={{ display: 'flex', gap: 8 }}>
               <div style={{ flex: 1, position: 'relative' }}>
-                <input className="rh-input" placeholder="Buscar cliente..." value={customerSearch}
+                <input className="rh-input" placeholder="Buscar por nombre, teléfono o RIF..." value={customerSearch}
                   onChange={(e) => setCustomerSearch(e.target.value)} />
                 {filteredCustomers.length > 0 && (
-                  <div style={{ position: 'absolute', top: '100%', left: 0, right: 0, background: '#fff', border: '1px solid #E2E0DE', borderRadius: 8, maxHeight: 200, overflowY: 'auto', zIndex: 10, boxShadow: '0 4px 12px rgba(0,0,0,0.08)' }}>
+                  <div style={{ position: 'absolute', top: '100%', left: 0, right: 0, background: '#fff', border: '1px solid #E2E0DE', borderRadius: 8, maxHeight: 200, overflowY: 'auto', zIndex: 10, boxShadow: '0 4px 12px rgba(0,0,0,0.1)' }}>
                     {filteredCustomers.map((c) => (
                       <div key={c.id} onClick={() => { setSelectedCustomer(c); setCustomerSearch(''); setCustomerPhone(c.phone ?? ''); setShippingAddress(c.address ?? ''); }}
-                        style={{ padding: '8px 12px', cursor: 'pointer', fontSize: 14, borderBottom: '1px solid #F1F5F9' }}
+                        style={{ padding: '10px 14px', cursor: 'pointer', fontSize: 14, borderBottom: '1px solid #F1F5F9', transition: 'background 0.15s' }}
                         onMouseEnter={(e) => (e.currentTarget.style.background = '#F8FAFC')}
                         onMouseLeave={(e) => (e.currentTarget.style.background = '#fff')}>
                         <span style={{ fontWeight: 500 }}>{c.name}</span>
-                        {c.phone && <span style={{ color: '#8A8886', marginLeft: 8 }}>{c.phone}</span>}
+                        {c.phone && <span style={{ color: '#8A8886', marginLeft: 8, fontSize: 13 }}>{c.phone}</span>}
+                        {c.city && <span style={{ color: '#94A3B8', marginLeft: 8, fontSize: 12 }}>· {c.city}</span>}
                       </div>
                     ))}
                   </div>
                 )}
               </div>
-              <button className="rh-btn rh-btn-secondary" onClick={() => setShowNewCustomer(true)}>+ Nuevo</button>
+              <button className="rh-btn rh-btn-secondary" onClick={() => setShowNewCustomer(true)} style={{ whiteSpace: 'nowrap' }}>
+                + Nuevo
+              </button>
             </div>
           )}
         </div>
 
-        {/* Shipping info */}
-        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 8 }}>
+        {/* ── Teléfono + Dirección ── */}
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
           <div>
-            <label className="rh-label">Teléfono de contacto</label>
+            <label className="rh-label" style={{ marginBottom: 4, display: 'block' }}>Teléfono de contacto</label>
             <input className="rh-input" placeholder="+58 414-..." value={customerPhone}
               onChange={(e) => setCustomerPhone(e.target.value)} />
           </div>
           <div>
-            <label className="rh-label">Dirección de envío</label>
-            <input className="rh-input" placeholder="Dirección completa" value={shippingAddress}
-              onChange={(e) => setShippingAddress(e.target.value)} />
+            <label className="rh-label" style={{ marginBottom: 4, display: 'block' }}>Dirección de envío</label>
+            <input className="rh-input"
+              placeholder="https://maps.google.com/... o dirección completa"
+              value={shippingAddress}
+              onChange={(e) => setShippingAddress(e.target.value)}
+            />
+            <span style={{ fontSize: 11, color: '#94A3B8', marginTop: 2, display: 'block' }}>
+              Pega el link de Google Maps para facilitar el tracking del despachador
+            </span>
           </div>
         </div>
 
-        {/* Products */}
+        {/* ── Productos ── */}
         <div>
-          <label className="rh-label">Productos</label>
+          <label className="rh-label" style={{ marginBottom: 6, display: 'block' }}>Productos</label>
           <div style={{ position: 'relative' }}>
-            <input className="rh-input" placeholder="Buscar producto o SKU..." value={productSearch}
-              onChange={(e) => searchProducts(e.target.value)} />
+            <div style={{ position: 'relative' }}>
+              <input className="rh-input" placeholder="Buscar por nombre, SKU o número OEM..."
+                value={productSearch}
+                onChange={(e) => searchProducts(e.target.value)}
+                style={{ paddingRight: 36 }}
+              />
+              {productLoading && (
+                <div style={{
+                  position: 'absolute', right: 10, top: '50%', transform: 'translateY(-50%)',
+                  width: 16, height: 16, border: '2px solid #E2E8F0', borderTopColor: '#D3010A',
+                  borderRadius: '50%', animation: 'spin 0.6s linear infinite',
+                }} />
+              )}
+            </div>
             {productResults.length > 0 && (
-              <div style={{ position: 'absolute', top: '100%', left: 0, right: 0, background: '#fff', border: '1px solid #E2E0DE', borderRadius: 8, maxHeight: 200, overflowY: 'auto', zIndex: 10, boxShadow: '0 4px 12px rgba(0,0,0,0.08)' }}>
+              <div style={{ position: 'absolute', top: '100%', left: 0, right: 0, background: '#fff', border: '1px solid #E2E0DE', borderRadius: 8, maxHeight: 240, overflowY: 'auto', zIndex: 10, boxShadow: '0 4px 16px rgba(0,0,0,0.12)' }}>
                 {productResults.map((p) => (
                   <div key={p.id} onClick={() => addItem(p)}
-                    style={{ padding: '8px 12px', cursor: 'pointer', fontSize: 14, display: 'flex', justifyContent: 'space-between', borderBottom: '1px solid #F1F5F9' }}
+                    style={{ padding: '10px 14px', cursor: 'pointer', fontSize: 14, display: 'flex', justifyContent: 'space-between', alignItems: 'center', borderBottom: '1px solid #F1F5F9', transition: 'background 0.15s' }}
                     onMouseEnter={(e) => (e.currentTarget.style.background = '#F8FAFC')}
                     onMouseLeave={(e) => (e.currentTarget.style.background = '#fff')}>
-                    <div>
-                      <span style={{ fontWeight: 500 }}>{p.name}</span>
-                      <span style={{ color: '#8A8886', marginLeft: 8, fontSize: 12 }}>{p.sku}</span>
+                    <div style={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
+                      <span style={{ fontWeight: 600 }}>{p.name}</span>
+                      <span style={{ color: '#8A8886', fontSize: 12 }}>SKU: {p.sku}{p.oem_number ? ` · OEM: ${p.oem_number}` : ''}</span>
                     </div>
-                    <div>
-                      <span style={{ fontWeight: 600, color: '#10B981' }}>${p.price.toFixed(2)}</span>
-                      <span style={{ color: '#8A8886', marginLeft: 8, fontSize: 12 }}>Stock: {p.stock}</span>
+                    <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-end', gap: 2 }}>
+                      <span style={{ fontWeight: 700, color: '#059669' }}>${p.price.toFixed(2)}</span>
+                      <span style={{ fontSize: 11, color: p.stock > 5 ? '#64748B' : '#D97706' }}>
+                        {p.stock > 5 ? `${p.stock} en stock` : `Solo ${p.stock} en stock`}
+                      </span>
                     </div>
                   </div>
                 ))}
               </div>
             )}
+            {productSearch.length >= 2 && !productLoading && productResults.length === 0 && (
+              <div style={{ position: 'absolute', top: '100%', left: 0, right: 0, background: '#fff', border: '1px solid #E2E0DE', borderRadius: 8, padding: '14px 16px', zIndex: 10, boxShadow: '0 4px 12px rgba(0,0,0,0.08)', color: '#94A3B8', fontSize: 13, textAlign: 'center' }}>
+                No se encontraron productos para "{productSearch}"
+              </div>
+            )}
           </div>
 
+          {/* Items table */}
           {items.length > 0 && (
-            <div style={{ marginTop: 8, border: '1px solid #E2E0DE', borderRadius: 8, overflow: 'hidden' }}>
+            <div style={{ marginTop: 10, border: '1px solid #E2E0DE', borderRadius: 8, overflow: 'hidden' }}>
               <table style={{ width: '100%', fontSize: 14, borderCollapse: 'collapse' }}>
                 <thead>
                   <tr style={{ background: '#F8FAFC' }}>
@@ -320,7 +364,7 @@ export function OrderCreateModal({ open, onClose, onCreated }: OrderCreateModalP
                     <th style={{ padding: '8px 12px', textAlign: 'center', fontWeight: 600, color: '#64748B', width: 80 }}>Qty</th>
                     <th style={{ padding: '8px 12px', textAlign: 'right', fontWeight: 600, color: '#64748B', width: 80 }}>Precio</th>
                     <th style={{ padding: '8px 12px', textAlign: 'right', fontWeight: 600, color: '#64748B', width: 90 }}>Subtotal</th>
-                    <th style={{ width: 40 }}></th>
+                    <th style={{ width: 36 }}></th>
                   </tr>
                 </thead>
                 <tbody>
@@ -339,9 +383,9 @@ export function OrderCreateModal({ open, onClose, onCreated }: OrderCreateModalP
                       <td style={{ padding: '8px 12px', textAlign: 'right', fontWeight: 600 }}>
                         ${(item.product.price * item.quantity).toFixed(2)}
                       </td>
-                      <td style={{ padding: '8px 12px', textAlign: 'center' }}>
+                      <td style={{ padding: '4px 8px', textAlign: 'center' }}>
                         <button onClick={() => removeItem(item.product.id)}
-                          style={{ background: 'none', border: 'none', cursor: 'pointer', color: '#D3010A', fontSize: 16 }}>&times;</button>
+                          style={{ background: 'none', border: 'none', cursor: 'pointer', color: '#D3010A', fontSize: 16, lineHeight: 1 }}>&times;</button>
                       </td>
                     </tr>
                   ))}
@@ -351,33 +395,40 @@ export function OrderCreateModal({ open, onClose, onCreated }: OrderCreateModalP
           )}
         </div>
 
-        {/* Totals */}
+        {/* ── Totales ── */}
         {items.length > 0 && (
-          <div style={{ display: 'flex', flexDirection: 'column', gap: 4, alignItems: 'flex-end', padding: '8px 0' }}>
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 4, alignItems: 'flex-end', padding: '4px 0' }}>
             <div style={{ display: 'flex', gap: 16, fontSize: 14 }}>
               <span style={{ color: '#64748B' }}>Subtotal:</span>
-              <span style={{ fontWeight: 500 }}>${subtotal.toFixed(2)}</span>
+              <span style={{ fontWeight: 500, minWidth: 70, textAlign: 'right' }}>${subtotal.toFixed(2)}</span>
             </div>
             <div style={{ display: 'flex', gap: 16, fontSize: 14, alignItems: 'center' }}>
               <span style={{ color: '#64748B' }}>Envío:</span>
               <input type="number" min="0" step="0.01" value={shippingCost}
                 onChange={(e) => setShippingCost(parseFloat(e.target.value) || 0)}
-                style={{ width: 80, textAlign: 'right', border: '1px solid #E2E0DE', borderRadius: 4, padding: '2px 8px' }} />
+                style={{ width: 70, textAlign: 'right', border: '1px solid #E2E0DE', borderRadius: 4, padding: '2px 8px' }} />
             </div>
-            <div style={{ display: 'flex', gap: 16, fontSize: 16, fontWeight: 700, borderTop: '1px solid #E2E0DE', paddingTop: 8, marginTop: 4 }}>
+            <div style={{ display: 'flex', gap: 16, fontSize: 16, fontWeight: 700, borderTop: '2px solid #E2E0DE', paddingTop: 8, marginTop: 4 }}>
               <span>TOTAL:</span>
-              <span style={{ color: '#D3010A' }}>${total.toFixed(2)}</span>
+              <span style={{ color: '#D3010A', minWidth: 70, textAlign: 'right' }}>${total.toFixed(2)}</span>
             </div>
           </div>
         )}
 
-        {/* Notes */}
+        {/* ── Notas ── */}
         <div>
-          <label className="rh-label">Notas</label>
-          <textarea className="rh-input" placeholder="Notas sobre el pedido..." rows={2}
+          <label className="rh-label" style={{ marginBottom: 4, display: 'block' }}>Notas</label>
+          <textarea className="rh-input" placeholder="Instrucciones especiales, observaciones..." rows={2}
             value={notes} onChange={(e) => setNotes(e.target.value)} style={{ resize: 'vertical' }} />
         </div>
       </div>
+
+      {/* Spinner animation */}
+      <style>{`
+        @keyframes spin {
+          to { transform: translateY(-50%) rotate(360deg); }
+        }
+      `}</style>
     </Modal>
   );
 }
