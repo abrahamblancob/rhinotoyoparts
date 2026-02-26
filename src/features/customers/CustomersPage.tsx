@@ -1,51 +1,119 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useState, useCallback } from 'react';
 import { supabase } from '@/lib/supabase.ts';
 import { usePermissions } from '@/hooks/usePermissions.ts';
 import { useAuthStore } from '@/stores/authStore.ts';
 import { EmptyState } from '@/components/hub/shared/EmptyState.tsx';
 import { Modal } from '@/components/hub/shared/Modal.tsx';
-import type { Customer } from '@/lib/database.types.ts';
+import GooglePlacesAutocomplete from '@/components/GooglePlacesAutocomplete.tsx';
+import type { Customer, Organization } from '@/lib/database.types.ts';
+
+const emptyForm = { name: '', rif: '', email: '', phone: '', whatsapp: '', address: '', city: '', state: '', notes: '', lat: null as number | null, lng: null as number | null };
 
 export function CustomersPage() {
   const [customers, setCustomers] = useState<Customer[]>([]);
   const [loading, setLoading] = useState(true);
   const [search, setSearch] = useState('');
-  const [showCreate, setShowCreate] = useState(false);
-  const { canWrite } = usePermissions();
+  const [showModal, setShowModal] = useState(false);
+  const [editCustomer, setEditCustomer] = useState<Customer | null>(null);
+  const [deleteConfirm, setDeleteConfirm] = useState<Customer | null>(null);
+  const [deleteLoading, setDeleteLoading] = useState(false);
+
+  const { canWrite, isPlatformOwner } = usePermissions();
   const organization = useAuthStore((s) => s.organization);
 
-  const [form, setForm] = useState({ name: '', rif: '', email: '', phone: '', whatsapp: '', address: '', city: '', state: '', notes: '' });
-  const [createLoading, setCreateLoading] = useState(false);
-  const [createError, setCreateError] = useState('');
+  const [form, setForm] = useState({ ...emptyForm });
+  const [saveLoading, setSaveLoading] = useState(false);
+  const [saveError, setSaveError] = useState('');
 
-  const loadCustomers = async () => {
+  // Org name cache for Super Admin view
+  const [orgNames, setOrgNames] = useState<Record<string, string>>({});
+
+  const isEditMode = Boolean(editCustomer);
+
+  // ── Load customers ──
+  const loadCustomers = useCallback(async () => {
     setLoading(true);
-    let query = supabase.from('customers').select('*').order('created_at', { ascending: false });
-    if (organization) {
+    let query = supabase
+      .from('customers')
+      .select('*')
+      .order('created_at', { ascending: false });
+
+    // Regular users: filter by their org. Super Admin: RLS returns all.
+    if (!isPlatformOwner && organization) {
       query = query.eq('org_id', organization.id);
     }
+
     const { data } = await query;
-    setCustomers((data as Customer[]) ?? []);
+    const list = (data as Customer[]) ?? [];
+    setCustomers(list);
     setLoading(false);
+
+    // Load org names for Super Admin
+    if (isPlatformOwner && list.length > 0) {
+      const uniqueOrgIds = [...new Set(list.map((c) => c.org_id))];
+      const { data: orgs } = await supabase
+        .from('organizations')
+        .select('id, name')
+        .in('id', uniqueOrgIds);
+      if (orgs) {
+        const map: Record<string, string> = {};
+        (orgs as Organization[]).forEach((o) => { map[o.id] = o.name; });
+        setOrgNames(map);
+      }
+    }
+  }, [isPlatformOwner, organization]);
+
+  useEffect(() => { loadCustomers(); }, [loadCustomers]);
+
+  // ── Filtered list ──
+  const filtered = customers.filter((c) => {
+    if (!search) return true;
+    const q = search.toLowerCase();
+    return (
+      c.name.toLowerCase().includes(q) ||
+      (c.rif ?? '').toLowerCase().includes(q) ||
+      (c.email ?? '').toLowerCase().includes(q) ||
+      (c.phone ?? '').includes(search) ||
+      (c.city ?? '').toLowerCase().includes(q)
+    );
+  });
+
+  // ── Open create modal ──
+  const openCreate = () => {
+    setEditCustomer(null);
+    setForm({ ...emptyForm });
+    setSaveError('');
+    setShowModal(true);
   };
 
-  useEffect(() => { loadCustomers(); }, []);
+  // ── Open edit modal ──
+  const openEdit = (customer: Customer) => {
+    setEditCustomer(customer);
+    setForm({
+      name: customer.name,
+      rif: customer.rif ?? '',
+      email: customer.email ?? '',
+      phone: customer.phone ?? '',
+      whatsapp: customer.whatsapp ?? '',
+      address: customer.address ?? '',
+      city: customer.city ?? '',
+      state: customer.state ?? '',
+      notes: customer.notes ?? '',
+      lat: customer.lat ?? null,
+      lng: customer.lng ?? null,
+    });
+    setSaveError('');
+    setShowModal(true);
+  };
 
-  const filtered = customers.filter((c) =>
-    !search ||
-    c.name.toLowerCase().includes(search.toLowerCase()) ||
-    (c.rif ?? '').toLowerCase().includes(search.toLowerCase()) ||
-    (c.email ?? '').toLowerCase().includes(search.toLowerCase())
-  );
+  // ── Save (create or edit) ──
+  const handleSave = async () => {
+    if (!form.name.trim()) return;
+    setSaveLoading(true);
+    setSaveError('');
 
-  const handleCreate = async () => {
-    if (!organization) return;
-    setCreateLoading(true);
-    setCreateError('');
-
-    const { error } = await supabase.from('customers').insert({
-      org_id: organization.id,
-      name: form.name,
+    const payload = {
+      name: form.name.trim(),
       rif: form.rif || null,
       email: form.email || null,
       phone: form.phone || null,
@@ -54,18 +122,67 @@ export function CustomersPage() {
       city: form.city || null,
       state: form.state || null,
       notes: form.notes || null,
-    });
+      lat: form.lat,
+      lng: form.lng,
+    };
 
-    if (error) {
-      setCreateError(error.message);
-      setCreateLoading(false);
-      return;
+    if (isEditMode && editCustomer) {
+      // UPDATE
+      const { error } = await supabase
+        .from('customers')
+        .update(payload)
+        .eq('id', editCustomer.id);
+
+      if (error) {
+        setSaveError(error.message);
+        setSaveLoading(false);
+        return;
+      }
+    } else {
+      // INSERT — need org_id
+      const orgId = organization?.id;
+      if (!orgId) {
+        setSaveError('No se pudo determinar la organizacion');
+        setSaveLoading(false);
+        return;
+      }
+
+      const { error } = await supabase
+        .from('customers')
+        .insert({ ...payload, org_id: orgId });
+
+      if (error) {
+        setSaveError(error.message);
+        setSaveLoading(false);
+        return;
+      }
     }
 
-    setCreateLoading(false);
-    setForm({ name: '', rif: '', email: '', phone: '', whatsapp: '', address: '', city: '', state: '', notes: '' });
-    setShowCreate(false);
+    setSaveLoading(false);
+    setShowModal(false);
+    setEditCustomer(null);
+    setForm({ ...emptyForm });
     loadCustomers();
+  };
+
+  // ── Delete ──
+  const handleDelete = async () => {
+    if (!deleteConfirm) return;
+    setDeleteLoading(true);
+
+    await supabase.from('customers').delete().eq('id', deleteConfirm.id);
+
+    setDeleteLoading(false);
+    setDeleteConfirm(null);
+    loadCustomers();
+  };
+
+  // ── Close modal ──
+  const closeModal = () => {
+    setShowModal(false);
+    setEditCustomer(null);
+    setForm({ ...emptyForm });
+    setSaveError('');
   };
 
   return (
@@ -75,16 +192,13 @@ export function CustomersPage() {
         <div className="rh-page-actions">
           <input
             type="text"
-            placeholder="Buscar cliente..."
+            placeholder="Buscar por nombre, RIF, email, telefono..."
             value={search}
             onChange={(e) => setSearch(e.target.value)}
             className="rh-search"
           />
           {canWrite('customers') && (
-            <button
-              onClick={() => setShowCreate(true)}
-              className="rh-btn rh-btn-primary"
-            >
+            <button onClick={openCreate} className="rh-btn rh-btn-primary">
               + Nuevo Cliente
             </button>
           )}
@@ -99,7 +213,7 @@ export function CustomersPage() {
           title="No hay clientes"
           description="Agrega clientes para gestionar tus ventas"
           actionLabel="Agregar Cliente"
-          onAction={() => setShowCreate(true)}
+          onAction={openCreate}
         />
       ) : (
         <div className="rh-table-wrapper">
@@ -107,20 +221,44 @@ export function CustomersPage() {
             <thead>
               <tr>
                 <th>Nombre</th>
-                <th>RIF</th>
+                <th>RIF / Cedula</th>
+                <th>Telefono</th>
                 <th>Email</th>
-                <th>Teléfono</th>
                 <th>Ciudad</th>
+                {isPlatformOwner && <th>Organizacion</th>}
+                <th style={{ width: 80 }}></th>
               </tr>
             </thead>
             <tbody>
               {filtered.map((customer) => (
-                <tr key={customer.id} className="cursor-pointer">
+                <tr
+                  key={customer.id}
+                  className="cursor-pointer"
+                  onClick={() => openEdit(customer)}
+                  style={{ cursor: 'pointer' }}
+                >
                   <td className="cell-primary">{customer.name}</td>
                   <td className="cell-muted">{customer.rif ?? '—'}</td>
-                  <td className="cell-muted">{customer.email ?? '—'}</td>
                   <td className="cell-muted">{customer.phone ?? '—'}</td>
+                  <td className="cell-muted">{customer.email ?? '—'}</td>
                   <td className="cell-muted">{customer.city ?? '—'}</td>
+                  {isPlatformOwner && (
+                    <td className="cell-muted" style={{ fontSize: 12, color: '#64748B' }}>
+                      {orgNames[customer.org_id] ?? '—'}
+                    </td>
+                  )}
+                  <td>
+                    {canWrite('customers') && (
+                      <button
+                        onClick={(e) => { e.stopPropagation(); setDeleteConfirm(customer); }}
+                        className="rh-btn rh-btn-ghost"
+                        style={{ color: '#EF4444', padding: '4px 10px', fontSize: 13 }}
+                        title="Eliminar cliente"
+                      >
+                        Eliminar
+                      </button>
+                    )}
+                  </td>
                 </tr>
               ))}
             </tbody>
@@ -128,69 +266,202 @@ export function CustomersPage() {
         </div>
       )}
 
+      {/* ── Create / Edit Modal ── */}
       <Modal
-        open={showCreate}
-        onClose={() => setShowCreate(false)}
-        title="Nuevo Cliente"
-        width="600px"
+        open={showModal}
+        onClose={closeModal}
+        title={isEditMode ? `Editar Cliente — ${editCustomer?.name}` : 'Nuevo Cliente'}
+        width="640px"
         footer={
           <>
-            <button onClick={() => setShowCreate(false)} className="rh-btn rh-btn-ghost">
+            <button onClick={closeModal} className="rh-btn rh-btn-ghost">
               Cancelar
             </button>
-            <button onClick={handleCreate} disabled={createLoading || !form.name} className="rh-btn rh-btn-primary">
-              {createLoading ? 'Creando...' : 'Crear Cliente'}
+            <button
+              onClick={handleSave}
+              disabled={saveLoading || !form.name.trim()}
+              className="rh-btn rh-btn-primary"
+            >
+              {saveLoading ? 'Guardando...' : isEditMode ? 'Guardar Cambios' : 'Crear Cliente'}
             </button>
           </>
         }
       >
-        {createError && (
-          <div className="rh-alert rh-alert-error mb-4">{createError}</div>
+        {saveError && (
+          <div className="rh-alert rh-alert-error mb-4">{saveError}</div>
         )}
         <div className="rh-form-grid">
+          {/* Name */}
           <div className="col-span-2">
             <div className="rh-field">
               <label className="rh-label">Nombre *</label>
-              <input type="text" value={form.name} onChange={(e) => setForm((f) => ({ ...f, name: e.target.value }))} className="rh-input" placeholder="Nombre del cliente" />
+              <input
+                type="text"
+                value={form.name}
+                onChange={(e) => setForm((f) => ({ ...f, name: e.target.value }))}
+                className="rh-input"
+                placeholder="Nombre del cliente o empresa"
+              />
             </div>
           </div>
+
+          {/* RIF */}
           <div className="rh-field">
-            <label className="rh-label">RIF</label>
-            <input type="text" value={form.rif} onChange={(e) => setForm((f) => ({ ...f, rif: e.target.value }))} className="rh-input" placeholder="J-12345678-9" />
+            <label className="rh-label">RIF / Cedula</label>
+            <input
+              type="text"
+              value={form.rif}
+              onChange={(e) => setForm((f) => ({ ...f, rif: e.target.value }))}
+              className="rh-input"
+              placeholder="J-12345678-9"
+            />
           </div>
+
+          {/* Email */}
           <div className="rh-field">
             <label className="rh-label">Email</label>
-            <input type="email" value={form.email} onChange={(e) => setForm((f) => ({ ...f, email: e.target.value }))} className="rh-input" placeholder="cliente@email.com" />
+            <input
+              type="email"
+              value={form.email}
+              onChange={(e) => setForm((f) => ({ ...f, email: e.target.value }))}
+              className="rh-input"
+              placeholder="cliente@email.com"
+            />
           </div>
+
+          {/* Phone */}
           <div className="rh-field">
-            <label className="rh-label">Teléfono</label>
-            <input type="tel" value={form.phone} onChange={(e) => setForm((f) => ({ ...f, phone: e.target.value }))} className="rh-input" placeholder="+58 412 1234567" />
+            <label className="rh-label">Telefono</label>
+            <input
+              type="tel"
+              value={form.phone}
+              onChange={(e) => setForm((f) => ({ ...f, phone: e.target.value }))}
+              className="rh-input"
+              placeholder="+58 412 1234567"
+            />
           </div>
+
+          {/* WhatsApp */}
           <div className="rh-field">
             <label className="rh-label">WhatsApp</label>
-            <input type="tel" value={form.whatsapp} onChange={(e) => setForm((f) => ({ ...f, whatsapp: e.target.value }))} className="rh-input" placeholder="+58 412 1234567" />
+            <input
+              type="tel"
+              value={form.whatsapp}
+              onChange={(e) => setForm((f) => ({ ...f, whatsapp: e.target.value }))}
+              className="rh-input"
+              placeholder="+58 412 1234567"
+            />
           </div>
+
+          {/* Address — Google Maps Autocomplete */}
           <div className="col-span-2">
             <div className="rh-field">
-              <label className="rh-label">Dirección</label>
-              <input type="text" value={form.address} onChange={(e) => setForm((f) => ({ ...f, address: e.target.value }))} className="rh-input" placeholder="Dirección completa" />
+              <label className="rh-label">Direccion</label>
+              <GooglePlacesAutocomplete
+                className="rh-input"
+                placeholder="Escribe la direccion del cliente..."
+                value={form.address}
+                onChange={(addr) => setForm((f) => ({ ...f, address: addr }))}
+                onPlaceSelect={(place) => {
+                  setForm((f) => ({
+                    ...f,
+                    address: place.address,
+                    lat: place.lat,
+                    lng: place.lng,
+                  }));
+                  // Try to extract city and state from address
+                  const parts = place.address.split(',').map((p) => p.trim());
+                  if (parts.length >= 3) {
+                    setForm((prev) => ({
+                      ...prev,
+                      address: place.address,
+                      lat: place.lat,
+                      lng: place.lng,
+                      city: prev.city || parts[parts.length - 3] || '',
+                      state: prev.state || parts[parts.length - 2] || '',
+                    }));
+                  }
+                }}
+              />
+              {form.lat && form.lng && (
+                <p style={{ fontSize: 11, color: '#10B981', marginTop: 4, margin: 0 }}>
+                  Coordenadas guardadas ({form.lat.toFixed(4)}, {form.lng.toFixed(4)})
+                </p>
+              )}
             </div>
           </div>
+
+          {/* State */}
           <div className="rh-field">
             <label className="rh-label">Estado</label>
-            <input type="text" value={form.state} onChange={(e) => setForm((f) => ({ ...f, state: e.target.value }))} className="rh-input" placeholder="Miranda" />
+            <input
+              type="text"
+              value={form.state}
+              onChange={(e) => setForm((f) => ({ ...f, state: e.target.value }))}
+              className="rh-input"
+              placeholder="Miranda"
+            />
           </div>
+
+          {/* City */}
           <div className="rh-field">
             <label className="rh-label">Ciudad</label>
-            <input type="text" value={form.city} onChange={(e) => setForm((f) => ({ ...f, city: e.target.value }))} className="rh-input" placeholder="Caracas" />
+            <input
+              type="text"
+              value={form.city}
+              onChange={(e) => setForm((f) => ({ ...f, city: e.target.value }))}
+              className="rh-input"
+              placeholder="Caracas"
+            />
           </div>
+
+          {/* Notes */}
           <div className="col-span-2">
             <div className="rh-field">
               <label className="rh-label">Notas</label>
-              <textarea value={form.notes} onChange={(e) => setForm((f) => ({ ...f, notes: e.target.value }))} className="rh-input resize-none" rows={3} placeholder="Notas adicionales" />
+              <textarea
+                value={form.notes}
+                onChange={(e) => setForm((f) => ({ ...f, notes: e.target.value }))}
+                className="rh-input resize-none"
+                rows={3}
+                placeholder="Notas adicionales sobre el cliente"
+              />
             </div>
           </div>
         </div>
+      </Modal>
+
+      {/* ── Delete Confirmation Modal ── */}
+      <Modal
+        open={Boolean(deleteConfirm)}
+        onClose={() => setDeleteConfirm(null)}
+        title="Eliminar Cliente"
+        width="440px"
+        footer={
+          <>
+            <button onClick={() => setDeleteConfirm(null)} className="rh-btn rh-btn-ghost">
+              Cancelar
+            </button>
+            <button
+              onClick={handleDelete}
+              disabled={deleteLoading}
+              className="rh-btn"
+              style={{ background: '#EF4444', color: '#fff' }}
+            >
+              {deleteLoading ? 'Eliminando...' : 'Eliminar'}
+            </button>
+          </>
+        }
+      >
+        <p style={{ fontSize: 14, color: '#475569', margin: 0 }}>
+          ¿Estas seguro de eliminar al cliente <strong>{deleteConfirm?.name}</strong>?
+          Esta accion no se puede deshacer.
+        </p>
+        {deleteConfirm?.rif && (
+          <p style={{ fontSize: 13, color: '#94A3B8', marginTop: 4 }}>
+            RIF: {deleteConfirm.rif}
+          </p>
+        )}
       </Modal>
     </div>
   );

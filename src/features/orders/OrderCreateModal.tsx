@@ -753,7 +753,7 @@ export function OrderCreateModal({ open, onClose, onCreated, editOrder, editItem
                     {filteredCustomers.length > 0 && (
                       <div style={{ position: 'absolute', top: '100%', left: 0, right: 0, background: '#fff', border: '1px solid #E2E0DE', borderRadius: 8, maxHeight: 200, overflowY: 'auto', zIndex: 10, boxShadow: '0 4px 12px rgba(0,0,0,0.1)' }}>
                         {filteredCustomers.map((c) => (
-                          <div key={c.id} onClick={() => { setSelectedCustomer(c); setCustomerSearch(''); setCustomerPhone(c.phone ?? ''); setShippingAddress(c.address ?? ''); }}
+                          <div key={c.id} onClick={() => { setSelectedCustomer(c); setCustomerSearch(''); setCustomerPhone(c.phone ?? ''); setShippingAddress(c.address ?? ''); if (c.lat && c.lng) { setDeliveryLat(c.lat); setDeliveryLng(c.lng); } }}
                             style={{ padding: '10px 14px', cursor: 'pointer', fontSize: 14, borderBottom: '1px solid #F1F5F9', transition: 'background 0.15s' }}
                             onMouseEnter={(e) => (e.currentTarget.style.background = '#F8FAFC')}
                             onMouseLeave={(e) => (e.currentTarget.style.background = '#fff')}>

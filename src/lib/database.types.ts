@@ -105,6 +105,8 @@ export interface Customer {
   city: string | null;
   state: string | null;
   notes: string | null;
+  lat: number | null;
+  lng: number | null;
   created_at: string;
   updated_at: string;
 }
