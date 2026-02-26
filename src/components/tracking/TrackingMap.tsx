@@ -148,7 +148,9 @@ export function TrackingMap({
             height="100%"
             style={{ border: 0 }}
             loading="lazy"
-            src={`https://www.google.com/maps?q=${dispatcherLat},${dispatcherLng}&z=14&output=embed`}
+            src={deliveryLat && deliveryLng
+              ? `https://www.google.com/maps/dir/${dispatcherLat},${dispatcherLng}/${deliveryLat},${deliveryLng}/@${(dispatcherLat + deliveryLat) / 2},${(dispatcherLng + deliveryLng) / 2},13z?output=embed`
+              : `https://www.google.com/maps?q=${dispatcherLat},${dispatcherLng}&z=14&output=embed`}
           />
         </div>
       )}
