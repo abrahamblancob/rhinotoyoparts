@@ -290,7 +290,12 @@ export function OrderCreateModal({ open, onClose, onCreated }: OrderCreateModalP
         if (newC) customerId = newC.id;
       }
 
-      const orderNumber = `RH-${Date.now().toString(36).toUpperCase()}`;
+      // Generar número de orden secuencial: RH-00001, RH-00002, ...
+      const { count: orderCount } = await supabase
+        .from('orders')
+        .select('*', { count: 'exact', head: true });
+      const seq = (orderCount ?? 0) + 1;
+      const orderNumber = `RH-${String(seq).padStart(5, '0')}`;
 
       const { data: order, error } = await supabase.from('orders').insert({
         org_id: orderOrgId,
@@ -788,10 +793,13 @@ export function OrderCreateModal({ open, onClose, onCreated }: OrderCreateModalP
                 Cliente
               </div>
               <div style={{ fontSize: 14, fontWeight: 500 }}>
-                {selectedCustomer?.name ?? (showNewCustomer && newCustomerName ? `${newCustomerName} (nuevo)` : '— Sin cliente —')}
+                {selectedCustomer?.name
+                  ?? (showNewCustomer && newCustomerName ? `${newCustomerName} (nuevo)` : null)
+                  ?? (customerPhone ? `Cliente: ${customerPhone}` : null)
+                  ?? <span style={{ color: '#94A3B8', fontStyle: 'italic' }}>Sin cliente registrado</span>}
               </div>
-              {customerPhone && <div style={{ fontSize: 13, color: '#64748B' }}>Tel: {customerPhone}</div>}
-              {shippingAddress && <div style={{ fontSize: 13, color: '#64748B', wordBreak: 'break-all' }}>Dir: {shippingAddress}</div>}
+              {customerPhone && <div style={{ fontSize: 13, color: '#64748B' }}>📞 {customerPhone}</div>}
+              {shippingAddress && <div style={{ fontSize: 13, color: '#64748B', wordBreak: 'break-all' }}>📍 {shippingAddress}</div>}
             </div>
 
             {/* Productos */}
