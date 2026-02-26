@@ -23,9 +23,17 @@ export function OrderCreateModal({ open, onClose, onCreated }: OrderCreateModalP
 
   // ── Step flow (Super Admin: 1→2→3, Regular users: always 2) ──
   const [step, setStep] = useState<1 | 2 | 3>(isPlatformOwner ? 1 : 2);
+  // Sub-step within step 1: 'aggregator' = pick aggregator, 'store' = pick child store
+  const [orgSubStep, setOrgSubStep] = useState<'aggregator' | 'store'>('aggregator');
   const [organizations, setOrganizations] = useState<Organization[]>([]);
   const [selectedOrg, setSelectedOrg] = useState<Organization | null>(null);
   const [orgsLoading, setOrgsLoading] = useState(false);
+  // Child organizations (stores/associates under the selected aggregator)
+  const [childOrgs, setChildOrgs] = useState<Organization[]>([]);
+  // Pre-loaded map: aggregatorId → child organizations
+  const [childOrgMap, setChildOrgMap] = useState<Record<string, Organization[]>>({});
+  // The final inventory org — either the aggregator itself or a child store
+  const [inventoryOrg, setInventoryOrg] = useState<Organization | null>(null);
 
   const [customers, setCustomers] = useState<Customer[]>([]);
   const [customerSearch, setCustomerSearch] = useState('');
@@ -46,31 +54,87 @@ export function OrderCreateModal({ open, onClose, onCreated }: OrderCreateModalP
   const productDebounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const productSearchRef = useRef('');
 
-  // Load organizations for Super Admin (Step 1)
+  // Load organizations + pre-load child hierarchy for Super Admin (Step 1)
   useEffect(() => {
     if (open && isPlatformOwner) {
       setOrgsLoading(true);
-      // Solo mostrar agregadores — son los dueños del inventario
-      supabase
-        .from('organizations')
-        .select('*')
-        .eq('type', 'aggregator')
-        .eq('status', 'active')
-        .order('name')
-        .then(({ data }) => {
-          setOrganizations((data as Organization[]) ?? []);
-          setOrgsLoading(false);
-        });
+      (async () => {
+        // 1. Load aggregators
+        const { data: aggregators } = await supabase
+          .from('organizations')
+          .select('*')
+          .eq('type', 'aggregator')
+          .eq('status', 'active')
+          .order('name');
+
+        const aggs = (aggregators as Organization[]) ?? [];
+        setOrganizations(aggs);
+
+        // 2. Pre-load child orgs for every aggregator via org_hierarchy + organizations
+        const map: Record<string, Organization[]> = {};
+        for (const agg of aggs) {
+          const { data: hierarchy } = await supabase
+            .from('org_hierarchy')
+            .select('child_id')
+            .eq('parent_id', agg.id);
+
+          if (hierarchy && hierarchy.length > 0) {
+            const childIds = hierarchy.map((h: { child_id: string }) => h.child_id);
+            const { data: children } = await supabase
+              .from('organizations')
+              .select('*')
+              .in('id', childIds)
+              .eq('status', 'active')
+              .order('name');
+
+            if (children && children.length > 0) {
+              map[agg.id] = children as Organization[];
+            }
+          }
+        }
+        setChildOrgMap(map);
+        setOrgsLoading(false);
+      })();
     }
   }, [open, isPlatformOwner]);
 
-  // Load customers — filtered by selectedOrg for Super Admin, by organization for regular users
+  // When an aggregator is selected — synchronous lookup from pre-loaded map
+  const handleSelectAggregator = useCallback((org: Organization) => {
+    setSelectedOrg(org);
+    setInventoryOrg(null);
+
+    const children = childOrgMap[org.id];
+    if (children && children.length > 0) {
+      setChildOrgs(children);
+      setOrgSubStep('store');
+    } else {
+      // No children — use aggregator directly, skip to step 2
+      setInventoryOrg(org);
+      setStep(2);
+    }
+  }, [childOrgMap]);
+
+  // When a child store is selected, set it as the inventory org and move to step 2
+  const handleSelectStore = useCallback((store: Organization) => {
+    setInventoryOrg(store);
+    setStep(2);
+  }, []);
+
+  // Use aggregator itself (even if it has children) — user can pick the aggregator directly
+  const handleUseAggregatorDirectly = useCallback(() => {
+    if (selectedOrg) {
+      setInventoryOrg(selectedOrg);
+      setStep(2);
+    }
+  }, [selectedOrg]);
+
+  // Load customers — filtered by inventoryOrg for Super Admin, by organization for regular users
   useEffect(() => {
     if (!open) return;
-    // Super Admin: load customers after selecting org
+    // Super Admin: load customers after selecting inventory org (aggregator or child store)
     if (isPlatformOwner) {
-      if (!selectedOrg) return;
-      supabase.from('customers').select('*').eq('org_id', selectedOrg.id).order('name').then(({ data }) => {
+      if (!inventoryOrg) return;
+      supabase.from('customers').select('*').eq('org_id', inventoryOrg.id).order('name').then(({ data }) => {
         setCustomers((data as Customer[]) ?? []);
       });
     } else if (organization) {
@@ -78,13 +142,17 @@ export function OrderCreateModal({ open, onClose, onCreated }: OrderCreateModalP
         setCustomers((data as Customer[]) ?? []);
       });
     }
-  }, [open, organization, isPlatformOwner, selectedOrg]);
+  }, [open, organization, isPlatformOwner, inventoryOrg]);
 
   // Reset form when modal closes
   useEffect(() => {
     if (!open) {
       setStep(isPlatformOwner ? 1 : 2);
+      setOrgSubStep('aggregator');
       setSelectedOrg(null);
+      setChildOrgs([]);
+      setChildOrgMap({});
+      setInventoryOrg(null);
       setSelectedCustomer(null);
       setShowNewCustomer(false);
       setNewCustomerName('');
@@ -128,8 +196,8 @@ export function OrderCreateModal({ open, onClose, onCreated }: OrderCreateModalP
         .or(`name.ilike.%${query}%,sku.ilike.%${query}%`)
         .limit(10);
 
-      if (isPlatformOwner && selectedOrg) {
-        q = q.eq('org_id', selectedOrg.id);
+      if (isPlatformOwner && inventoryOrg) {
+        q = q.eq('org_id', inventoryOrg.id);
       } else if (!isPlatformOwner && organization) {
         q = q.eq('org_id', organization.id);
       }
@@ -142,7 +210,7 @@ export function OrderCreateModal({ open, onClose, onCreated }: OrderCreateModalP
         setProductLoading(false);
       }
     }, 200);
-  }, [organization, isPlatformOwner, selectedOrg]);
+  }, [organization, isPlatformOwner, inventoryOrg]);
 
   useEffect(() => {
     return () => { if (productDebounceRef.current) clearTimeout(productDebounceRef.current); };
@@ -183,6 +251,10 @@ export function OrderCreateModal({ open, onClose, onCreated }: OrderCreateModalP
   // Go back to org selection (clear cart to avoid mixing inventories)
   const goBackToOrgSelection = () => {
     setStep(1);
+    setOrgSubStep('aggregator');
+    setSelectedOrg(null);
+    setChildOrgs([]);
+    setInventoryOrg(null);
     setItems([]);
     setSelectedCustomer(null);
     setCustomerSearch('');
@@ -202,9 +274,9 @@ export function OrderCreateModal({ open, onClose, onCreated }: OrderCreateModalP
     setSaving(true);
 
     try {
-      // Determine org_id: Super Admin uses selectedOrg, regular users use their organization
-      const orderOrgId = isPlatformOwner && selectedOrg
-        ? selectedOrg.id
+      // Determine org_id: Super Admin uses inventoryOrg (selected store/aggregator), regular users use their organization
+      const orderOrgId = isPlatformOwner && inventoryOrg
+        ? inventoryOrg.id
         : organization!.id;
 
       let customerId = selectedCustomer?.id ?? null;
@@ -274,21 +346,27 @@ export function OrderCreateModal({ open, onClose, onCreated }: OrderCreateModalP
 
   // ── Dynamic modal title ──
   const modalTitle = isPlatformOwner
-    ? step === 1 ? 'Nueva Orden — Seleccionar Inventario'
+    ? step === 1
+      ? orgSubStep === 'aggregator'
+        ? 'Nueva Orden — Seleccionar Agregador'
+        : 'Nueva Orden — Seleccionar Tienda'
     : step === 3 ? 'Nueva Orden — Confirmar Datos'
     : 'Nueva Orden'
     : 'Nueva Orden';
 
   // ── Dynamic modal footer ──
   const modalFooter = (() => {
-    // Step 1: Org selection
+    // Step 1: Org selection (two sub-steps)
     if (isPlatformOwner && step === 1) {
       return (
         <div style={{ display: 'flex', gap: 8, justifyContent: 'flex-end' }}>
+          {orgSubStep === 'store' && (
+            <button className="rh-btn rh-btn-secondary" onClick={() => { setOrgSubStep('aggregator'); setSelectedOrg(null); setChildOrgs([]); setInventoryOrg(null); }}
+              style={{ marginRight: 'auto' }}>
+              ← Cambiar agregador
+            </button>
+          )}
           <button className="rh-btn rh-btn-secondary" onClick={onClose}>Cancelar</button>
-          <button className="rh-btn rh-btn-primary" onClick={() => setStep(2)} disabled={!selectedOrg}>
-            Continuar
-          </button>
         </div>
       );
     }
@@ -338,42 +416,129 @@ export function OrderCreateModal({ open, onClose, onCreated }: OrderCreateModalP
            ═══════════════════════════════════════════════════════════════ */}
         {isPlatformOwner && step === 1 && (
           <div>
-            <p style={{ fontSize: 14, color: '#64748B', marginBottom: 16 }}>
-              Selecciona el agregador de cuyo inventario se descontarán los productos para esta orden.
-            </p>
-            {orgsLoading ? (
-              <p style={{ textAlign: 'center', color: '#94A3B8', padding: 20 }}>Cargando organizaciones...</p>
-            ) : organizations.length === 0 ? (
-              <p style={{ textAlign: 'center', color: '#94A3B8', padding: 20 }}>No hay organizaciones activas</p>
-            ) : (
-              <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
-                {organizations.map((org) => {
-                  const isSelected = selectedOrg?.id === org.id;
-                  return (
-                    <div key={org.id} onClick={() => setSelectedOrg(org)}
+            {/* Sub-step indicator */}
+            <div style={{ display: 'flex', gap: 8, marginBottom: 16, alignItems: 'center' }}>
+              <div style={{
+                display: 'flex', alignItems: 'center', gap: 6,
+                padding: '4px 12px', borderRadius: 20, fontSize: 12, fontWeight: 600,
+                background: orgSubStep === 'aggregator' ? '#D3010A' : '#E2E8F0',
+                color: orgSubStep === 'aggregator' ? '#fff' : '#64748B',
+              }}>
+                1. Agregador
+              </div>
+              <span style={{ color: '#CBD5E1' }}>→</span>
+              <div style={{
+                display: 'flex', alignItems: 'center', gap: 6,
+                padding: '4px 12px', borderRadius: 20, fontSize: 12, fontWeight: 600,
+                background: orgSubStep === 'store' ? '#D3010A' : '#E2E8F0',
+                color: orgSubStep === 'store' ? '#fff' : '#64748B',
+              }}>
+                2. Tienda
+              </div>
+            </div>
+
+            {/* Sub-step A: Select Aggregator */}
+            {orgSubStep === 'aggregator' && (
+              <>
+                <p style={{ fontSize: 14, color: '#64748B', marginBottom: 16 }}>
+                  Selecciona el agregador de cuyo inventario se descontarán los productos.
+                </p>
+                {orgsLoading ? (
+                  <p style={{ textAlign: 'center', color: '#94A3B8', padding: 20 }}>Cargando agregadores...</p>
+                ) : organizations.length === 0 ? (
+                  <p style={{ textAlign: 'center', color: '#94A3B8', padding: 20 }}>No hay agregadores activos</p>
+                ) : (
+                  <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+                    {organizations.map((org) => (
+                      <div key={org.id} onClick={() => handleSelectAggregator(org)}
+                        style={{
+                          padding: '14px 18px', borderRadius: 10, cursor: 'pointer',
+                          border: '1px solid #E2E0DE', background: '#fff',
+                          display: 'flex', alignItems: 'center', justifyContent: 'space-between',
+                          transition: 'all 0.15s ease',
+                        }}
+                        onMouseEnter={(e) => { e.currentTarget.style.borderColor = '#D3010A'; e.currentTarget.style.background = '#FEF2F2'; }}
+                        onMouseLeave={(e) => { e.currentTarget.style.borderColor = '#E2E0DE'; e.currentTarget.style.background = '#fff'; }}
+                      >
+                        <div>
+                          <div style={{ fontWeight: 600, fontSize: 15, color: '#1E293B' }}>{org.name}</div>
+                          <div style={{ fontSize: 12, color: '#8A8886', marginTop: 2 }}>
+                            Agregador{org.rif && ` · RIF: ${org.rif}`}
+                          </div>
+                        </div>
+                        <span style={{ color: '#94A3B8', fontSize: 18 }}>→</span>
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </>
+            )}
+
+            {/* Sub-step B: Select Store / Child */}
+            {orgSubStep === 'store' && (
+              <>
+                {/* Selected aggregator badge */}
+                <div style={{
+                  display: 'flex', alignItems: 'center', gap: 8,
+                  padding: '8px 14px', borderRadius: 8, marginBottom: 16,
+                  background: '#F1F5F9', border: '1px solid #E2E8F0',
+                }}>
+                  <span style={{ fontSize: 14 }}>🏢</span>
+                  <span style={{ fontSize: 13, color: '#475569' }}>Agregador:</span>
+                  <span style={{ fontSize: 13, fontWeight: 700, color: '#1E293B' }}>{selectedOrg?.name}</span>
+                </div>
+
+                <p style={{ fontSize: 14, color: '#64748B', marginBottom: 16 }}>
+                  ¿De qué tienda deseas descontar el inventario?
+                </p>
+
+                <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+                    {/* Option: Use the aggregator directly */}
+                    <div onClick={handleUseAggregatorDirectly}
                       style={{
                         padding: '14px 18px', borderRadius: 10, cursor: 'pointer',
-                        border: isSelected ? '2px solid #D3010A' : '1px solid #E2E0DE',
-                        background: isSelected ? 'rgba(211,1,10,0.04)' : '#fff',
+                        border: '1px solid #E2E0DE', background: '#fff',
                         display: 'flex', alignItems: 'center', justifyContent: 'space-between',
                         transition: 'all 0.15s ease',
                       }}
-                      onMouseEnter={(e) => { if (!isSelected) e.currentTarget.style.borderColor = '#D3010A'; e.currentTarget.style.background = isSelected ? 'rgba(211,1,10,0.04)' : '#FEF2F2'; }}
-                      onMouseLeave={(e) => { if (!isSelected) e.currentTarget.style.borderColor = '#E2E0DE'; e.currentTarget.style.background = isSelected ? 'rgba(211,1,10,0.04)' : '#fff'; }}
+                      onMouseEnter={(e) => { e.currentTarget.style.borderColor = '#D3010A'; e.currentTarget.style.background = '#FEF2F2'; }}
+                      onMouseLeave={(e) => { e.currentTarget.style.borderColor = '#E2E0DE'; e.currentTarget.style.background = '#fff'; }}
                     >
                       <div>
-                        <div style={{ fontWeight: 600, fontSize: 15, color: '#1E293B' }}>{org.name}</div>
+                        <div style={{ fontWeight: 600, fontSize: 15, color: '#1E293B' }}>
+                          {selectedOrg?.name}
+                          <span style={{ fontWeight: 400, fontSize: 12, color: '#8A8886', marginLeft: 8 }}>(inventario del agregador)</span>
+                        </div>
                         <div style={{ fontSize: 12, color: '#8A8886', marginTop: 2 }}>
-                          Agregador{org.rif && ` · RIF: ${org.rif}`}
+                          Agregador{selectedOrg?.rif && ` · RIF: ${selectedOrg.rif}`}
                         </div>
                       </div>
-                      {isSelected && (
-                        <span style={{ color: '#D3010A', fontSize: 20, fontWeight: 700 }}>✓</span>
-                      )}
+                      <span style={{ color: '#94A3B8', fontSize: 18 }}>→</span>
                     </div>
-                  );
-                })}
-              </div>
+
+                    {/* Child stores */}
+                    {childOrgs.map((store) => (
+                      <div key={store.id} onClick={() => handleSelectStore(store)}
+                        style={{
+                          padding: '14px 18px', borderRadius: 10, cursor: 'pointer',
+                          border: '1px solid #E2E0DE', background: '#fff',
+                          display: 'flex', alignItems: 'center', justifyContent: 'space-between',
+                          transition: 'all 0.15s ease',
+                        }}
+                        onMouseEnter={(e) => { e.currentTarget.style.borderColor = '#D3010A'; e.currentTarget.style.background = '#FEF2F2'; }}
+                        onMouseLeave={(e) => { e.currentTarget.style.borderColor = '#E2E0DE'; e.currentTarget.style.background = '#fff'; }}
+                      >
+                        <div>
+                          <div style={{ fontWeight: 600, fontSize: 15, color: '#1E293B' }}>{store.name}</div>
+                          <div style={{ fontSize: 12, color: '#8A8886', marginTop: 2 }}>
+                            Tienda asociada{store.rif && ` · RIF: ${store.rif}`}
+                          </div>
+                        </div>
+                        <span style={{ color: '#94A3B8', fontSize: 18 }}>→</span>
+                      </div>
+                    ))}
+                  </div>
+              </>
             )}
           </div>
         )}
@@ -384,7 +549,7 @@ export function OrderCreateModal({ open, onClose, onCreated }: OrderCreateModalP
         {step === 2 && (
           <>
             {/* Banner de organización seleccionada (Solo Super Admin) */}
-            {isPlatformOwner && selectedOrg && (
+            {isPlatformOwner && inventoryOrg && (
               <div style={{
                 display: 'flex', alignItems: 'center', gap: 10,
                 padding: '10px 14px', borderRadius: 8,
@@ -393,7 +558,10 @@ export function OrderCreateModal({ open, onClose, onCreated }: OrderCreateModalP
                 <span style={{ fontSize: 18 }}>🏢</span>
                 <div style={{ flex: 1 }}>
                   <span style={{ fontSize: 12, color: '#64748B' }}>Inventario de:</span>
-                  <span style={{ fontWeight: 700, fontSize: 14, color: '#D3010A', marginLeft: 6 }}>{selectedOrg.name}</span>
+                  <span style={{ fontWeight: 700, fontSize: 14, color: '#D3010A', marginLeft: 6 }}>{inventoryOrg.name}</span>
+                  {selectedOrg && inventoryOrg.id !== selectedOrg.id && (
+                    <span style={{ fontSize: 11, color: '#64748B', marginLeft: 6 }}>({selectedOrg.name})</span>
+                  )}
                 </div>
                 <button onClick={goBackToOrgSelection}
                   style={{ fontSize: 12, color: '#D3010A', background: 'none', border: '1px solid rgba(211,1,10,0.3)', borderRadius: 6, padding: '4px 10px', cursor: 'pointer' }}>
@@ -596,19 +764,21 @@ export function OrderCreateModal({ open, onClose, onCreated }: OrderCreateModalP
               border: '1px solid #FDE68A', marginBottom: 20, fontSize: 13, color: '#92400E',
             }}>
               ⚠️ Revisa los datos antes de confirmar. Los productos se descontarán del inventario
-              de <strong>{selectedOrg?.name}</strong>.
+              de <strong>{inventoryOrg?.name}</strong>.
             </div>
 
             {/* Organización */}
             <div style={{ marginBottom: 16 }}>
               <div style={{ fontSize: 11, fontWeight: 600, color: '#8A8886', textTransform: 'uppercase', letterSpacing: 0.5, marginBottom: 4 }}>
-                Organización
+                Organización / Tienda
               </div>
               <div style={{ fontSize: 15, fontWeight: 700, color: '#D3010A' }}>
-                🏢 {selectedOrg?.name}
+                🏢 {inventoryOrg?.name}
               </div>
               <div style={{ fontSize: 12, color: '#64748B' }}>
-                Agregador{selectedOrg?.rif && ` · RIF: ${selectedOrg.rif}`}
+                {inventoryOrg?.type === 'aggregator' ? 'Agregador' : 'Asociado'}
+                {selectedOrg && inventoryOrg?.id !== selectedOrg.id && ` · Agregador: ${selectedOrg.name}`}
+                {inventoryOrg?.rif && ` · RIF: ${inventoryOrg.rif}`}
               </div>
             </div>
 
