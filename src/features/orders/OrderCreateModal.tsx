@@ -42,10 +42,11 @@ export function OrderCreateModal({ open, onClose, onCreated }: OrderCreateModalP
   const productSearchRef = useRef('');
 
   // Load customers on open
+  // IMPORTANTE: Solo platform_owner ve clientes de todas las orgs.
+  // Usuarios regulares SIEMPRE filtran por su org para no mezclar datos entre asociados.
   useEffect(() => {
     if (open && organization) {
       const query = supabase.from('customers').select('*').order('name');
-      // Platform owner can see all customers; regular users only their org
       if (!isPlatformOwner) {
         query.eq('org_id', organization.id);
       }
@@ -93,6 +94,8 @@ export function OrderCreateModal({ open, onClose, onCreated }: OrderCreateModalP
     productDebounceRef.current = setTimeout(async () => {
       if (productSearchRef.current !== query) return;
 
+      // IMPORTANTE: Solo platform_owner busca en todas las orgs.
+      // Usuarios regulares SIEMPRE filtran por su org_id para no mezclar inventarios entre asociados.
       let q = supabase
         .from('products')
         .select('*')
@@ -101,7 +104,6 @@ export function OrderCreateModal({ open, onClose, onCreated }: OrderCreateModalP
         .or(`name.ilike.%${query}%,sku.ilike.%${query}%`)
         .limit(10);
 
-      // Regular users only see their org's products
       if (!isPlatformOwner && organization) {
         q = q.eq('org_id', organization.id);
       }
