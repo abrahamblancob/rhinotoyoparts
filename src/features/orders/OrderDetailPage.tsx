@@ -543,7 +543,9 @@ export function OrderDetailPage() {
                 </div>
                 <div style={{ flex: 1, display: 'flex', flexDirection: 'column', gap: 10 }}>
                   <p style={{ fontSize: 13, color: '#64748B', margin: 0 }}>
-                    El despachador escanea este código desde <strong>Rhino Móvil</strong> para tomar la orden.
+                    {orderQr.scanned_at
+                      ? 'El despachador ha tomado la orden.'
+                      : <>El despachador escanea este código desde <strong>Rhino Móvil</strong> para tomar la orden.</>}
                   </p>
                   {orderQr.scanned_at ? (
                     <div style={{
