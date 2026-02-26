@@ -209,8 +209,13 @@ export function OrderDetailPage() {
   };
 
   const openAssignModal = async () => {
-    if (!organization) return;
-    // Load dispatchers (users with associate_dispatcher role in same org)
+    if (!organization || !order) return;
+    // Determine which org to search dispatchers in:
+    // - Super Admin: use the order's org_id (+ parent/child orgs)
+    // - Regular users: use their own org
+    const orderOrgId = order.org_id;
+
+    // Load dispatchers (users with associate_dispatcher role)
     const { data: userRoles } = await supabase
       .from('user_roles')
       .select('user_id, roles(name)')
@@ -221,11 +226,20 @@ export function OrderDetailPage() {
       .map((ur) => ur.user_id) ?? [];
 
     if (dispatcherIds.length > 0) {
+      // Collect related org IDs: the order's org + parent + children
+      const relatedOrgIds = [orderOrgId];
+      const { data: parents } = await supabase
+        .from('org_hierarchy').select('parent_id').eq('child_id', orderOrgId);
+      (parents ?? []).forEach((p: { parent_id: string }) => relatedOrgIds.push(p.parent_id));
+      const { data: children } = await supabase
+        .from('org_hierarchy').select('child_id').eq('parent_id', orderOrgId);
+      (children ?? []).forEach((c: { child_id: string }) => relatedOrgIds.push(c.child_id));
+
       const { data: profiles } = await supabase
         .from('profiles')
         .select('*')
         .in('id', dispatcherIds)
-        .eq('org_id', organization.id)
+        .in('org_id', relatedOrgIds)
         .eq('is_active', true);
 
       // Count active orders per dispatcher
