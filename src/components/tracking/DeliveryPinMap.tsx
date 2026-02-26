@@ -9,8 +9,11 @@ declare global {
 }
 
 interface DeliveryPinMapProps {
-  lat: number;
-  lng: number;
+  /** Latitude — if null, will attempt to geocode the address */
+  lat?: number | null;
+  /** Longitude — if null, will attempt to geocode the address */
+  lng?: number | null;
+  /** Address text — used for display and geocoding fallback */
   address?: string;
 }
 
@@ -18,11 +21,17 @@ interface DeliveryPinMapProps {
  * Lightweight map that shows a single delivery pin.
  * Used on the order detail page before a dispatcher is assigned.
  * Only rendered for Super Admin to save Google Maps API quota.
+ *
+ * If lat/lng are not provided but address is, the component will
+ * geocode the address using Google Maps Geocoding API.
  */
 export function DeliveryPinMap({ lat, lng, address }: DeliveryPinMapProps) {
   const mapRef = useRef<HTMLDivElement>(null);
   const mapInstance = useRef<any>(null);
   const [mapLoaded, setMapLoaded] = useState(false);
+  const [resolvedLat, setResolvedLat] = useState<number | null>(lat ?? null);
+  const [resolvedLng, setResolvedLng] = useState<number | null>(lng ?? null);
+  const [geocoding, setGeocoding] = useState(false);
   const apiKey = ENV.GOOGLE_MAPS_KEY;
 
   // Load Google Maps script
@@ -40,12 +49,34 @@ export function DeliveryPinMap({ lat, lng, address }: DeliveryPinMapProps) {
     document.head.appendChild(script);
   }, [apiKey]);
 
+  // Geocode address if no coordinates provided
+  useEffect(() => {
+    if (lat && lng) {
+      setResolvedLat(lat);
+      setResolvedLng(lng);
+      return;
+    }
+    if (!address || !mapLoaded || !window.google?.maps) return;
+
+    setGeocoding(true);
+    const geocoder = new window.google.maps.Geocoder();
+    geocoder.geocode({ address }, (results: any[], status: string) => {
+      setGeocoding(false);
+      if (status === 'OK' && results?.[0]?.geometry?.location) {
+        const loc = results[0].geometry.location;
+        setResolvedLat(loc.lat());
+        setResolvedLng(loc.lng());
+      }
+    });
+  }, [lat, lng, address, mapLoaded]);
+
   // Init map with pin
   useEffect(() => {
     if (!apiKey || !mapLoaded || !mapRef.current || !window.google?.maps) return;
+    if (resolvedLat == null || resolvedLng == null) return;
 
     const g = window.google;
-    const center = { lat, lng };
+    const center = { lat: resolvedLat, lng: resolvedLng };
 
     const map = new g.maps.Map(mapRef.current, {
       center,
@@ -76,12 +107,23 @@ export function DeliveryPinMap({ lat, lng, address }: DeliveryPinMapProps) {
     }
 
     mapInstance.current = map;
-  }, [apiKey, mapLoaded, lat, lng, address]);
+  }, [apiKey, mapLoaded, resolvedLat, resolvedLng, address]);
 
   if (!apiKey) return null;
+  // Nothing to show if no coordinates and no address to geocode
+  if (!lat && !lng && !address) return null;
 
   return (
     <div style={{ marginBottom: 20 }}>
+      {geocoding && (
+        <div style={{
+          height: 280, borderRadius: 12, border: '1px solid #E2E8F0',
+          display: 'flex', alignItems: 'center', justifyContent: 'center',
+          background: '#F8FAFC', color: '#94A3B8', fontSize: 14,
+        }}>
+          Cargando mapa...
+        </div>
+      )}
       <div
         ref={mapRef}
         style={{
@@ -90,6 +132,7 @@ export function DeliveryPinMap({ lat, lng, address }: DeliveryPinMapProps) {
           borderRadius: 12,
           overflow: 'hidden',
           border: '1px solid #E2E8F0',
+          display: (resolvedLat != null && resolvedLng != null && !geocoding) ? 'block' : 'none',
         }}
       />
       {address && (

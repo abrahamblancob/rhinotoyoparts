@@ -392,8 +392,9 @@ export function OrderDetailPage() {
       )}
 
       {/* Delivery pin map — Super Admin only, before dispatcher is assigned */}
-      {isPlatformOwner && order.delivery_latitude && order.delivery_longitude
-        && !order.dispatcher_current_lat && (
+      {isPlatformOwner && !order.dispatcher_current_lat
+        && ((order.delivery_latitude && order.delivery_longitude)
+          || (order.shipping_address as Record<string, string> | null)?.address) && (
         <DeliveryPinMap
           lat={order.delivery_latitude}
           lng={order.delivery_longitude}
