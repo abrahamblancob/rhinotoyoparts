@@ -43,6 +43,8 @@ export function TrackingMap({
   const markerRef = useRef<any>(null);
   const destMarkerRef = useRef<any>(null);
   const [mapLoaded, setMapLoaded] = useState(false);
+  const [gpsFlash, setGpsFlash] = useState(false);
+  const prevCoordsRef = useRef({ lat: dispatcherLat, lng: dispatcherLng });
 
   const apiKey = (import.meta as unknown as { env: Record<string, string> }).env.VITE_GOOGLE_MAPS_KEY;
 
@@ -209,6 +211,17 @@ export function TrackingMap({
     }
   }, [dispatcherLat, dispatcherLng]);
 
+  // Flash animation when GPS coordinates change
+  useEffect(() => {
+    const prev = prevCoordsRef.current;
+    if (prev.lat !== dispatcherLat || prev.lng !== dispatcherLng) {
+      prevCoordsRef.current = { lat: dispatcherLat, lng: dispatcherLng };
+      setGpsFlash(true);
+      const t = setTimeout(() => setGpsFlash(false), 1500);
+      return () => clearTimeout(t);
+    }
+  }, [dispatcherLat, dispatcherLng]);
+
   const timeAgo = lastUpdate
     ? Math.round((Date.now() - new Date(lastUpdate).getTime()) / 1000)
     : null;
@@ -239,10 +252,18 @@ export function TrackingMap({
         gap: 8,
       }}>
         <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-          <span style={{ fontSize: 20 }}>🏍️</span>
+          <span style={{ fontSize: 20, transition: 'transform 0.3s', transform: gpsFlash ? 'scale(1.3)' : 'scale(1)' }}>🏍️</span>
           <div>
             <p style={{ fontSize: 14, fontWeight: 600, color: '#1E293B', margin: 0 }}>
               {dispatcherName} viene en camino
+              {gpsFlash && (
+                <span style={{
+                  marginLeft: 8, fontSize: 11, fontWeight: 500,
+                  color: '#10B981', animation: 'fadeOut 1.5s ease-out forwards',
+                }}>
+                  📡 Ubicación actualizada
+                </span>
+              )}
             </p>
             {timeAgoStr && (
               <p style={{ fontSize: 12, color: '#64748B', margin: 0 }}>
@@ -264,6 +285,14 @@ export function TrackingMap({
           </div>
         )}
       </div>
+
+      <style>{`
+        @keyframes fadeOut {
+          0% { opacity: 1; }
+          70% { opacity: 1; }
+          100% { opacity: 0; }
+        }
+      `}</style>
     </div>
   );
 }

@@ -64,6 +64,7 @@ export function OrderDetailPage() {
   const [showEditModal, setShowEditModal] = useState(false);
 
   const [updating, setUpdating] = useState(false);
+  const [realtimeStatus, setRealtimeStatus] = useState<'connecting' | 'connected' | 'error'>('connecting');
   const [dispatcherName, setDispatcherName] = useState<string>('Despachador');
   const [orderQr, setOrderQr] = useState<{ qr_code: string; scanned_at: string | null; scanned_by: string | null; is_valid: boolean } | null>(null);
   const channelRef = useRef<ReturnType<typeof supabase.channel> | null>(null);
@@ -202,9 +203,10 @@ export function OrderDetailPage() {
     tryGeocode();
   }, [order?.id, order?.delivery_latitude, order?.delivery_longitude, order?.shipping_address]);
 
-  // Realtime subscription for GPS updates
+  // Realtime subscription for GPS updates + status history
   useEffect(() => {
     if (!orderId) return;
+    setRealtimeStatus('connecting');
 
     const channel = supabase
       .channel(`order-detail-${orderId}`)
@@ -216,7 +218,24 @@ export function OrderDetailPage() {
           setOrder((prev) => prev ? { ...prev, ...updated } : prev);
         }
       )
-      .subscribe();
+      .on(
+        'postgres_changes',
+        { event: 'INSERT', schema: 'public', table: 'order_status_history', filter: `order_id=eq.${orderId}` },
+        () => {
+          // Reload history timeline in real time
+          supabase.from('order_status_history')
+            .select('*, profiles(full_name)')
+            .eq('order_id', orderId)
+            .order('created_at', { ascending: true })
+            .then(({ data }) => {
+              if (data) setHistory(data as StatusHistoryWithUser[]);
+            });
+        }
+      )
+      .subscribe((status) => {
+        if (status === 'SUBSCRIBED') setRealtimeStatus('connected');
+        else if (status === 'CHANNEL_ERROR' || status === 'TIMED_OUT') setRealtimeStatus('error');
+      });
 
     channelRef.current = channel;
 
@@ -486,6 +505,23 @@ export function OrderDetailPage() {
       {/* Live tracking map — when dispatcher is actively sharing location */}
       {order.dispatcher_current_lat && order.dispatcher_current_lng && order.assigned_to && (
         <div style={{ marginBottom: 20 }}>
+          {/* Realtime connection indicator */}
+          <div style={{
+            display: 'flex', alignItems: 'center', gap: 6,
+            marginBottom: 8, padding: '6px 12px',
+            background: realtimeStatus === 'connected' ? '#ECFDF5' : realtimeStatus === 'error' ? '#FEF2F2' : '#FFFBEB',
+            borderRadius: 8, width: 'fit-content',
+          }}>
+            <div style={{
+              width: 8, height: 8, borderRadius: '50%',
+              background: realtimeStatus === 'connected' ? '#10B981' : realtimeStatus === 'error' ? '#EF4444' : '#F59E0B',
+              boxShadow: realtimeStatus === 'connected' ? '0 0 0 3px rgba(16,185,129,0.2)' : 'none',
+              animation: realtimeStatus === 'connected' ? 'realtimePulse 2s ease-in-out infinite' : 'none',
+            }} />
+            <span style={{ fontSize: 12, fontWeight: 500, color: realtimeStatus === 'connected' ? '#059669' : realtimeStatus === 'error' ? '#DC2626' : '#D97706' }}>
+              {realtimeStatus === 'connected' ? '● En vivo — rastreo en tiempo real' : realtimeStatus === 'error' ? '● Sin conexión — recarga la página' : '● Conectando...'}
+            </span>
+          </div>
           <TrackingMap
             dispatcherLat={order.dispatcher_current_lat}
             dispatcherLng={order.dispatcher_current_lng}
@@ -907,6 +943,13 @@ export function OrderDetailPage() {
             value={cancelReason} onChange={(e) => setCancelReason(e.target.value)} />
         </div>
       </Modal>
+
+      <style>{`
+        @keyframes realtimePulse {
+          0%, 100% { opacity: 1; transform: scale(1); }
+          50% { opacity: 0.6; transform: scale(1.3); }
+        }
+      `}</style>
     </div>
   );
 }
