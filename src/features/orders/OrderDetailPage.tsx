@@ -8,6 +8,7 @@ import { Modal } from '@/components/hub/shared/Modal.tsx';
 import type { Order, OrderItem, OrderStatusHistory, Customer, Profile, Carrier } from '@/lib/database.types.ts';
 import { WhatsAppShareButton } from '@/components/orders/WhatsAppShareButton.tsx';
 import { TrackingMap } from '@/components/tracking/TrackingMap.tsx';
+import { QRCodeSVG } from 'qrcode.react';
 
 interface OrderItemWithProduct extends OrderItem {
   products: { name: string; sku: string; image_url: string | null } | null;
@@ -473,20 +474,49 @@ export function OrderDetailPage() {
             </div>
           )}
 
-          {/* WhatsApp share + tracking link */}
+          {/* WhatsApp share + tracking link + QR */}
           {order.tracking_code && (
             <div className="rh-card" style={{ padding: 20 }}>
-              <h3 className="rh-card-title" style={{ marginBottom: 8 }}>Tracking Público</h3>
-              <div style={{ fontSize: 13, color: '#64748B', marginBottom: 12 }}>
-                Código: <strong style={{ fontFamily: 'monospace', fontSize: 15, color: '#1E293B' }}>{order.tracking_code}</strong>
+              <h3 className="rh-card-title" style={{ marginBottom: 12 }}>Tracking Público</h3>
+              <div style={{ display: 'flex', gap: 20, alignItems: 'flex-start' }}>
+                {/* QR Code */}
+                <div style={{
+                  background: '#fff',
+                  padding: 12,
+                  borderRadius: 12,
+                  border: '2px solid #E2E8F0',
+                  display: 'flex',
+                  flexDirection: 'column',
+                  alignItems: 'center',
+                  gap: 8,
+                  flexShrink: 0,
+                }}>
+                  <QRCodeSVG
+                    value={`${window.location.origin}/tracking/${order.tracking_code}`}
+                    size={140}
+                    level="M"
+                    bgColor="#FFFFFF"
+                    fgColor="#1E293B"
+                  />
+                  <span style={{ fontSize: 11, color: '#64748B', fontWeight: 500 }}>Escanear para rastrear</span>
+                </div>
+                {/* Info + actions */}
+                <div style={{ flex: 1, display: 'flex', flexDirection: 'column', gap: 10 }}>
+                  <div style={{ fontSize: 13, color: '#64748B' }}>
+                    Código: <strong style={{ fontFamily: 'monospace', fontSize: 15, color: '#1E293B' }}>{order.tracking_code}</strong>
+                  </div>
+                  <div style={{ fontSize: 12, color: '#94A3B8', wordBreak: 'break-all' }}>
+                    {window.location.origin}/tracking/{order.tracking_code}
+                  </div>
+                  <WhatsAppShareButton
+                    trackingCode={order.tracking_code}
+                    receiverName={order.receiver_name ?? customer?.name ?? null}
+                    customerPhone={order.customer_phone ?? customer?.phone ?? null}
+                    items={items.map((i) => ({ name: i.products?.name ?? 'Producto', quantity: i.quantity }))}
+                    orderStatus={order.status}
+                  />
+                </div>
               </div>
-              <WhatsAppShareButton
-                trackingCode={order.tracking_code}
-                receiverName={order.receiver_name ?? customer?.name ?? null}
-                customerPhone={order.customer_phone ?? customer?.phone ?? null}
-                items={items.map((i) => ({ name: i.products?.name ?? 'Producto', quantity: i.quantity }))}
-                orderStatus={order.status}
-              />
             </div>
           )}
 
