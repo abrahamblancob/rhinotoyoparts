@@ -9,6 +9,7 @@ import type { Order, OrderItem, OrderStatusHistory, Customer, Profile, Carrier }
 import { WhatsAppShareButton } from '@/components/orders/WhatsAppShareButton.tsx';
 import { TrackingMap } from '@/components/tracking/TrackingMap.tsx';
 import { DeliveryPinMap } from '@/components/tracking/DeliveryPinMap.tsx';
+import { OrderCreateModal } from './OrderCreateModal.tsx';
 import { QRCodeSVG } from 'qrcode.react';
 
 /* eslint-disable @typescript-eslint/no-explicit-any */
@@ -58,6 +59,9 @@ export function OrderDetailPage() {
   // Cancel modal
   const [showCancelModal, setShowCancelModal] = useState(false);
   const [cancelReason, setCancelReason] = useState('');
+
+  // Edit modal
+  const [showEditModal, setShowEditModal] = useState(false);
 
   const [updating, setUpdating] = useState(false);
   const [dispatcherName, setDispatcherName] = useState<string>('Despachador');
@@ -375,6 +379,12 @@ export function OrderDetailPage() {
         </div>
         {!isReadOnly && (
           <div style={{ display: 'flex', gap: 8 }}>
+            {(isPlatformOwner || (canWrite('orders') && !isDispatcher))
+              && ['draft', 'confirmed', 'assigned'].includes(order.status) && (
+              <button className="rh-btn rh-btn-secondary" onClick={() => setShowEditModal(true)}>
+                ✏️ Editar Orden
+              </button>
+            )}
             {order.status === 'draft' && canWrite('orders') && (
               <button className="rh-btn rh-btn-primary" onClick={() => changeStatus('confirmed', 'Orden confirmada')} disabled={updating}>
                 Confirmar Orden
@@ -865,6 +875,19 @@ export function OrderDetailPage() {
           </div>
         </div>
       </Modal>
+
+      {/* Edit Order Modal */}
+      <OrderCreateModal
+        open={showEditModal}
+        onClose={() => setShowEditModal(false)}
+        onCreated={() => { setShowEditModal(false); loadOrder(); }}
+        editOrder={order}
+        editItems={items.map((i) => ({
+          product_id: i.product_id,
+          quantity: i.quantity,
+          unit_price: Number(i.unit_price),
+        }))}
+      />
 
       {/* Cancel Modal */}
       <Modal open={showCancelModal} onClose={() => setShowCancelModal(false)} title="Cancelar Orden" footer={

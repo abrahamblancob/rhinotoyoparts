@@ -4,23 +4,32 @@ import { useAuthStore } from '@/stores/authStore.ts';
 import { usePermissions } from '@/hooks/usePermissions.ts';
 import { Modal } from '@/components/hub/shared/Modal.tsx';
 import GooglePlacesAutocomplete from '@/components/GooglePlacesAutocomplete.tsx';
-import type { Customer, Product, Organization } from '@/lib/database.types.ts';
+import type { Customer, Product, Organization, Order } from '@/lib/database.types.ts';
 
 interface OrderItem {
   product: Product;
   quantity: number;
 }
 
+interface EditOrderItem {
+  product_id: string;
+  quantity: number;
+  unit_price: number;
+}
+
 interface OrderCreateModalProps {
   open: boolean;
   onClose: () => void;
   onCreated: () => void;
+  editOrder?: Order | null;
+  editItems?: EditOrderItem[];
 }
 
-export function OrderCreateModal({ open, onClose, onCreated }: OrderCreateModalProps) {
+export function OrderCreateModal({ open, onClose, onCreated, editOrder, editItems }: OrderCreateModalProps) {
   const profile = useAuthStore((s) => s.profile);
   const organization = useAuthStore((s) => s.organization);
   const { isPlatformOwner } = usePermissions();
+  const isEditMode = Boolean(editOrder);
 
   // ── Step flow (Super Admin: 1→2→3, Regular users: always 2) ──
   const [step, setStep] = useState<1 | 2 | 3>(isPlatformOwner ? 1 : 2);
@@ -173,6 +182,71 @@ export function OrderCreateModal({ open, onClose, onCreated }: OrderCreateModalP
     }
   }, [open, isPlatformOwner]);
 
+  // ── Initialize form for edit mode ──
+  useEffect(() => {
+    if (!open || !editOrder || !editItems) return;
+
+    const initEdit = async () => {
+      // Skip org selection, go directly to form
+      setStep(2);
+
+      // For Super Admin: load the order's org
+      if (isPlatformOwner) {
+        const { data: orderOrg } = await supabase
+          .from('organizations')
+          .select('*')
+          .eq('id', editOrder.org_id)
+          .single();
+        if (orderOrg) {
+          setSelectedOrg(orderOrg as Organization);
+          setInventoryOrg(orderOrg as Organization);
+        }
+      }
+
+      // Load customer if exists
+      if (editOrder.customer_id) {
+        const { data: cust } = await supabase
+          .from('customers')
+          .select('*')
+          .eq('id', editOrder.customer_id)
+          .single();
+        if (cust) setSelectedCustomer(cust as Customer);
+      }
+
+      // Pre-fill fields
+      setCustomerPhone(editOrder.customer_phone ?? '');
+      const addr = (editOrder.shipping_address as Record<string, string> | null)?.address ?? '';
+      setShippingAddress(addr);
+      setDeliveryLat(editOrder.delivery_latitude ?? null);
+      setDeliveryLng(editOrder.delivery_longitude ?? null);
+      setNotes(editOrder.notes ?? '');
+      setShippingCost(Math.max(0, Number(editOrder.total) - Number(editOrder.subtotal)));
+
+      // Load full product data for items
+      const productIds = editItems.map((i) => i.product_id);
+      if (productIds.length > 0) {
+        const { data: products } = await supabase
+          .from('products')
+          .select('*')
+          .in('id', productIds);
+
+        if (products) {
+          const productMap = new Map((products as Product[]).map((p) => [p.id, p]));
+          const modalItems: OrderItem[] = editItems
+            .map((item) => {
+              const product = productMap.get(item.product_id);
+              if (!product) return null;
+              return { product, quantity: item.quantity };
+            })
+            .filter((item): item is OrderItem => item !== null);
+          setItems(modalItems);
+        }
+      }
+    };
+
+    initEdit();
+  }, [open, editOrder, editItems, isPlatformOwner]);
+
   // Debounced product search
   const searchProducts = useCallback((query: string) => {
     setProductSearch(query);
@@ -281,10 +355,12 @@ export function OrderCreateModal({ open, onClose, onCreated }: OrderCreateModalP
     setSaving(true);
 
     try {
-      // Determine org_id: Super Admin uses inventoryOrg (selected store/aggregator), regular users use their organization
-      const orderOrgId = isPlatformOwner && inventoryOrg
-        ? inventoryOrg.id
-        : organization!.id;
+      // Determine org_id: edit mode keeps original org, Super Admin uses inventoryOrg, regular users use their org
+      const orderOrgId = isEditMode && editOrder
+        ? editOrder.org_id
+        : isPlatformOwner && inventoryOrg
+          ? inventoryOrg.id
+          : organization!.id;
 
       let customerId = selectedCustomer?.id ?? null;
 
@@ -297,6 +373,53 @@ export function OrderCreateModal({ open, onClose, onCreated }: OrderCreateModalP
         if (newC) customerId = newC.id;
       }
 
+      // ── EDIT MODE: UPDATE existing order ──
+      if (isEditMode && editOrder) {
+        const { error } = await supabase.from('orders').update({
+          customer_id: customerId,
+          subtotal,
+          total,
+          notes: notes || null,
+          shipping_address: shippingAddress ? { address: shippingAddress } : null,
+          delivery_latitude: deliveryLat,
+          delivery_longitude: deliveryLng,
+          customer_phone: customerPhone || selectedCustomer?.phone || null,
+        }).eq('id', editOrder.id);
+
+        if (error) {
+          console.error('Error updating order:', error);
+          setSaving(false);
+          return;
+        }
+
+        // Replace items: delete old, insert new
+        await supabase.from('order_items').delete().eq('order_id', editOrder.id);
+        const updatedItems = items.map((i) => ({
+          order_id: editOrder.id,
+          product_id: i.product.id,
+          quantity: i.quantity,
+          unit_price: Number(i.product.price),
+          total: Number(i.product.price) * i.quantity,
+        }));
+        await supabase.from('order_items').insert(updatedItems);
+
+        // Log edit in status history
+        await supabase.from('order_status_history').insert({
+          order_id: editOrder.id,
+          org_id: orderOrgId,
+          from_status: editOrder.status,
+          to_status: editOrder.status,
+          changed_by: profile.id,
+          note: 'Orden editada',
+          metadata: { action: 'edit' },
+        });
+
+        onCreated();
+        onClose();
+        return;
+      }
+
+      // ── CREATE MODE ──
       // Generar número de orden secuencial: RH-00001, RH-00002, ...
       const { count: orderCount } = await supabase
         .from('orders')
@@ -359,14 +482,18 @@ export function OrderCreateModal({ open, onClose, onCreated }: OrderCreateModalP
   };
 
   // ── Dynamic modal title ──
-  const modalTitle = isPlatformOwner
-    ? step === 1
-      ? orgSubStep === 'aggregator'
-        ? 'Nueva Orden — Seleccionar Agregador'
-        : 'Nueva Orden — Seleccionar Tienda'
-    : step === 3 ? 'Nueva Orden — Confirmar Datos'
-    : 'Nueva Orden'
-    : 'Nueva Orden';
+  const modalTitle = isEditMode
+    ? step === 3
+      ? `Editar Orden ${editOrder?.order_number} — Confirmar`
+      : `Editar Orden ${editOrder?.order_number}`
+    : isPlatformOwner
+      ? step === 1
+        ? orgSubStep === 'aggregator'
+          ? 'Nueva Orden — Seleccionar Agregador'
+          : 'Nueva Orden — Seleccionar Tienda'
+      : step === 3 ? 'Nueva Orden — Confirmar Datos'
+      : 'Nueva Orden'
+      : 'Nueva Orden';
 
   // ── Dynamic modal footer ──
   const modalFooter = (() => {
@@ -386,12 +513,12 @@ export function OrderCreateModal({ open, onClose, onCreated }: OrderCreateModalP
     }
 
     // Step 3: Confirmation
-    if (isPlatformOwner && step === 3) {
+    if (step === 3) {
       return (
         <div style={{ display: 'flex', gap: 8, justifyContent: 'flex-end' }}>
           <button className="rh-btn rh-btn-secondary" onClick={() => setStep(2)}>Volver a editar</button>
           <button className="rh-btn rh-btn-primary" onClick={() => handleSave(false)} disabled={saving}>
-            {saving ? 'Guardando...' : 'Confirmar y crear orden'}
+            {saving ? 'Guardando...' : isEditMode ? 'Guardar cambios' : 'Confirmar y crear orden'}
           </button>
         </div>
       );
@@ -400,15 +527,27 @@ export function OrderCreateModal({ open, onClose, onCreated }: OrderCreateModalP
     // Step 2: Order form
     return (
       <div style={{ display: 'flex', gap: 8, justifyContent: 'flex-end' }}>
-        {isPlatformOwner && (
+        {!isEditMode && isPlatformOwner && (
           <button className="rh-btn rh-btn-secondary" onClick={goBackToOrgSelection} style={{ marginRight: 'auto' }}>
             ← Cambiar inventario
           </button>
         )}
-        <button className="rh-btn rh-btn-secondary" onClick={() => handleSave(true)} disabled={saving || items.length === 0}>
-          Guardar como borrador
-        </button>
-        {isPlatformOwner ? (
+        {!isEditMode && (
+          <button className="rh-btn rh-btn-secondary" onClick={() => handleSave(true)} disabled={saving || items.length === 0}>
+            Guardar como borrador
+          </button>
+        )}
+        {isEditMode ? (
+          isPlatformOwner ? (
+            <button className="rh-btn rh-btn-primary" onClick={() => setStep(3)} disabled={items.length === 0}>
+              Revisar cambios →
+            </button>
+          ) : (
+            <button className="rh-btn rh-btn-primary" onClick={() => handleSave(false)} disabled={saving || items.length === 0}>
+              {saving ? 'Guardando...' : 'Guardar cambios'}
+            </button>
+          )
+        ) : isPlatformOwner ? (
           <button className="rh-btn rh-btn-primary" onClick={() => setStep(3)} disabled={items.length === 0}>
             Revisar orden →
           </button>
@@ -577,10 +716,12 @@ export function OrderCreateModal({ open, onClose, onCreated }: OrderCreateModalP
                     <span style={{ fontSize: 11, color: '#64748B', marginLeft: 6 }}>({selectedOrg.name})</span>
                   )}
                 </div>
-                <button onClick={goBackToOrgSelection}
-                  style={{ fontSize: 12, color: '#D3010A', background: 'none', border: '1px solid rgba(211,1,10,0.3)', borderRadius: 6, padding: '4px 10px', cursor: 'pointer' }}>
-                  Cambiar
-                </button>
+                {!isEditMode && (
+                  <button onClick={goBackToOrgSelection}
+                    style={{ fontSize: 12, color: '#D3010A', background: 'none', border: '1px solid rgba(211,1,10,0.3)', borderRadius: 6, padding: '4px 10px', cursor: 'pointer' }}>
+                    Cambiar
+                  </button>
+                )}
               </div>
             )}
 
@@ -776,15 +917,17 @@ export function OrderCreateModal({ open, onClose, onCreated }: OrderCreateModalP
         {/* ═══════════════════════════════════════════════════════════════
             PASO 3: Confirmación (Solo Super Admin)
            ═══════════════════════════════════════════════════════════════ */}
-        {isPlatformOwner && step === 3 && (
+        {step === 3 && (
           <div>
             {/* Warning banner */}
             <div style={{
               padding: '12px 16px', background: '#FFFBEB', borderRadius: 8,
               border: '1px solid #FDE68A', marginBottom: 20, fontSize: 13, color: '#92400E',
             }}>
-              ⚠️ Revisa los datos antes de confirmar. Los productos se descontarán del inventario
-              de <strong>{inventoryOrg?.name}</strong>.
+              {isEditMode
+                ? <>⚠️ Revisa los cambios antes de guardar la orden <strong>{editOrder?.order_number}</strong>.</>
+                : <>⚠️ Revisa los datos antes de confirmar. Los productos se descontarán del inventario de <strong>{inventoryOrg?.name}</strong>.</>
+              }
             </div>
 
             {/* Organización */}
