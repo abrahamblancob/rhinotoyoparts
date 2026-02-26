@@ -1,4 +1,4 @@
-import { useEffect, useState, useCallback } from 'react';
+import { useEffect, useState, useCallback, useRef } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { supabase } from '@/lib/supabase.ts';
 import { useAuthStore } from '@/stores/authStore.ts';
@@ -7,6 +7,7 @@ import { StatusBadge } from '@/components/hub/shared/StatusBadge.tsx';
 import { Modal } from '@/components/hub/shared/Modal.tsx';
 import type { Order, OrderItem, OrderStatusHistory, Customer, Profile, Carrier } from '@/lib/database.types.ts';
 import { WhatsAppShareButton } from '@/components/orders/WhatsAppShareButton.tsx';
+import { TrackingMap } from '@/components/tracking/TrackingMap.tsx';
 
 interface OrderItemWithProduct extends OrderItem {
   products: { name: string; sku: string; image_url: string | null } | null;
@@ -55,6 +56,8 @@ export function OrderDetailPage() {
   const [cancelReason, setCancelReason] = useState('');
 
   const [updating, setUpdating] = useState(false);
+  const [dispatcherName, setDispatcherName] = useState<string>('Despachador');
+  const channelRef = useRef<ReturnType<typeof supabase.channel> | null>(null);
 
   const loadOrder = useCallback(async () => {
     if (!orderId) return;
@@ -76,10 +79,41 @@ export function OrderDetailPage() {
       setCustomer(c as Customer | null);
     }
 
+    // Load dispatcher name
+    if (orderData?.assigned_to) {
+      const { data: dp } = await supabase.from('profiles').select('full_name').eq('id', orderData.assigned_to).single();
+      if (dp) setDispatcherName((dp as { full_name: string }).full_name);
+    }
+
     setLoading(false);
   }, [orderId]);
 
   useEffect(() => { loadOrder(); }, [loadOrder]);
+
+  // Realtime subscription for GPS updates
+  useEffect(() => {
+    if (!orderId) return;
+
+    const channel = supabase
+      .channel(`order-detail-${orderId}`)
+      .on(
+        'postgres_changes',
+        { event: 'UPDATE', schema: 'public', table: 'orders', filter: `id=eq.${orderId}` },
+        (payload) => {
+          const updated = payload.new as Order;
+          setOrder((prev) => prev ? { ...prev, ...updated } : prev);
+        }
+      )
+      .subscribe();
+
+    channelRef.current = channel;
+
+    return () => {
+      if (channelRef.current) {
+        supabase.removeChannel(channelRef.current);
+      }
+    };
+  }, [orderId]);
 
   const changeStatus = async (newStatus: string, notes?: string, metadata?: Record<string, unknown>) => {
     if (!orderId || !profile) return;
@@ -304,6 +338,21 @@ export function OrderDetailPage() {
               );
             })}
           </div>
+        </div>
+      )}
+
+      {/* Live tracking map */}
+      {order.dispatcher_current_lat && order.dispatcher_current_lng && order.assigned_to && (
+        <div style={{ marginBottom: 20 }}>
+          <TrackingMap
+            dispatcherLat={order.dispatcher_current_lat}
+            dispatcherLng={order.dispatcher_current_lng}
+            deliveryLat={order.delivery_latitude}
+            deliveryLng={order.delivery_longitude}
+            dispatcherName={dispatcherName}
+            lastUpdate={order.dispatcher_last_update}
+            estimatedMinutes={order.estimated_duration_min}
+          />
         </div>
       )}
 
