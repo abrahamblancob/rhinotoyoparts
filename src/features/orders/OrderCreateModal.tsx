@@ -1,6 +1,7 @@
 import { useEffect, useState, useRef, useCallback } from 'react';
 import { supabase } from '@/lib/supabase.ts';
 import { useAuthStore } from '@/stores/authStore.ts';
+import { usePermissions } from '@/hooks/usePermissions.ts';
 import { Modal } from '@/components/hub/shared/Modal.tsx';
 import type { Customer, Product } from '@/lib/database.types.ts';
 
@@ -18,12 +19,13 @@ interface OrderCreateModalProps {
 export function OrderCreateModal({ open, onClose, onCreated }: OrderCreateModalProps) {
   const profile = useAuthStore((s) => s.profile);
   const organization = useAuthStore((s) => s.organization);
+  const { isPlatformOwner } = usePermissions();
 
   const [customers, setCustomers] = useState<Customer[]>([]);
   const [customerSearch, setCustomerSearch] = useState('');
   const [selectedCustomer, setSelectedCustomer] = useState<Customer | null>(null);
   const [showNewCustomer, setShowNewCustomer] = useState(false);
-  const [newCustomer, setNewCustomer] = useState({ name: '', phone: '', city: '' });
+  const [newCustomerName, setNewCustomerName] = useState('');
   const [shippingAddress, setShippingAddress] = useState('');
   const [customerPhone, setCustomerPhone] = useState('');
 
@@ -39,20 +41,26 @@ export function OrderCreateModal({ open, onClose, onCreated }: OrderCreateModalP
   const productDebounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const productSearchRef = useRef('');
 
+  // Load customers on open
   useEffect(() => {
     if (open && organization) {
-      supabase.from('customers').select('*').eq('org_id', organization.id).order('name').then(({ data }) => {
+      const query = supabase.from('customers').select('*').order('name');
+      // Platform owner can see all customers; regular users only their org
+      if (!isPlatformOwner) {
+        query.eq('org_id', organization.id);
+      }
+      query.then(({ data }) => {
         setCustomers((data as Customer[]) ?? []);
       });
     }
-  }, [open, organization]);
+  }, [open, organization, isPlatformOwner]);
 
   // Reset form when modal closes
   useEffect(() => {
     if (!open) {
       setSelectedCustomer(null);
       setShowNewCustomer(false);
-      setNewCustomer({ name: '', phone: '', city: '' });
+      setNewCustomerName('');
       setShippingAddress('');
       setCustomerPhone('');
       setCustomerSearch('');
@@ -65,7 +73,7 @@ export function OrderCreateModal({ open, onClose, onCreated }: OrderCreateModalP
     }
   }, [open]);
 
-  // Debounced product search
+  // Debounced product search - real-time as you type
   const searchProducts = useCallback((query: string) => {
     setProductSearch(query);
     productSearchRef.current = query;
@@ -74,7 +82,7 @@ export function OrderCreateModal({ open, onClose, onCreated }: OrderCreateModalP
       clearTimeout(productDebounceRef.current);
     }
 
-    if (query.length < 2 || !organization) {
+    if (query.length < 2) {
       setProductResults([]);
       setProductLoading(false);
       return;
@@ -83,25 +91,33 @@ export function OrderCreateModal({ open, onClose, onCreated }: OrderCreateModalP
     setProductLoading(true);
 
     productDebounceRef.current = setTimeout(async () => {
-      // Check if query is still current
       if (productSearchRef.current !== query) return;
 
-      const { data } = await supabase
+      let q = supabase
         .from('products')
         .select('*')
-        .eq('org_id', organization.id)
         .eq('status', 'active')
         .gt('stock', 0)
-        .or(`name.ilike.%${query}%,sku.ilike.%${query}%,oem_number.ilike.%${query}%`)
+        .or(`name.ilike.%${query}%,sku.ilike.%${query}%`)
         .limit(10);
 
-      // Only update if query hasn't changed while we were fetching
+      // Regular users only see their org's products
+      if (!isPlatformOwner && organization) {
+        q = q.eq('org_id', organization.id);
+      }
+
+      const { data, error } = await q;
+
+      if (error) {
+        console.error('Product search error:', error);
+      }
+
       if (productSearchRef.current === query) {
         setProductResults((data as Product[]) ?? []);
         setProductLoading(false);
       }
-    }, 250);
-  }, [organization]);
+    }, 200);
+  }, [organization, isPlatformOwner]);
 
   // Cleanup debounce on unmount
   useEffect(() => {
@@ -134,7 +150,7 @@ export function OrderCreateModal({ open, onClose, onCreated }: OrderCreateModalP
     setItems(items.filter((i) => i.product.id !== productId));
   };
 
-  const subtotal = items.reduce((s, i) => s + i.product.price * i.quantity, 0);
+  const subtotal = items.reduce((s, i) => s + Number(i.product.price) * i.quantity, 0);
   const total = subtotal + shippingCost;
 
   const filteredCustomers = customerSearch.length >= 2
@@ -151,15 +167,19 @@ export function OrderCreateModal({ open, onClose, onCreated }: OrderCreateModalP
     setSaving(true);
 
     try {
+      // Determine org_id: use the first product's org for platform owners
+      const orderOrgId = isPlatformOwner && items.length > 0
+        ? items[0].product.org_id
+        : organization.id;
+
       let customerId = selectedCustomer?.id ?? null;
 
       // Create new customer if needed
-      if (showNewCustomer && newCustomer.name) {
+      if (showNewCustomer && newCustomerName) {
         const { data: newC } = await supabase.from('customers').insert({
-          org_id: organization.id,
-          name: newCustomer.name,
-          phone: newCustomer.phone || null,
-          city: newCustomer.city || null,
+          org_id: orderOrgId,
+          name: newCustomerName,
+          phone: customerPhone || null,
         }).select().single();
         if (newC) customerId = newC.id;
       }
@@ -168,7 +188,7 @@ export function OrderCreateModal({ open, onClose, onCreated }: OrderCreateModalP
       const orderNumber = `RH-${Date.now().toString(36).toUpperCase()}`;
 
       const { data: order, error } = await supabase.from('orders').insert({
-        org_id: organization.id,
+        org_id: orderOrgId,
         customer_id: customerId,
         order_number: orderNumber,
         status: asDraft ? 'draft' : 'confirmed',
@@ -180,7 +200,7 @@ export function OrderCreateModal({ open, onClose, onCreated }: OrderCreateModalP
         created_by: profile.id,
         source: 'manual',
         shipping_address: shippingAddress ? { address: shippingAddress } : null,
-        customer_phone: customerPhone || selectedCustomer?.phone || newCustomer.phone || null,
+        customer_phone: customerPhone || selectedCustomer?.phone || null,
         confirmed_at: asDraft ? null : new Date().toISOString(),
       }).select().single();
 
@@ -195,8 +215,8 @@ export function OrderCreateModal({ open, onClose, onCreated }: OrderCreateModalP
         order_id: order.id,
         product_id: i.product.id,
         quantity: i.quantity,
-        unit_price: i.product.price,
-        total: i.product.price * i.quantity,
+        unit_price: Number(i.product.price),
+        total: Number(i.product.price) * i.quantity,
       }));
 
       await supabase.from('order_items').insert(orderItems);
@@ -204,7 +224,7 @@ export function OrderCreateModal({ open, onClose, onCreated }: OrderCreateModalP
       // Record initial status in history
       await supabase.from('order_status_history').insert({
         order_id: order.id,
-        org_id: organization.id,
+        org_id: orderOrgId,
         from_status: null,
         to_status: asDraft ? 'draft' : 'confirmed',
         changed_by: profile.id,
@@ -248,18 +268,11 @@ export function OrderCreateModal({ open, onClose, onCreated }: OrderCreateModalP
                 style={{ background: 'none', border: 'none', cursor: 'pointer', color: '#8A8886', fontSize: 18, lineHeight: 1 }}>&times;</button>
             </div>
           ) : showNewCustomer ? (
-            <div style={{ display: 'flex', flexDirection: 'column', gap: 8, padding: 14, background: '#F8FAFC', borderRadius: 8, border: '1px solid #E2E8F0' }}>
-              <span style={{ fontSize: 12, fontWeight: 600, color: '#64748B', textTransform: 'uppercase', letterSpacing: 0.5 }}>Nuevo cliente</span>
-              <input className="rh-input" placeholder="Nombre del cliente *"
-                value={newCustomer.name} onChange={(e) => setNewCustomer({ ...newCustomer, name: e.target.value })} />
-              <div style={{ display: 'flex', gap: 8 }}>
-                <input className="rh-input" placeholder="Teléfono" style={{ flex: 1 }}
-                  value={newCustomer.phone} onChange={(e) => setNewCustomer({ ...newCustomer, phone: e.target.value })} />
-                <input className="rh-input" placeholder="Ciudad" style={{ flex: 1 }}
-                  value={newCustomer.city} onChange={(e) => setNewCustomer({ ...newCustomer, city: e.target.value })} />
-              </div>
-              <button className="rh-btn rh-btn-secondary" onClick={() => { setShowNewCustomer(false); setNewCustomer({ name: '', phone: '', city: '' }); }}
-                style={{ alignSelf: 'flex-start', fontSize: 12, padding: '4px 12px' }}>Cancelar</button>
+            <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
+              <input className="rh-input" placeholder="Nombre del nuevo cliente *" style={{ flex: 1 }}
+                value={newCustomerName} onChange={(e) => setNewCustomerName(e.target.value)} autoFocus />
+              <button className="rh-btn rh-btn-secondary" onClick={() => { setShowNewCustomer(false); setNewCustomerName(''); }}
+                style={{ fontSize: 12, padding: '6px 12px', whiteSpace: 'nowrap' }}>Cancelar</button>
             </div>
           ) : (
             <div style={{ display: 'flex', gap: 8 }}>
@@ -335,12 +348,12 @@ export function OrderCreateModal({ open, onClose, onCreated }: OrderCreateModalP
                     onMouseLeave={(e) => (e.currentTarget.style.background = '#fff')}>
                     <div style={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
                       <span style={{ fontWeight: 600 }}>{p.name}</span>
-                      <span style={{ color: '#8A8886', fontSize: 12 }}>SKU: {p.sku}{p.oem_number ? ` · OEM: ${p.oem_number}` : ''}</span>
+                      <span style={{ color: '#8A8886', fontSize: 12 }}>SKU: {p.sku}</span>
                     </div>
                     <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-end', gap: 2 }}>
-                      <span style={{ fontWeight: 700, color: '#059669' }}>${p.price.toFixed(2)}</span>
+                      <span style={{ fontWeight: 700, color: '#059669' }}>${Number(p.price).toFixed(2)}</span>
                       <span style={{ fontSize: 11, color: p.stock > 5 ? '#64748B' : '#D97706' }}>
-                        {p.stock > 5 ? `${p.stock} en stock` : `Solo ${p.stock} en stock`}
+                        {p.stock > 5 ? `${p.stock} en stock` : `⚠ ${p.stock} en stock`}
                       </span>
                     </div>
                   </div>
@@ -379,9 +392,9 @@ export function OrderCreateModal({ open, onClose, onCreated }: OrderCreateModalP
                           onChange={(e) => updateQty(item.product.id, parseInt(e.target.value) || 1)}
                           style={{ width: 50, textAlign: 'center', border: '1px solid #E2E0DE', borderRadius: 4, padding: '2px 4px' }} />
                       </td>
-                      <td style={{ padding: '8px 12px', textAlign: 'right' }}>${item.product.price.toFixed(2)}</td>
+                      <td style={{ padding: '8px 12px', textAlign: 'right' }}>${Number(item.product.price).toFixed(2)}</td>
                       <td style={{ padding: '8px 12px', textAlign: 'right', fontWeight: 600 }}>
-                        ${(item.product.price * item.quantity).toFixed(2)}
+                        ${(Number(item.product.price) * item.quantity).toFixed(2)}
                       </td>
                       <td style={{ padding: '4px 8px', textAlign: 'center' }}>
                         <button onClick={() => removeItem(item.product.id)}
