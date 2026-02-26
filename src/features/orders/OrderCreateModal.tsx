@@ -3,6 +3,7 @@ import { supabase } from '@/lib/supabase.ts';
 import { useAuthStore } from '@/stores/authStore.ts';
 import { usePermissions } from '@/hooks/usePermissions.ts';
 import { Modal } from '@/components/hub/shared/Modal.tsx';
+import GooglePlacesAutocomplete from '@/components/GooglePlacesAutocomplete.tsx';
 import type { Customer, Product, Organization } from '@/lib/database.types.ts';
 
 interface OrderItem {
@@ -41,6 +42,8 @@ export function OrderCreateModal({ open, onClose, onCreated }: OrderCreateModalP
   const [showNewCustomer, setShowNewCustomer] = useState(false);
   const [newCustomerName, setNewCustomerName] = useState('');
   const [shippingAddress, setShippingAddress] = useState('');
+  const [deliveryLat, setDeliveryLat] = useState<number | null>(null);
+  const [deliveryLng, setDeliveryLng] = useState<number | null>(null);
   const [customerPhone, setCustomerPhone] = useState('');
 
   const [productSearch, setProductSearch] = useState('');
@@ -157,6 +160,8 @@ export function OrderCreateModal({ open, onClose, onCreated }: OrderCreateModalP
       setShowNewCustomer(false);
       setNewCustomerName('');
       setShippingAddress('');
+      setDeliveryLat(null);
+      setDeliveryLng(null);
       setCustomerPhone('');
       setCustomerSearch('');
       setProductSearch('');
@@ -260,6 +265,8 @@ export function OrderCreateModal({ open, onClose, onCreated }: OrderCreateModalP
     setCustomerSearch('');
     setCustomerPhone('');
     setShippingAddress('');
+    setDeliveryLat(null);
+    setDeliveryLng(null);
     setShowNewCustomer(false);
     setNewCustomerName('');
     setProductSearch('');
@@ -310,6 +317,8 @@ export function OrderCreateModal({ open, onClose, onCreated }: OrderCreateModalP
         created_by: profile.id,
         source: 'manual',
         shipping_address: shippingAddress ? { address: shippingAddress } : null,
+        delivery_latitude: deliveryLat,
+        delivery_longitude: deliveryLng,
         customer_phone: customerPhone || selectedCustomer?.phone || null,
         confirmed_at: asDraft ? null : new Date().toISOString(),
       }).select().single();
@@ -585,7 +594,7 @@ export function OrderCreateModal({ open, onClose, onCreated }: OrderCreateModalP
                     {selectedCustomer.name}
                     {selectedCustomer.phone && <span style={{ fontWeight: 400, color: '#64748B', marginLeft: 8 }}>{selectedCustomer.phone}</span>}
                   </span>
-                  <button onClick={() => { setSelectedCustomer(null); setCustomerPhone(''); setShippingAddress(''); }}
+                  <button onClick={() => { setSelectedCustomer(null); setCustomerPhone(''); setShippingAddress(''); setDeliveryLat(null); setDeliveryLng(null); }}
                     style={{ background: 'none', border: 'none', cursor: 'pointer', color: '#8A8886', fontSize: 18, lineHeight: 1 }}>&times;</button>
                 </div>
               ) : showNewCustomer ? (
@@ -631,13 +640,19 @@ export function OrderCreateModal({ open, onClose, onCreated }: OrderCreateModalP
               </div>
               <div>
                 <label className="rh-label" style={{ marginBottom: 4, display: 'block' }}>Dirección de envío</label>
-                <input className="rh-input"
-                  placeholder="https://maps.google.com/... o dirección completa"
+                <GooglePlacesAutocomplete
+                  className="rh-input"
+                  placeholder="Escribe la dirección de envío..."
                   value={shippingAddress}
-                  onChange={(e) => setShippingAddress(e.target.value)}
+                  onChange={setShippingAddress}
+                  onPlaceSelect={(place) => {
+                    setShippingAddress(place.address);
+                    setDeliveryLat(place.lat);
+                    setDeliveryLng(place.lng);
+                  }}
                 />
                 <span style={{ fontSize: 11, color: '#94A3B8', marginTop: 2, display: 'block' }}>
-                  Pega el link de Google Maps para facilitar el tracking del despachador
+                  Escribe y selecciona una dirección de las sugerencias de Google Maps
                 </span>
               </div>
             </div>
