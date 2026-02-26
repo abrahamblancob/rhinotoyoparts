@@ -8,6 +8,7 @@ import { Modal } from '@/components/hub/shared/Modal.tsx';
 import type { Order, OrderItem, OrderStatusHistory, Customer, Profile, Carrier } from '@/lib/database.types.ts';
 import { WhatsAppShareButton } from '@/components/orders/WhatsAppShareButton.tsx';
 import { TrackingMap } from '@/components/tracking/TrackingMap.tsx';
+import { DeliveryPinMap } from '@/components/tracking/DeliveryPinMap.tsx';
 import { QRCodeSVG } from 'qrcode.react';
 
 interface OrderItemWithProduct extends OrderItem {
@@ -32,7 +33,7 @@ export function OrderDetailPage() {
   const navigate = useNavigate();
   const profile = useAuthStore((s) => s.profile);
   const organization = useAuthStore((s) => s.organization);
-  const { canWrite, isDispatcher, isAggregator } = usePermissions();
+  const { canWrite, isDispatcher, isAggregator, isPlatformOwner } = usePermissions();
 
   const [order, setOrder] = useState<Order | null>(null);
   const [items, setItems] = useState<OrderItemWithProduct[]>([]);
@@ -376,7 +377,17 @@ export function OrderDetailPage() {
         </div>
       )}
 
-      {/* Live tracking map */}
+      {/* Delivery pin map — Super Admin only, before dispatcher is assigned */}
+      {isPlatformOwner && order.delivery_latitude && order.delivery_longitude
+        && !order.dispatcher_current_lat && (
+        <DeliveryPinMap
+          lat={order.delivery_latitude}
+          lng={order.delivery_longitude}
+          address={(order.shipping_address as Record<string, string> | null)?.address}
+        />
+      )}
+
+      {/* Live tracking map — when dispatcher is actively tracking */}
       {order.dispatcher_current_lat && order.dispatcher_current_lng && order.assigned_to && (
         <div style={{ marginBottom: 20 }}>
           <TrackingMap
