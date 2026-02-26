@@ -11,6 +11,8 @@ import { TrackingMap } from '@/components/tracking/TrackingMap.tsx';
 import { DeliveryPinMap } from '@/components/tracking/DeliveryPinMap.tsx';
 import { QRCodeSVG } from 'qrcode.react';
 
+/* eslint-disable @typescript-eslint/no-explicit-any */
+
 interface OrderItemWithProduct extends OrderItem {
   products: { name: string; sku: string; image_url: string | null } | null;
 }
@@ -61,6 +63,11 @@ export function OrderDetailPage() {
   const [dispatcherName, setDispatcherName] = useState<string>('Despachador');
   const [orderQr, setOrderQr] = useState<{ qr_code: string; scanned_at: string | null; scanned_by: string | null; is_valid: boolean } | null>(null);
   const channelRef = useRef<ReturnType<typeof supabase.channel> | null>(null);
+
+  // Resolved delivery coordinates (from order or geocoded from address)
+  const [resolvedDeliveryLat, setResolvedDeliveryLat] = useState<number | null>(null);
+  const [resolvedDeliveryLng, setResolvedDeliveryLng] = useState<number | null>(null);
+  const geocodeAttemptedRef = useRef(false);
 
   const loadOrder = useCallback(async () => {
     if (!orderId) return;
@@ -125,6 +132,71 @@ export function OrderDetailPage() {
   }, [orderId]);
 
   useEffect(() => { loadOrder(); }, [loadOrder]);
+
+  // Resolve delivery coordinates: use order lat/lng or geocode the address
+  useEffect(() => {
+    if (!order) return;
+
+    // If order already has coordinates, use them directly
+    if (order.delivery_latitude && order.delivery_longitude) {
+      setResolvedDeliveryLat(order.delivery_latitude);
+      setResolvedDeliveryLng(order.delivery_longitude);
+      return;
+    }
+
+    // Try to geocode the address (only once)
+    const addr = (order.shipping_address as Record<string, string> | null)?.address;
+    if (!addr || geocodeAttemptedRef.current) return;
+    geocodeAttemptedRef.current = true;
+
+    // Wait for Google Maps to be available
+    const tryGeocode = () => {
+      if (!window.google?.maps) {
+        setTimeout(tryGeocode, 500);
+        return;
+      }
+      const geocoder = new window.google.maps.Geocoder();
+      geocoder.geocode({ address: addr }, (results: any[], status: string) => {
+        let lat: number | null = null;
+        let lng: number | null = null;
+
+        if (status === 'OK' && results?.[0]?.geometry?.location) {
+          lat = results[0].geometry.location.lat();
+          lng = results[0].geometry.location.lng();
+        }
+
+        // Fallback: Places text search
+        if (!lat && window.google?.maps?.places) {
+          const dummyDiv = document.createElement('div');
+          const service = new window.google.maps.places.PlacesService(dummyDiv);
+          service.textSearch({ query: addr }, (placeResults: any[], placeStatus: string) => {
+            if (placeStatus === 'OK' && placeResults?.[0]?.geometry?.location) {
+              const loc = placeResults[0].geometry.location;
+              setResolvedDeliveryLat(loc.lat());
+              setResolvedDeliveryLng(loc.lng());
+              // Persist geocoded coordinates to DB so we don't geocode again
+              supabase.from('orders').update({
+                delivery_latitude: loc.lat(),
+                delivery_longitude: loc.lng(),
+              }).eq('id', order.id).then(() => {});
+            }
+          });
+          return;
+        }
+
+        if (lat && lng) {
+          setResolvedDeliveryLat(lat);
+          setResolvedDeliveryLng(lng);
+          // Persist geocoded coordinates to DB
+          supabase.from('orders').update({
+            delivery_latitude: lat,
+            delivery_longitude: lng,
+          }).eq('id', order.id).then(() => {});
+        }
+      });
+    };
+    tryGeocode();
+  }, [order?.id, order?.delivery_latitude, order?.delivery_longitude, order?.shipping_address]);
 
   // Realtime subscription for GPS updates
   useEffect(() => {
@@ -391,25 +463,24 @@ export function OrderDetailPage() {
         </div>
       )}
 
-      {/* Delivery pin map — Super Admin only, before dispatcher is assigned */}
+      {/* Delivery pin map — Super Admin only, before dispatcher is sharing location */}
       {isPlatformOwner && !order.dispatcher_current_lat
-        && ((order.delivery_latitude && order.delivery_longitude)
-          || (order.shipping_address as Record<string, string> | null)?.address) && (
+        && (resolvedDeliveryLat || (order.shipping_address as Record<string, string> | null)?.address) && (
         <DeliveryPinMap
-          lat={order.delivery_latitude}
-          lng={order.delivery_longitude}
+          lat={resolvedDeliveryLat}
+          lng={resolvedDeliveryLng}
           address={(order.shipping_address as Record<string, string> | null)?.address}
         />
       )}
 
-      {/* Live tracking map — when dispatcher is actively tracking */}
+      {/* Live tracking map — when dispatcher is actively sharing location */}
       {order.dispatcher_current_lat && order.dispatcher_current_lng && order.assigned_to && (
         <div style={{ marginBottom: 20 }}>
           <TrackingMap
             dispatcherLat={order.dispatcher_current_lat}
             dispatcherLng={order.dispatcher_current_lng}
-            deliveryLat={order.delivery_latitude}
-            deliveryLng={order.delivery_longitude}
+            deliveryLat={resolvedDeliveryLat}
+            deliveryLng={resolvedDeliveryLng}
             dispatcherName={dispatcherName}
             lastUpdate={order.dispatcher_last_update}
             estimatedMinutes={order.estimated_duration_min}
