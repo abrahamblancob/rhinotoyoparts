@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState } from 'react';
+import L from 'leaflet';
 
 /* eslint-disable @typescript-eslint/no-explicit-any */
 declare global {
@@ -17,6 +18,17 @@ interface TrackingMapProps {
   estimatedMinutes: number | null;
 }
 
+// Leaflet CSS injected once
+let leafletCssInjected = false;
+function injectLeafletCss() {
+  if (leafletCssInjected) return;
+  leafletCssInjected = true;
+  const link = document.createElement('link');
+  link.rel = 'stylesheet';
+  link.href = 'https://unpkg.com/leaflet@1.9.4/dist/leaflet.css';
+  document.head.appendChild(link);
+}
+
 export function TrackingMap({
   dispatcherLat,
   dispatcherLng,
@@ -32,11 +44,14 @@ export function TrackingMap({
   const destMarkerRef = useRef<any>(null);
   const [mapLoaded, setMapLoaded] = useState(false);
 
-  // Load Google Maps script dynamically
+  const apiKey = (import.meta as unknown as { env: Record<string, string> }).env.VITE_GOOGLE_MAPS_KEY;
+
+  // Load Google Maps script dynamically (only if API key exists)
   useEffect(() => {
-    const apiKey = (import.meta as unknown as { env: Record<string, string> }).env.VITE_GOOGLE_MAPS_KEY;
     if (!apiKey) {
-      // No API key — show static fallback
+      // Use Leaflet fallback
+      injectLeafletCss();
+      setMapLoaded(true);
       return;
     }
     if (window.google?.maps) {
@@ -51,9 +66,9 @@ export function TrackingMap({
     document.head.appendChild(script);
   }, []);
 
-  // Init map
+  // Init Google Maps
   useEffect(() => {
-    if (!mapLoaded || !mapRef.current || !window.google?.maps) return;
+    if (!apiKey || !mapLoaded || !mapRef.current || !window.google?.maps) return;
 
     const g = window.google;
     const center = { lat: dispatcherLat, lng: dispatcherLng };
@@ -111,10 +126,86 @@ export function TrackingMap({
     }
   }, [mapLoaded]);
 
-  // Update dispatcher position when props change
+  // Init Leaflet map (fallback when no Google API key)
   useEffect(() => {
-    if (markerRef.current) {
+    if (apiKey || !mapLoaded || !mapRef.current) return;
+    // Avoid re-init
+    if (mapInstance.current) return;
+
+    const map = L.map(mapRef.current, {
+      center: [dispatcherLat, dispatcherLng],
+      zoom: 14,
+      zoomControl: true,
+      attributionControl: true,
+    });
+
+    L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+      attribution: '&copy; OpenStreetMap',
+      maxZoom: 19,
+    }).addTo(map);
+
+    mapInstance.current = map;
+
+    // Dispatcher marker (motorcycle emoji)
+    const motoIcon = L.divIcon({
+      html: '<div style="font-size:28px;filter:drop-shadow(0 2px 4px rgba(0,0,0,0.3));">🏍️</div>',
+      className: '',
+      iconSize: [36, 36],
+      iconAnchor: [18, 18],
+    });
+
+    const dispatcherMarker = L.marker([dispatcherLat, dispatcherLng], {
+      icon: motoIcon,
+      title: dispatcherName,
+    }).addTo(map);
+    dispatcherMarker.bindPopup(`<strong>${dispatcherName}</strong><br/>Despachador`);
+    markerRef.current = dispatcherMarker;
+
+    // Destination marker
+    if (deliveryLat && deliveryLng) {
+      const destIcon = L.divIcon({
+        html: '<div style="font-size:24px;filter:drop-shadow(0 2px 4px rgba(0,0,0,0.3));">📍</div>',
+        className: '',
+        iconSize: [30, 30],
+        iconAnchor: [15, 30],
+      });
+
+      const destMarker = L.marker([deliveryLat, deliveryLng], {
+        icon: destIcon,
+        title: 'Destino',
+      }).addTo(map);
+      destMarker.bindPopup('<strong>Destino</strong><br/>Punto de entrega');
+      destMarkerRef.current = destMarker;
+
+      // Fit bounds to show both markers
+      const bounds = L.latLngBounds(
+        [dispatcherLat, dispatcherLng],
+        [deliveryLat, deliveryLng]
+      );
+      map.fitBounds(bounds, { padding: [50, 50] });
+    }
+
+    // Fix Leaflet size issues when container is hidden then shown
+    setTimeout(() => map.invalidateSize(), 100);
+  }, [mapLoaded]);
+
+  // Update dispatcher position when props change (both Google & Leaflet)
+  useEffect(() => {
+    if (!markerRef.current) return;
+
+    if (apiKey) {
+      // Google Maps
       markerRef.current.position = { lat: dispatcherLat, lng: dispatcherLng };
+    } else {
+      // Leaflet
+      markerRef.current.setLatLng([dispatcherLat, dispatcherLng]);
+      if (mapInstance.current && destMarkerRef.current) {
+        const bounds = L.latLngBounds(
+          [dispatcherLat, dispatcherLng],
+          destMarkerRef.current.getLatLng()
+        );
+        mapInstance.current.fitBounds(bounds, { padding: [50, 50] });
+      }
     }
   }, [dispatcherLat, dispatcherLng]);
 
@@ -127,8 +218,6 @@ export function TrackingMap({
         : `hace ${Math.round(timeAgo / 3600)}h`
     : null;
 
-  const apiKey = (import.meta as unknown as { env: Record<string, string> }).env.VITE_GOOGLE_MAPS_KEY;
-
   return (
     <div style={{
       background: '#fff',
@@ -137,23 +226,7 @@ export function TrackingMap({
       marginBottom: 20,
       boxShadow: '0 1px 3px rgba(0,0,0,0.06)',
     }}>
-      {apiKey ? (
-        <div ref={mapRef} style={{ width: '100%', height: 320 }} />
-      ) : (
-        /* Static map fallback — no API key needed for embed */
-        <div style={{ width: '100%', height: 320, position: 'relative', background: '#E2E8F0' }}>
-          <iframe
-            title="Ubicación del motorizado"
-            width="100%"
-            height="100%"
-            style={{ border: 0 }}
-            loading="lazy"
-            src={deliveryLat && deliveryLng
-              ? `https://www.google.com/maps/dir/${dispatcherLat},${dispatcherLng}/${deliveryLat},${deliveryLng}/@${(dispatcherLat + deliveryLat) / 2},${(dispatcherLng + deliveryLng) / 2},13z?output=embed`
-              : `https://www.google.com/maps?q=${dispatcherLat},${dispatcherLng}&z=14&output=embed`}
-          />
-        </div>
-      )}
+      <div ref={mapRef} style={{ width: '100%', height: 320 }} />
 
       {/* Info bar */}
       <div style={{
