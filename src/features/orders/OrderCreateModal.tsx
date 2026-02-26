@@ -50,10 +50,11 @@ export function OrderCreateModal({ open, onClose, onCreated }: OrderCreateModalP
   useEffect(() => {
     if (open && isPlatformOwner) {
       setOrgsLoading(true);
+      // Solo mostrar agregadores — son los dueños del inventario
       supabase
         .from('organizations')
         .select('*')
-        .neq('type', 'platform')
+        .eq('type', 'aggregator')
         .eq('status', 'active')
         .order('name')
         .then(({ data }) => {
@@ -338,7 +339,7 @@ export function OrderCreateModal({ open, onClose, onCreated }: OrderCreateModalP
         {isPlatformOwner && step === 1 && (
           <div>
             <p style={{ fontSize: 14, color: '#64748B', marginBottom: 16 }}>
-              Selecciona de cuál organización se descontará el inventario para esta orden.
+              Selecciona el agregador de cuyo inventario se descontarán los productos para esta orden.
             </p>
             {orgsLoading ? (
               <p style={{ textAlign: 'center', color: '#94A3B8', padding: 20 }}>Cargando organizaciones...</p>
@@ -363,8 +364,7 @@ export function OrderCreateModal({ open, onClose, onCreated }: OrderCreateModalP
                       <div>
                         <div style={{ fontWeight: 600, fontSize: 15, color: '#1E293B' }}>{org.name}</div>
                         <div style={{ fontSize: 12, color: '#8A8886', marginTop: 2 }}>
-                          {org.type === 'associate' ? 'Asociado' : 'Agregador'}
-                          {org.rif && ` · RIF: ${org.rif}`}
+                          Agregador{org.rif && ` · RIF: ${org.rif}`}
                         </div>
                       </div>
                       {isSelected && (
@@ -608,8 +608,7 @@ export function OrderCreateModal({ open, onClose, onCreated }: OrderCreateModalP
                 🏢 {selectedOrg?.name}
               </div>
               <div style={{ fontSize: 12, color: '#64748B' }}>
-                {selectedOrg?.type === 'associate' ? 'Asociado' : 'Agregador'}
-                {selectedOrg?.rif && ` · RIF: ${selectedOrg.rif}`}
+                Agregador{selectedOrg?.rif && ` · RIF: ${selectedOrg.rif}`}
               </div>
             </div>
 
