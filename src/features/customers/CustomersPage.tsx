@@ -356,37 +356,51 @@ export function CustomersPage() {
           {/* Address — Google Maps Autocomplete */}
           <div className="col-span-2">
             <div className="rh-field">
-              <label className="rh-label">Direccion</label>
+              <label className="rh-label">Direccion de envio</label>
               <GooglePlacesAutocomplete
                 className="rh-input"
-                placeholder="Escribe la direccion del cliente..."
+                placeholder="Escribe la direccion y selecciona de las sugerencias..."
                 value={form.address}
-                onChange={(addr) => setForm((f) => ({ ...f, address: addr }))}
+                onChange={(addr) => {
+                  // If user edits text manually after selecting, clear coordinates
+                  // so they must re-select from Google to get valid lat/lng
+                  setForm((f) => ({ ...f, address: addr, lat: null, lng: null }));
+                }}
                 onPlaceSelect={(place) => {
+                  // Extract city and state from Google result
+                  const parts = place.address.split(',').map((p) => p.trim());
+                  const extractedCity = parts.length >= 3 ? parts[parts.length - 3] : '';
+                  const extractedState = parts.length >= 2 ? parts[parts.length - 2] : '';
+
                   setForm((f) => ({
                     ...f,
                     address: place.address,
                     lat: place.lat,
                     lng: place.lng,
+                    city: extractedCity || f.city,
+                    state: extractedState || f.state,
                   }));
-                  // Try to extract city and state from address
-                  const parts = place.address.split(',').map((p) => p.trim());
-                  if (parts.length >= 3) {
-                    setForm((prev) => ({
-                      ...prev,
-                      address: place.address,
-                      lat: place.lat,
-                      lng: place.lng,
-                      city: prev.city || parts[parts.length - 3] || '',
-                      state: prev.state || parts[parts.length - 2] || '',
-                    }));
-                  }
                 }}
               />
-              {form.lat && form.lng && (
-                <p style={{ fontSize: 11, color: '#10B981', marginTop: 4, margin: 0 }}>
-                  Coordenadas guardadas ({form.lat.toFixed(4)}, {form.lng.toFixed(4)})
-                </p>
+              {/* Status indicator — validated vs not */}
+              {form.address && form.lat && form.lng ? (
+                <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginTop: 4 }}>
+                  <div style={{ width: 6, height: 6, borderRadius: '50%', background: '#10B981' }} />
+                  <span style={{ fontSize: 11, color: '#10B981' }}>
+                    Direccion verificada por Google Maps ({form.lat.toFixed(4)}, {form.lng.toFixed(4)})
+                  </span>
+                </div>
+              ) : form.address ? (
+                <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginTop: 4 }}>
+                  <div style={{ width: 6, height: 6, borderRadius: '50%', background: '#F59E0B' }} />
+                  <span style={{ fontSize: 11, color: '#D97706' }}>
+                    Selecciona una direccion de las sugerencias de Google Maps para guardar las coordenadas
+                  </span>
+                </div>
+              ) : (
+                <span style={{ fontSize: 11, color: '#94A3B8', marginTop: 2, display: 'block' }}>
+                  Escribe y selecciona una direccion de las sugerencias de Google Maps
+                </span>
               )}
             </div>
           </div>
