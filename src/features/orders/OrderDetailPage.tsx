@@ -87,8 +87,8 @@ export function OrderDetailPage() {
       if (dp) setDispatcherName((dp as { full_name: string }).full_name);
     }
 
-    // Load order QR code for dispatcher
-    if (orderData?.tracking_code) {
+    // Load or auto-generate order QR code for dispatcher
+    if (orderData?.tracking_code && orderData?.org_id) {
       const { data: qr } = await supabase
         .from('order_qr_codes')
         .select('qr_code, scanned_at, scanned_by, is_valid')
@@ -96,7 +96,28 @@ export function OrderDetailPage() {
         .order('created_at', { ascending: false })
         .limit(1)
         .single();
-      setOrderQr(qr as { qr_code: string; scanned_at: string | null; scanned_by: string | null; is_valid: boolean } | null);
+
+      if (qr) {
+        setOrderQr(qr as { qr_code: string; scanned_at: string | null; scanned_by: string | null; is_valid: boolean });
+      } else {
+        // Auto-generate QR: TRACK-TP001-2026 → RHINO-QR-TP001-2026
+        const qrCode = orderData.tracking_code.replace(/^TRACK-/, 'RHINO-QR-');
+        const { data: newQr } = await supabase
+          .from('order_qr_codes')
+          .insert({
+            order_id: orderId,
+            org_id: orderData.org_id,
+            qr_code: qrCode,
+            generated_at: new Date().toISOString(),
+            is_valid: true,
+            expires_at: new Date(Date.now() + 7 * 24 * 60 * 60 * 1000).toISOString(),
+          })
+          .select('qr_code, scanned_at, scanned_by, is_valid')
+          .single();
+        if (newQr) {
+          setOrderQr(newQr as { qr_code: string; scanned_at: string | null; scanned_by: string | null; is_valid: boolean });
+        }
+      }
     }
 
     setLoading(false);
