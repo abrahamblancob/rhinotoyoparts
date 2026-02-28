@@ -1,6 +1,5 @@
 import { useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { supabase } from '@/lib/supabase.ts';
 import { usePermissions } from '@/hooks/usePermissions.ts';
 import { useAuthStore } from '@/stores/authStore.ts';
 import { StatusBadge } from '@/components/hub/shared/StatusBadge.tsx';
@@ -8,6 +7,8 @@ import { EmptyState } from '@/components/hub/shared/EmptyState.tsx';
 import { StatsCard } from '@/components/hub/shared/StatsCard.tsx';
 import { OrderCreateModal } from './OrderCreateModal.tsx';
 import type { Order } from '@/lib/database.types.ts';
+import { ORDER_STATUS_LABELS, SOURCE_LABELS } from '@/lib/statusConfig.ts';
+import { getOrders } from '@/services/orderService.ts';
 
 export function OrdersPage() {
   const [orders, setOrders] = useState<Order[]>([]);
@@ -25,25 +26,14 @@ export function OrdersPage() {
 
   const loadOrders = async () => {
     setLoading(true);
-    let query = supabase
-      .from('orders')
-      .select('*, customers(name)')
-      .order('created_at', { ascending: false });
-
-    if (!isPlatform && organization) {
-      query = query.eq('org_id', organization.id);
-    }
-
-    // Dispatchers only see their assigned orders
-    if (isDispatcher && profile) {
-      query = query.eq('assigned_to', profile.id);
-    }
-
-    if (statusFilter !== 'all') {
-      query = query.eq('status', statusFilter);
-    }
-    const { data } = await query;
-    setOrders((data as (Order & { customers: { name: string } | null })[]) ?? []);
+    const result = await getOrders({
+      orgId: organization?.id,
+      isPlatform,
+      isDispatcher,
+      assignedTo: profile?.id,
+      status: statusFilter,
+    });
+    setOrders((result.data ?? []) as (Order & { customers: { name: string } | null })[]);
     setLoading(false);
   };
 
@@ -52,12 +42,7 @@ export function OrdersPage() {
   const inProgressCount = orders.filter((o) => ['assigned', 'preparing', 'ready_to_ship', 'processing'].includes(o.status)).length;
 
   const statuses = ['all', 'draft', 'pending', 'confirmed', 'assigned', 'preparing', 'ready_to_ship', 'shipped', 'in_transit', 'delivered', 'cancelled'];
-  const statusLabels: Record<string, string> = {
-    all: 'Todas', draft: 'Borrador', pending: 'Pendientes', confirmed: 'Confirmadas',
-    assigned: 'Asignadas', preparing: 'Preparando', ready_to_ship: 'Listas',
-    processing: 'En proceso', shipped: 'Enviadas', in_transit: 'En tránsito',
-    delivered: 'Entregadas', cancelled: 'Canceladas',
-  };
+  const statusLabels = ORDER_STATUS_LABELS;
 
   return (
     <div>
@@ -122,7 +107,7 @@ export function OrdersPage() {
                     </td>
                     <td>
                       <span style={{ fontSize: 12, color: '#8A8886' }}>
-                        {order.source === 'whatsapp' ? 'WhatsApp' : order.source === 'rhino_vision' ? 'Rhino Vision' : 'Manual'}
+                        {SOURCE_LABELS[order.source ?? 'manual'] ?? order.source}
                       </span>
                     </td>
                     <td className="text-right cell-bold">${Number(order.total).toFixed(2)}</td>

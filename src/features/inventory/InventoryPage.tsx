@@ -1,29 +1,17 @@
 import { useEffect, useMemo, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { supabase } from '@/lib/supabase.ts';
 import { usePermissions } from '@/hooks/usePermissions.ts';
 import { useAuthStore } from '@/stores/authStore.ts';
 import { StatusBadge } from '@/components/hub/shared/StatusBadge.tsx';
 import { EmptyState } from '@/components/hub/shared/EmptyState.tsx';
 import { StatsCard } from '@/components/hub/shared/StatsCard.tsx';
-import { Modal } from '@/components/hub/shared/Modal.tsx';
+import { ConfirmDeleteModal } from '@/components/hub/shared/ConfirmDeleteModal.tsx';
 import { Pagination } from '@/features/inventory/upload/components/Pagination.tsx';
+import { ProductFormModal } from './ProductFormModal.tsx';
 import type { Product } from '@/lib/database.types.ts';
+import * as productService from '@/services/productService.ts';
 
 const PAGE_SIZE = 20;
-
-const EMPTY_FORM = {
-  sku: '',
-  name: '',
-  description: '',
-  brand: '',
-  oem_number: '',
-  price: '',
-  cost: '',
-  stock: '',
-  min_stock: '5',
-  status: 'active' as const,
-};
 
 export function InventoryPage() {
   const [products, setProducts] = useState<Product[]>([]);
@@ -37,15 +25,9 @@ export function InventoryPage() {
   const organization = useAuthStore((s) => s.organization);
   const navigate = useNavigate();
 
-  // Create / Edit product state
+  // Modal state
   const [showProduct, setShowProduct] = useState(false);
   const [editingProduct, setEditingProduct] = useState<Product | null>(null);
-  const [productForm, setProductForm] = useState({ ...EMPTY_FORM });
-  const [productLoading, setProductLoading] = useState(false);
-  const [productError, setProductError] = useState('');
-  const [productSuccess, setProductSuccess] = useState('');
-
-  // Delete product state
   const [deleteTarget, setDeleteTarget] = useState<Product | null>(null);
   const [deleteLoading, setDeleteLoading] = useState(false);
 
@@ -55,137 +37,33 @@ export function InventoryPage() {
 
   const loadProducts = async () => {
     setLoading(true);
-    let query = supabase.from('products').select('*').order('created_at', { ascending: false });
-
-    if (!isPlatform && organization) {
-      query = query.eq('org_id', organization.id);
-    }
-    if (statusFilter === 'active' || statusFilter === 'inactive') {
-      query = query.eq('status', statusFilter);
-    }
-    if (statusFilter === 'out_of_stock') {
-      query = query.eq('stock', 0);
-    }
-
-    const { data } = await query;
-    setProducts((data as Product[]) ?? []);
+    const result = await productService.getProducts({
+      orgId: organization?.id,
+      isPlatform,
+      status: statusFilter !== 'all' ? statusFilter : undefined,
+    });
+    setProducts(result.data ?? []);
     setLoading(false);
   };
 
   const openCreateModal = () => {
     setEditingProduct(null);
-    setProductForm({ ...EMPTY_FORM });
-    setProductError('');
-    setProductSuccess('');
     setShowProduct(true);
   };
 
   const openEditModal = (product: Product) => {
     setEditingProduct(product);
-    setProductForm({
-      sku: product.sku,
-      name: product.name,
-      description: product.description ?? '',
-      brand: product.brand ?? '',
-      oem_number: product.oem_number ?? '',
-      price: String(product.price),
-      cost: product.cost != null ? String(product.cost) : '',
-      stock: String(product.stock),
-      min_stock: String(product.min_stock),
-      status: product.status as 'active',
-    });
-    setProductError('');
-    setProductSuccess('');
     setShowProduct(true);
-  };
-
-  const handleSaveProduct = async () => {
-    if (!productForm.name.trim()) {
-      setProductError('El nombre del producto es requerido');
-      return;
-    }
-
-    setProductLoading(true);
-    setProductError('');
-
-    const orgId = organization?.id;
-    if (!orgId && !isPlatform) {
-      setProductError('No se pudo determinar la organización');
-      setProductLoading(false);
-      return;
-    }
-
-    const productData = {
-      org_id: editingProduct?.org_id ?? orgId,
-      sku: productForm.sku.trim() || `SKU-${Date.now()}`,
-      name: productForm.name.trim(),
-      description: productForm.description.trim() || null,
-      brand: productForm.brand.trim() || null,
-      oem_number: productForm.oem_number.trim() || null,
-      price: parseFloat(productForm.price) || 0,
-      cost: productForm.cost ? parseFloat(productForm.cost) : null,
-      stock: parseInt(productForm.stock) || 0,
-      min_stock: parseInt(productForm.min_stock) || 5,
-      status: productForm.status,
-    };
-
-    if (editingProduct) {
-      const { error } = await supabase
-        .from('products')
-        .update(productData)
-        .eq('id', editingProduct.id);
-
-      if (error) {
-        setProductError(`Error al actualizar: ${error.message}`);
-        setProductLoading(false);
-        return;
-      }
-      setProductSuccess('Producto actualizado exitosamente');
-    } else {
-      const { error } = await supabase
-        .from('products')
-        .insert(productData);
-
-      if (error) {
-        if (error.message.includes('duplicate') || error.message.includes('unique')) {
-          setProductError('Ya existe un producto con ese SKU en tu organización');
-        } else {
-          setProductError(`Error al crear: ${error.message}`);
-        }
-        setProductLoading(false);
-        return;
-      }
-      setProductSuccess('Producto creado exitosamente');
-    }
-
-    setProductLoading(false);
-    loadProducts();
-    setTimeout(() => {
-      setShowProduct(false);
-      setProductSuccess('');
-      setEditingProduct(null);
-    }, 1500);
   };
 
   const handleDeleteProduct = async () => {
     if (!deleteTarget) return;
     setDeleteLoading(true);
 
-    const { error } = await supabase
-      .from('products')
-      .delete()
-      .eq('id', deleteTarget.id);
-
-    if (error) {
-      setDeleteLoading(false);
-      setDeleteTarget(null);
-      setProductError(`Error al eliminar: ${error.message}`);
-      return;
-    }
+    await productService.deleteProduct(deleteTarget.id);
 
     setDeleteLoading(false);
     setDeleteTarget(null);
-    // Close edit modal if open
     setShowProduct(false);
     setEditingProduct(null);
     loadProducts();
@@ -229,7 +107,6 @@ export function InventoryPage() {
   const lowStock = products.filter((p) => p.stock > 0 && p.stock <= p.min_stock).length;
   const outOfStock = products.filter((p) => p.stock === 0).length;
 
-  // Brand distribution for bar chart
   const brandData = useMemo(() => {
     const map = new Map<string, number>();
     for (const p of products) {
@@ -454,255 +331,41 @@ export function InventoryPage() {
         </div>
       )}
 
-      {/* ── Create / Edit Product Modal ──────────────────────────────── */}
-      <Modal
+      {/* Product Form Modal */}
+      <ProductFormModal
         open={showProduct}
+        product={editingProduct}
+        orgId={organization?.id}
+        isPlatform={isPlatform}
         onClose={() => {
           setShowProduct(false);
           setEditingProduct(null);
-          setProductError('');
-          setProductSuccess('');
         }}
-        title={editingProduct ? 'Editar Producto' : 'Nuevo Producto'}
-        width="600px"
-        footer={
-          productSuccess ? (
-            <button
-              onClick={() => {
-                setShowProduct(false);
-                setProductSuccess('');
-                setEditingProduct(null);
-              }}
-              className="rh-btn rh-btn-primary"
-            >
-              Cerrar
-            </button>
-          ) : (
-            <div style={{ display: 'flex', justifyContent: editingProduct ? 'space-between' : 'flex-end', width: '100%', alignItems: 'center' }}>
-              {editingProduct && canWrite('inventory') && (
-                <button
-                  onClick={() => setDeleteTarget(editingProduct)}
-                  className="rh-btn rh-btn-ghost"
-                  style={{ color: '#D3010A' }}
-                >
-                  🗑️ Eliminar
-                </button>
-              )}
-              <div style={{ display: 'flex', gap: 8 }}>
-                <button
-                  onClick={() => {
-                    setShowProduct(false);
-                    setEditingProduct(null);
-                    setProductError('');
-                  }}
-                  className="rh-btn rh-btn-ghost"
-                >
-                  Cancelar
-                </button>
-                <button
-                  onClick={handleSaveProduct}
-                  disabled={productLoading || !productForm.name}
-                  className="rh-btn rh-btn-primary"
-                >
-                  {productLoading ? 'Guardando...' : editingProduct ? 'Guardar Cambios' : 'Crear Producto'}
-                </button>
-              </div>
-            </div>
-          )
-        }
-      >
-        {productSuccess ? (
-          <div className="rh-alert rh-alert-success">
-            <div style={{ fontSize: 32, marginBottom: 12 }}>✅</div>
-            <p style={{ fontWeight: 500 }}>{productSuccess}</p>
-          </div>
-        ) : (
-          <>
-            {productError && (
-              <div className="rh-alert rh-alert-error mb-4">{productError}</div>
-            )}
+        onSaved={loadProducts}
+        onRequestDelete={setDeleteTarget}
+        canDelete={canWrite('inventory')}
+      />
 
-            <div className="rh-form-grid">
-              {/* Name - full width */}
-              <div className="col-span-2">
-                <div className="rh-field">
-                  <label className="rh-label">Nombre del producto *</label>
-                  <input
-                    type="text"
-                    value={productForm.name}
-                    onChange={(e) => setProductForm((f) => ({ ...f, name: e.target.value }))}
-                    className="rh-input"
-                    placeholder="Pastillas de freno Toyota Hilux"
-                  />
-                </div>
-              </div>
-
-              {/* SKU */}
-              <div className="rh-field">
-                <label className="rh-label">SKU</label>
-                <input
-                  type="text"
-                  value={productForm.sku}
-                  onChange={(e) => setProductForm((f) => ({ ...f, sku: e.target.value }))}
-                  className="rh-input"
-                  placeholder="TOY-04465-001"
-                />
-                <p className="rh-hint">Se genera automáticamente si se deja vacío</p>
-              </div>
-
-              {/* OEM */}
-              <div className="rh-field">
-                <label className="rh-label">Número OEM</label>
-                <input
-                  type="text"
-                  value={productForm.oem_number}
-                  onChange={(e) => setProductForm((f) => ({ ...f, oem_number: e.target.value }))}
-                  className="rh-input"
-                  placeholder="04465-33471"
-                />
-              </div>
-
-              {/* Brand */}
-              <div className="rh-field">
-                <label className="rh-label">Marca</label>
-                <input
-                  type="text"
-                  value={productForm.brand}
-                  onChange={(e) => setProductForm((f) => ({ ...f, brand: e.target.value }))}
-                  className="rh-input"
-                  placeholder="Toyota, Denso, KYB..."
-                />
-              </div>
-
-              {/* Status */}
-              <div className="rh-field">
-                <label className="rh-label">Estado</label>
-                <select
-                  value={productForm.status}
-                  onChange={(e) => setProductForm((f) => ({ ...f, status: e.target.value as 'active' }))}
-                  className="rh-select"
-                >
-                  <option value="active">Activo</option>
-                  <option value="inactive">Inactivo</option>
-                  <option value="out_of_stock">Agotado</option>
-                </select>
-              </div>
-
-              {/* Price */}
-              <div className="rh-field">
-                <label className="rh-label">Precio (USD) *</label>
-                <input
-                  type="number"
-                  step="0.01"
-                  min="0"
-                  value={productForm.price}
-                  onChange={(e) => setProductForm((f) => ({ ...f, price: e.target.value }))}
-                  className="rh-input"
-                  placeholder="25.50"
-                />
-              </div>
-
-              {/* Cost */}
-              <div className="rh-field">
-                <label className="rh-label">Costo (USD)</label>
-                <input
-                  type="number"
-                  step="0.01"
-                  min="0"
-                  value={productForm.cost}
-                  onChange={(e) => setProductForm((f) => ({ ...f, cost: e.target.value }))}
-                  className="rh-input"
-                  placeholder="15.00"
-                />
-              </div>
-
-              {/* Stock */}
-              <div className="rh-field">
-                <label className="rh-label">Stock</label>
-                <input
-                  type="number"
-                  min="0"
-                  value={productForm.stock}
-                  onChange={(e) => setProductForm((f) => ({ ...f, stock: e.target.value }))}
-                  className="rh-input"
-                  placeholder="100"
-                />
-              </div>
-
-              {/* Min Stock */}
-              <div className="rh-field">
-                <label className="rh-label">Stock mínimo</label>
-                <input
-                  type="number"
-                  min="0"
-                  value={productForm.min_stock}
-                  onChange={(e) => setProductForm((f) => ({ ...f, min_stock: e.target.value }))}
-                  className="rh-input"
-                  placeholder="5"
-                />
-                <p className="rh-hint">Alerta cuando el stock esté por debajo</p>
-              </div>
-
-              {/* Description - full width */}
-              <div className="col-span-2">
-                <div className="rh-field">
-                  <label className="rh-label">Descripción</label>
-                  <textarea
-                    value={productForm.description}
-                    onChange={(e) => setProductForm((f) => ({ ...f, description: e.target.value }))}
-                    className="rh-input"
-                    rows={3}
-                    placeholder="Descripción detallada del producto..."
-                    style={{ resize: 'vertical' }}
-                  />
-                </div>
-              </div>
-            </div>
-          </>
-        )}
-      </Modal>
-
-      {/* ── Delete Confirmation Modal ──────────────────────────────── */}
-      <Modal
+      {/* Delete Confirmation Modal */}
+      <ConfirmDeleteModal
         open={!!deleteTarget}
-        onClose={() => !deleteLoading && setDeleteTarget(null)}
         title="Eliminar Producto"
-        width="460px"
-        footer={
-          <>
-            <button
-              onClick={() => setDeleteTarget(null)}
-              disabled={deleteLoading}
-              className="rh-btn rh-btn-ghost"
-            >
-              Cancelar
-            </button>
-            <button
-              onClick={handleDeleteProduct}
-              disabled={deleteLoading}
-              className="rh-btn"
-              style={{ background: '#D3010A', color: '#fff' }}
-            >
-              {deleteLoading ? 'Eliminando...' : 'Sí, Eliminar'}
-            </button>
-          </>
-        }
+        loading={deleteLoading}
+        onClose={() => setDeleteTarget(null)}
+        onConfirm={handleDeleteProduct}
       >
-        <div style={{ textAlign: 'center', padding: '8px 0' }}>
-          <div style={{ fontSize: 40, marginBottom: 12 }}>⚠️</div>
-          <p style={{ fontWeight: 500, marginBottom: 8 }}>
-            ¿Estás seguro de que deseas eliminar este producto?
+        <p style={{ fontWeight: 500, marginBottom: 8 }}>
+          ¿Estas seguro de que deseas eliminar este producto?
+        </p>
+        {deleteTarget && (
+          <p style={{ color: '#94A3B8', fontSize: 14 }}>
+            <strong>{deleteTarget.name}</strong> (SKU: {deleteTarget.sku})
           </p>
-          {deleteTarget && (
-            <p style={{ color: '#94A3B8', fontSize: 14 }}>
-              <strong>{deleteTarget.name}</strong> (SKU: {deleteTarget.sku})
-            </p>
-          )}
-          <p style={{ color: '#F59E0B', fontSize: 13, marginTop: 12 }}>
-            Esta acción no se puede deshacer.
-          </p>
-        </div>
-      </Modal>
+        )}
+        <p style={{ color: '#F59E0B', fontSize: 13, marginTop: 12 }}>
+          Esta accion no se puede deshacer.
+        </p>
+      </ConfirmDeleteModal>
     </div>
   );
 }

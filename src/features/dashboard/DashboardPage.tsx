@@ -1,9 +1,9 @@
 import { useEffect, useMemo, useState } from 'react';
 import { StatsCard } from '@/components/hub/shared/StatsCard.tsx';
 import { usePermissions } from '@/hooks/usePermissions.ts';
-import { supabase } from '@/lib/supabase.ts';
 import { useAuthStore } from '@/stores/authStore.ts';
 import { OrderPipelineWidget } from './OrderPipelineWidget.tsx';
+import { getDashboardStats } from '@/services/dashboardService.ts';
 
 export function DashboardPage() {
   const { isPlatform, isAggregator } = usePermissions();
@@ -12,21 +12,7 @@ export function DashboardPage() {
   const [salesPeriod, setSalesPeriod] = useState<'6m' | '12m'>('6m');
 
   useEffect(() => {
-    async function loadStats() {
-      const [orgsRes, productsRes, ordersRes, lowStockRes] = await Promise.all([
-        supabase.from('organizations').select('id', { count: 'exact', head: true }),
-        supabase.from('products').select('id', { count: 'exact', head: true }),
-        supabase.from('orders').select('id', { count: 'exact', head: true }),
-        supabase.from('products').select('id', { count: 'exact', head: true }).gt('stock', 0).lte('stock', 5),
-      ]);
-      setStats({
-        orgs: orgsRes.count ?? 0,
-        products: productsRes.count ?? 0,
-        orders: ordersRes.count ?? 0,
-        lowStock: lowStockRes.count ?? 0,
-      });
-    }
-    loadStats();
+    getDashboardStats().then(setStats);
   }, []);
 
   // Generate month labels for chart
