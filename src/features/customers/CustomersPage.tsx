@@ -1,11 +1,13 @@
 import { useEffect, useState, useCallback } from 'react';
-import { supabase } from '@/lib/supabase.ts';
 import { usePermissions } from '@/hooks/usePermissions.ts';
 import { useAuthStore } from '@/stores/authStore.ts';
 import { EmptyState } from '@/components/hub/shared/EmptyState.tsx';
 import { Modal } from '@/components/hub/shared/Modal.tsx';
+import { ConfirmDeleteModal } from '@/components/hub/shared/ConfirmDeleteModal.tsx';
 import GooglePlacesAutocomplete from '@/components/GooglePlacesAutocomplete.tsx';
-import type { Customer, Organization } from '@/lib/database.types.ts';
+import type { Customer } from '@/lib/database.types.ts';
+import * as customerService from '@/services/customerService.ts';
+import { getOrgNameMap } from '@/services/orgService.ts';
 
 const emptyForm = { name: '', rif: '', email: '', phone: '', whatsapp: '', address: '', city: '', state: '', notes: '', lat: null as number | null, lng: null as number | null };
 
@@ -33,33 +35,19 @@ export function CustomersPage() {
   // ── Load customers ──
   const loadCustomers = useCallback(async () => {
     setLoading(true);
-    let query = supabase
-      .from('customers')
-      .select('*')
-      .order('created_at', { ascending: false });
-
-    // Regular users: filter by their org. Super Admin: RLS returns all.
-    if (!isPlatformOwner && organization) {
-      query = query.eq('org_id', organization.id);
-    }
-
-    const { data } = await query;
-    const list = (data as Customer[]) ?? [];
+    const result = await customerService.getCustomers({
+      orgId: organization?.id,
+      isPlatform: isPlatformOwner,
+    });
+    const list = result.data ?? [];
     setCustomers(list);
     setLoading(false);
 
     // Load org names for Super Admin
     if (isPlatformOwner && list.length > 0) {
       const uniqueOrgIds = [...new Set(list.map((c) => c.org_id))];
-      const { data: orgs } = await supabase
-        .from('organizations')
-        .select('id, name')
-        .in('id', uniqueOrgIds);
-      if (orgs) {
-        const map: Record<string, string> = {};
-        (orgs as Organization[]).forEach((o) => { map[o.id] = o.name; });
-        setOrgNames(map);
-      }
+      const map = await getOrgNameMap(uniqueOrgIds);
+      setOrgNames(map);
     }
   }, [isPlatformOwner, organization]);
 
@@ -127,32 +115,22 @@ export function CustomersPage() {
     };
 
     if (isEditMode && editCustomer) {
-      // UPDATE
-      const { error } = await supabase
-        .from('customers')
-        .update(payload)
-        .eq('id', editCustomer.id);
-
-      if (error) {
-        setSaveError(error.message);
+      const result = await customerService.updateCustomer(editCustomer.id, payload);
+      if (result.error) {
+        setSaveError(result.error);
         setSaveLoading(false);
         return;
       }
     } else {
-      // INSERT — need org_id
       const orgId = organization?.id;
       if (!orgId) {
         setSaveError('No se pudo determinar la organizacion');
         setSaveLoading(false);
         return;
       }
-
-      const { error } = await supabase
-        .from('customers')
-        .insert({ ...payload, org_id: orgId });
-
-      if (error) {
-        setSaveError(error.message);
+      const result = await customerService.createCustomer({ ...payload, org_id: orgId });
+      if (result.error) {
+        setSaveError(result.error);
         setSaveLoading(false);
         return;
       }
@@ -170,7 +148,7 @@ export function CustomersPage() {
     if (!deleteConfirm) return;
     setDeleteLoading(true);
 
-    await supabase.from('customers').delete().eq('id', deleteConfirm.id);
+    await customerService.deleteCustomer(deleteConfirm.id);
 
     setDeleteLoading(false);
     setDeleteConfirm(null);
@@ -446,37 +424,25 @@ export function CustomersPage() {
       </Modal>
 
       {/* ── Delete Confirmation Modal ── */}
-      <Modal
+      <ConfirmDeleteModal
         open={Boolean(deleteConfirm)}
-        onClose={() => setDeleteConfirm(null)}
         title="Eliminar Cliente"
-        width="440px"
-        footer={
-          <>
-            <button onClick={() => setDeleteConfirm(null)} className="rh-btn rh-btn-ghost">
-              Cancelar
-            </button>
-            <button
-              onClick={handleDelete}
-              disabled={deleteLoading}
-              className="rh-btn"
-              style={{ background: '#EF4444', color: '#fff' }}
-            >
-              {deleteLoading ? 'Eliminando...' : 'Eliminar'}
-            </button>
-          </>
-        }
+        loading={deleteLoading}
+        onClose={() => setDeleteConfirm(null)}
+        onConfirm={handleDelete}
       >
-        <p style={{ fontSize: 14, color: '#475569', margin: 0 }}>
+        <p style={{ fontWeight: 500, marginBottom: 8 }}>
           ¿Estas seguro de eliminar al cliente <strong>{deleteConfirm?.name}</strong>?
-          Esta accion no se puede deshacer.
         </p>
         {deleteConfirm?.rif && (
-          <p style={{ fontSize: 13, color: '#94A3B8', marginTop: 4 }}>
+          <p style={{ color: '#94A3B8', fontSize: 14, marginBottom: 8 }}>
             RIF: {deleteConfirm.rif}
           </p>
         )}
-      </Modal>
+        <p style={{ color: '#F59E0B', fontSize: 13 }}>
+          Esta accion no se puede deshacer.
+        </p>
+      </ConfirmDeleteModal>
     </div>
   );
 }

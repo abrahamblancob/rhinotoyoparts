@@ -22,14 +22,7 @@ interface StatusHistoryWithUser extends OrderStatusHistory {
   profiles: { full_name: string } | null;
 }
 
-const STATUS_FLOW = ['draft', 'confirmed', 'assigned', 'preparing', 'ready_to_ship', 'shipped', 'in_transit', 'delivered'];
-
-const STATUS_LABELS: Record<string, string> = {
-  draft: 'Borrador', pending: 'Pendiente', confirmed: 'Confirmada', assigned: 'Asignada',
-  preparing: 'Preparando', ready_to_ship: 'Lista para envío', processing: 'Procesando',
-  shipped: 'Despachada', in_transit: 'En tránsito', delivered: 'Entregada',
-  cancelled: 'Cancelada', returned: 'Devuelta',
-};
+import { ORDER_STATUS_FLOW, ORDER_STATUS_LABELS } from '@/lib/statusConfig.ts';
 
 export function OrderDetailPage() {
   const { orderId } = useParams<{ orderId: string }>();
@@ -374,7 +367,7 @@ export function OrderDetailPage() {
   const isReadOnly = isAggregator;
 
   // Determine current step in the flow
-  const currentStepIndex = STATUS_FLOW.indexOf(order.status);
+  const currentStepIndex = ORDER_STATUS_FLOW.indexOf(order.status);
 
   return (
     <div>
@@ -466,9 +459,9 @@ export function OrderDetailPage() {
             {/* Progress line */}
             <div style={{ position: 'absolute', top: 12, left: 24, right: 24, height: 3, background: '#E2E8F0', zIndex: 0 }} />
             <div style={{ position: 'absolute', top: 12, left: 24, height: 3, background: '#D3010A', zIndex: 1,
-              width: currentStepIndex >= 0 ? `${(currentStepIndex / (STATUS_FLOW.length - 1)) * 100}%` : '0%', transition: 'width 0.5s ease' }} />
+              width: currentStepIndex >= 0 ? `${(currentStepIndex / (ORDER_STATUS_FLOW.length - 1)) * 100}%` : '0%', transition: 'width 0.5s ease' }} />
 
-            {STATUS_FLOW.map((status, i) => {
+            {ORDER_STATUS_FLOW.map((status, i) => {
               const isCompleted = i <= currentStepIndex;
               const isCurrent = i === currentStepIndex;
               return (
@@ -483,7 +476,7 @@ export function OrderDetailPage() {
                     {isCompleted ? '✓' : i + 1}
                   </div>
                   <span style={{ fontSize: 10, marginTop: 4, color: isCurrent ? '#D3010A' : isCompleted ? '#1E293B' : '#94A3B8', fontWeight: isCurrent ? 700 : 400, whiteSpace: 'nowrap' }}>
-                    {STATUS_LABELS[status]}
+                    {ORDER_STATUS_LABELS[status]}
                   </span>
                 </div>
               );

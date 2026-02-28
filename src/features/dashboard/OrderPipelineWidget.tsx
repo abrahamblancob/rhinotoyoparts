@@ -2,6 +2,7 @@ import { useEffect, useState, useCallback } from 'react';
 import { supabase } from '@/lib/supabase.ts';
 import { useAuthStore } from '@/stores/authStore.ts';
 import { usePermissions } from '@/hooks/usePermissions.ts';
+import { PIPELINE_STAGES } from '@/lib/statusConfig.ts';
 
 interface PipelineCounts {
   draft: number;
@@ -20,17 +21,6 @@ interface FulfillmentMetrics {
   completedToday: number;
   cancelRate: number;
 }
-
-const PIPELINE_STAGES: { key: keyof PipelineCounts; label: string; color: string }[] = [
-  { key: 'draft', label: 'Borrador', color: '#94A3B8' },
-  { key: 'confirmed', label: 'Confirmada', color: '#10B981' },
-  { key: 'assigned', label: 'Asignada', color: '#8B5CF6' },
-  { key: 'preparing', label: 'Preparando', color: '#F59E0B' },
-  { key: 'ready_to_ship', label: 'Lista', color: '#06B6D4' },
-  { key: 'shipped', label: 'Despachada', color: '#3B82F6' },
-  { key: 'in_transit', label: 'En tránsito', color: '#6366F1' },
-  { key: 'delivered', label: 'Entregada', color: '#10B981' },
-];
 
 export function OrderPipelineWidget() {
   const organization = useAuthStore((s) => s.organization);
@@ -128,7 +118,7 @@ export function OrderPipelineWidget() {
         </div>
         <div style={{ display: 'flex', gap: 8, alignItems: 'flex-end', height: 160 }}>
           {PIPELINE_STAGES.map(({ key, label, color }) => {
-            const count = counts[key];
+            const count = counts[key as keyof PipelineCounts] ?? 0;
             const height = count > 0 ? Math.max((count / maxCount) * 120, 20) : 4;
             return (
               <div key={key} style={{ flex: 1, display: 'flex', flexDirection: 'column', alignItems: 'center' }}>

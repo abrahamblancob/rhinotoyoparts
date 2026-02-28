@@ -6,6 +6,7 @@ import { StatusBadge } from '@/components/hub/shared/StatusBadge.tsx';
 import { EmptyState } from '@/components/hub/shared/EmptyState.tsx';
 import { StatsCard } from '@/components/hub/shared/StatsCard.tsx';
 import type { Order } from '@/lib/database.types.ts';
+import { useRealtimeSubscription } from '@/hooks/useRealtimeSubscription.ts';
 
 type TabKey = 'assigned' | 'preparing' | 'ready_to_ship' | 'shipped';
 
@@ -55,19 +56,12 @@ export function DispatchesPage() {
   }, [activeTab, allOrders]);
 
   // Subscribe to real-time changes
-  useEffect(() => {
-    if (!profile) return;
-    const channel = supabase.channel('dispatcher-orders')
-      .on('postgres_changes', {
-        event: '*',
-        schema: 'public',
-        table: 'orders',
-        filter: `assigned_to=eq.${profile.id}`,
-      }, () => { loadOrders(); })
-      .subscribe();
-
-    return () => { supabase.removeChannel(channel); };
-  }, [profile, loadOrders]);
+  useRealtimeSubscription(
+    'dispatcher-orders',
+    'orders',
+    profile ? `assigned_to=eq.${profile.id}` : undefined,
+    loadOrders,
+  );
 
   const tabCounts = TABS.reduce((acc, tab) => {
     acc[tab.key] = allOrders.filter((o) => tab.statuses.includes(o.status)).length;
