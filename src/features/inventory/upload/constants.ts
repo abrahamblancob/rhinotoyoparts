@@ -64,13 +64,13 @@ export const HEADER_ALIASES: Record<string, string> = {
 export const PRODUCT_FIELDS = [
   { key: 'name', label: 'Nombre', required: true },
   { key: 'sku', label: 'SKU', required: false },
-  { key: 'description', label: 'Descripcion', required: false },
+  { key: 'description', label: 'Descripción', required: false },
   { key: 'brand', label: 'Marca', required: false },
-  { key: 'oem_number', label: 'Numero OEM', required: false },
+  { key: 'oem_number', label: 'Número OEM', required: false },
   { key: 'price', label: 'Precio', required: true },
   { key: 'cost', label: 'Costo', required: false },
   { key: 'stock', label: 'Stock', required: true },
-  { key: 'min_stock', label: 'Stock Minimo', required: false },
+  { key: 'min_stock', label: 'Stock Mínimo', required: false },
   { key: 'status', label: 'Estado', required: false },
 ] as const;
 

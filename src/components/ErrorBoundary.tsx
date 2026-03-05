@@ -43,10 +43,10 @@ export class ErrorBoundary extends Component<ErrorBoundaryProps, ErrorBoundarySt
         }}>
           <div style={{ fontSize: 40, marginBottom: 16 }}>:(</div>
           <h2 style={{ marginBottom: 8, fontSize: 18, fontWeight: 600 }}>
-            Algo salio mal
+            Algo salió mal
           </h2>
           <p style={{ color: '#8A8886', fontSize: 14, marginBottom: 20, maxWidth: 400 }}>
-            Ocurrio un error inesperado. Intenta recargar la pagina.
+            Ocurrió un error inesperado. Intenta recargar la página.
           </p>
           <button
             onClick={() => window.location.reload()}
@@ -60,7 +60,7 @@ export class ErrorBoundary extends Component<ErrorBoundaryProps, ErrorBoundarySt
               fontSize: 14,
             }}
           >
-            Recargar pagina
+            Recargar página
           </button>
         </div>
       );

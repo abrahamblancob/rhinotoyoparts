@@ -11,7 +11,7 @@ interface ProductCardProps {
 
 export function ProductCard({ product, index }: ProductCardProps) {
   const whatsappLink = `${WHATSAPP_BASE_URL}${CONTACT_INFO.whatsappNumber}?text=${encodeURIComponent(
-    `Hola, me interesa el producto: ${product.name}. Me pueden dar mas informacion?`,
+    `Hola, me interesa el producto: ${product.name}. Me pueden dar más información?`,
   )}`;
 
   return (

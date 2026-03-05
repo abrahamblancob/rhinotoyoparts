@@ -20,7 +20,7 @@ export function FileDropzone({ onFileSelected }: Props) {
       return false;
     }
     if (file.size > 50 * 1024 * 1024) {
-      setError('El archivo es demasiado grande (maximo 50MB)');
+      setError('El archivo es demasiado grande (máximo 50MB)');
       return false;
     }
     setError('');
@@ -63,7 +63,7 @@ export function FileDropzone({ onFileSelected }: Props) {
     <div className="rh-card">
       {/* Process explanation */}
       <div style={{ marginBottom: 20 }}>
-        <h3 className="rh-card-title">Como funciona la carga masiva</h3>
+        <h3 className="rh-card-title">Cómo funciona la carga masiva</h3>
         <ol
           style={{
             fontSize: 14,
@@ -86,7 +86,7 @@ export function FileDropzone({ onFileSelected }: Props) {
         onDragLeave={handleDragLeave}
       >
         <span className="rh-dropzone-icon">📤</span>
-        <p className="rh-dropzone-title">Arrastra tu archivo aqui</p>
+        <p className="rh-dropzone-title">Arrastra tu archivo aquí</p>
         <p className="rh-dropzone-subtitle">
           Formatos soportados: CSV, XLSX, XLS, ODS (max 50MB)
         </p>
@@ -109,7 +109,7 @@ export function FileDropzone({ onFileSelected }: Props) {
         <h3 className="rh-card-title">Formato esperado</h3>
         <p className="rh-page-subtitle mb-3">
           El archivo debe contener una fila de encabezados. Se aceptan nombres en
-          espanol o ingles:
+          español o inglés:
         </p>
         <div className="rh-code-block">
           sku,nombre,descripcion,marca,oem,precio,costo,stock,stock_minimo

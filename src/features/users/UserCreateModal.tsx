@@ -92,7 +92,7 @@ export function UserCreateModal({ open, onClose, onCreated }: UserCreateModalPro
 
     const targetOrgId = form.org_id || organization?.id;
     if (!targetOrgId) {
-      setError('Selecciona una organizacion');
+      setError('Selecciona una organización');
       setLoading(false);
       return;
     }
@@ -125,7 +125,7 @@ export function UserCreateModal({ open, onClose, onCreated }: UserCreateModalPro
       return;
     }
 
-    setSuccess(fnData?.message || `Invitacion enviada a ${form.email}`);
+    setSuccess(fnData?.message || `Invitación enviada a ${form.email}`);
     setLoading(false);
     setForm({ full_name: '', email: '', phone: '', role_id: '', org_id: organization?.id ?? '' });
     onCreated();
@@ -163,7 +163,7 @@ export function UserCreateModal({ open, onClose, onCreated }: UserCreateModalPro
               disabled={loading || !form.full_name || !form.email || !form.role_id}
               className="rh-btn rh-btn-primary"
             >
-              {loading ? 'Enviando invitacion...' : 'Enviar Invitacion'}
+              {loading ? 'Enviando invitación...' : 'Enviar Invitación'}
             </button>
           </>
         )
@@ -172,7 +172,7 @@ export function UserCreateModal({ open, onClose, onCreated }: UserCreateModalPro
       {success ? (
         <div className="rh-alert rh-alert-success">
           <div style={{ fontSize: 32, marginBottom: 12 }}>✅</div>
-          <p style={{ fontWeight: 500, marginBottom: 4 }}>Invitacion enviada</p>
+          <p style={{ fontWeight: 500, marginBottom: 4 }}>Invitación enviada</p>
           <p className="rh-hint">{success}</p>
         </div>
       ) : (
@@ -182,7 +182,7 @@ export function UserCreateModal({ open, onClose, onCreated }: UserCreateModalPro
           )}
 
           <p className="rh-hint" style={{ marginBottom: 16 }}>
-            El usuario recibira un correo electronico con un enlace para establecer su contrasena y acceder al sistema.
+            El usuario recibirá un correo electrónico con un enlace para establecer su contraseña y acceder al sistema.
           </p>
 
           <div className="rh-form-grid">
@@ -211,7 +211,7 @@ export function UserCreateModal({ open, onClose, onCreated }: UserCreateModalPro
             </div>
 
             <div className="rh-field">
-              <label className="rh-label">Telefono</label>
+              <label className="rh-label">Teléfono</label>
               <input
                 type="tel"
                 value={form.phone}
@@ -223,13 +223,13 @@ export function UserCreateModal({ open, onClose, onCreated }: UserCreateModalPro
 
             {showOrgSelector && (
               <div className="rh-field">
-                <label className="rh-label">Organizacion *</label>
+                <label className="rh-label">Organización *</label>
                 <select
                   value={form.org_id}
                   onChange={(e) => setForm((f) => ({ ...f, org_id: e.target.value }))}
                   className="rh-select"
                 >
-                  <option value="">Seleccionar organizacion</option>
+                  <option value="">Seleccionar organización</option>
                   {availableOrgs.map((org) => (
                     <option key={org.id} value={org.id}>
                       {org.name} ({org.type === 'platform' ? 'Plataforma' : org.type === 'aggregator' ? 'Agregador' : 'Asociado'})
@@ -249,7 +249,7 @@ export function UserCreateModal({ open, onClose, onCreated }: UserCreateModalPro
               >
                 <option value="">
                   {showOrgSelector && !form.org_id
-                    ? 'Selecciona organizacion primero'
+                    ? 'Selecciona organización primero'
                     : 'Seleccionar rol'}
                 </option>
                 {filteredRoles.map((role) => (

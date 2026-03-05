@@ -33,7 +33,7 @@ export async function smartMapColumns(
         .map((m) => ({
           fileHeader: m.fileHeader,
           productField: m.productField!,
-          reason: 'Nombre de columna reconocido automaticamente',
+          reason: 'Nombre de columna reconocido automáticamente',
         })),
       usedAI: false,
       unmappedHeaders: [],
@@ -84,7 +84,7 @@ async function mapWithGemini(
     return values;
   });
 
-  const prompt = `Eres un asistente que mapea columnas de archivos de inventario de repuestos automotrices a un esquema estandar.
+  const prompt = `Eres un asistente que mapea columnas de archivos de inventario de repuestos automotrices a un esquema estándar.
 
 COLUMNAS DEL ARCHIVO DEL USUARIO:
 ${headers.map((h, i) => `${i + 1}. "${h}"`).join('\n')}
@@ -96,26 +96,26 @@ CAMPOS DE NUESTRO SISTEMA:
 ${TARGET_FIELDS.map((f) => `- "${f.key}" (${f.label})${f.required ? ' [REQUERIDO]' : ''}`).join('\n')}
 
 Campos del sistema:
-- "sku": Codigo unico del producto (codigos como TOY-001, ATF-WSLT-TOY, etc.)
+- "sku": Código único del producto (códigos como TOY-001, ATF-WSLT-TOY, etc.)
 - "name": Nombre descriptivo del producto
-- "description": Descripcion detallada (opcional)
+- "description": Descripción detallada (opcional)
 - "brand": Marca del fabricante
-- "oem_number": Numero OEM del fabricante original
-- "price": Precio de venta (numero)
-- "cost": Costo de compra (numero, opcional)
+- "oem_number": Número OEM del fabricante original
+- "price": Precio de venta (número)
+- "cost": Costo de compra (número, opcional)
 - "stock": Cantidad en inventario (entero)
-- "min_stock": Stock minimo para alerta (entero, opcional)
+- "min_stock": Stock mínimo para alerta (entero, opcional)
 - "status": Estado (active/inactive/out_of_stock, opcional)
 
 INSTRUCCIONES:
-1. Analiza cada columna del archivo del usuario basandote en su nombre Y en los datos de ejemplo
-2. Mapea cada columna a uno de nuestros campos, o "skip" si no corresponde a ningun campo
-3. Explica brevemente por que hiciste cada mapeo
+1. Analiza cada columna del archivo del usuario basándote en su nombre Y en los datos de ejemplo
+2. Mapea cada columna a uno de nuestros campos, o "skip" si no corresponde a ningún campo
+3. Explica brevemente por qué hiciste cada mapeo
 
 Responde SOLO con este JSON (sin texto adicional):
 {
   "mappings": [
-    { "fileHeader": "nombre_columna", "productField": "campo_del_sistema_o_skip", "reason": "explicacion breve" }
+    { "fileHeader": "nombre_columna", "productField": "campo_del_sistema_o_skip", "reason": "explicación breve" }
   ]
 }`;
 
@@ -229,7 +229,7 @@ function mapWithHeuristics(
       explanations.push({
         fileHeader: h,
         productField: existing.productField,
-        reason: 'Nombre de columna reconocido automaticamente',
+        reason: 'Nombre de columna reconocido automáticamente',
       });
       return existing;
     }
@@ -340,7 +340,7 @@ function detectFieldByContent(
       headerLower.includes('part') ||
       headerLower.includes('ref'))
   ) {
-    return { field: 'sku', reason: `Columna con codigos alfanumericos y nombre "${header}" sugiere SKU` };
+    return { field: 'sku', reason: `Columna con códigos alfanuméricos y nombre "${header}" sugiere SKU` };
   }
 
   // Brand detection (short text, repeated values)

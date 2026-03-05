@@ -8,7 +8,7 @@ export function AboutSection() {
     <SectionWrapper id="nosotros" dark>
       <SectionTitle
         title="Sobre Nosotros"
-        subtitle="Somos un equipo apasionado por los vehiculos Toyota. Con anos de experiencia en el mercado venezolano, ofrecemos repuestos de calidad con atencion personalizada."
+        subtitle="Somos un equipo apasionado por los vehículos Toyota. Con años de experiencia en el mercado venezolano, ofrecemos repuestos de calidad con atención personalizada."
       />
 
       {/* Team grid - 1 col mobile, 2 cols tablet, 2 cols desktop (max 4 por fila cuando hay 8) */}

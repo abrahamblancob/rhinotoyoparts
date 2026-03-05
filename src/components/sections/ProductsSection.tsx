@@ -19,7 +19,7 @@ export function ProductsSection() {
     <SectionWrapper id="productos">
       <SectionTitle
         title="Nuestros Productos"
-        subtitle="Amplio catalogo de repuestos Toyota originales y compatibles. Calidad garantizada para tu vehiculo."
+        subtitle="Amplio catálogo de repuestos Toyota originales y compatibles. Calidad garantizada para tu vehículo."
       />
 
       {/* Category filters */}

@@ -11,13 +11,13 @@ export async function callEdgeFunction<T = Record<string, unknown>>(
 ): Promise<T> {
   const { data: { session } } = await supabase.auth.getSession();
   if (!session?.access_token) {
-    throw new Error('Sesion expirada. Por favor, inicia sesion de nuevo.');
+    throw new Error('Sesión expirada. Por favor, inicia sesión de nuevo.');
   }
 
   const url = ENV.SUPABASE_URL;
   const anonKey = ENV.SUPABASE_ANON_KEY;
   if (!url || !anonKey) {
-    throw new Error('Configuracion de Supabase incompleta.');
+    throw new Error('Configuración de Supabase incompleta.');
   }
 
   const res = await fetch(`${url}/functions/v1/${functionName}`, {

@@ -188,7 +188,7 @@ export function UserEditModal({ user, onClose, onSaved }: UserEditModalProps) {
           </div>
 
           <div className="rh-field">
-            <label className="rh-label">Telefono</label>
+            <label className="rh-label">Teléfono</label>
             <input
               type="tel"
               value={form.phone}
@@ -227,7 +227,7 @@ export function UserEditModal({ user, onClose, onSaved }: UserEditModalProps) {
             </select>
             <p className="rh-hint">
               {getUserStatus(user) === 'pending'
-                ? 'Este usuario aun no ha iniciado sesion. Se activara automaticamente cuando lo haga.'
+                ? 'Este usuario aún no ha iniciado sesión. Se activará automáticamente cuando lo haga.'
                 : 'Desactiva al usuario para revocar su acceso al sistema.'}
             </p>
           </div>
@@ -235,13 +235,13 @@ export function UserEditModal({ user, onClose, onSaved }: UserEditModalProps) {
           <div className="col-span-2" style={{ borderTop: '1px solid #E2E0DE', paddingTop: 12, marginTop: 4 }}>
             <div style={{ display: 'flex', gap: 24, fontSize: 13, color: '#8A8886' }}>
               <div>
-                <strong>Organizacion:</strong> {user.org_name ?? organization?.name ?? '—'}
+                <strong>Organización:</strong> {user.org_name ?? organization?.name ?? '—'}
               </div>
               <div>
                 <strong>Creado:</strong> {new Date(user.created_at).toLocaleDateString('es-VE')}
               </div>
               <div>
-                <strong>Ultimo login:</strong> {user.last_login ? new Date(user.last_login).toLocaleDateString('es-VE') : 'Nunca'}
+                <strong>Último login:</strong> {user.last_login ? new Date(user.last_login).toLocaleDateString('es-VE') : 'Nunca'}
               </div>
             </div>
           </div>

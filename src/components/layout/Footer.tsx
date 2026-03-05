@@ -13,7 +13,7 @@ export function Footer() {
             <img src="/logo.jpg" alt="Rhino Toyo Parts" width="140" height="64" loading="lazy" className="h-16 w-auto" />
             <p className="footer-brand-text text-rhino-steel text-sm leading-relaxed">
               Tu proveedor de confianza en repuestos Toyota en Venezuela.
-              Calidad, garantia y los mejores precios del mercado.
+              Calidad, garantía y los mejores precios del mercado.
             </p>
           </div>
 

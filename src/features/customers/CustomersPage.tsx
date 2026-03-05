@@ -170,7 +170,7 @@ export function CustomersPage() {
         <div className="rh-page-actions">
           <input
             type="text"
-            placeholder="Buscar por nombre, RIF, email, telefono..."
+            placeholder="Buscar por nombre, RIF, email, teléfono..."
             value={search}
             onChange={(e) => setSearch(e.target.value)}
             className="rh-search"
@@ -199,11 +199,11 @@ export function CustomersPage() {
             <thead>
               <tr>
                 <th>Nombre</th>
-                <th>RIF / Cedula</th>
-                <th>Telefono</th>
+                <th>RIF / Cédula</th>
+                <th>Teléfono</th>
                 <th>Email</th>
                 <th>Ciudad</th>
-                {isPlatformOwner && <th>Organizacion</th>}
+                {isPlatformOwner && <th>Organización</th>}
                 <th style={{ width: 80 }}></th>
               </tr>
             </thead>
@@ -285,7 +285,7 @@ export function CustomersPage() {
 
           {/* RIF */}
           <div className="rh-field">
-            <label className="rh-label">RIF / Cedula</label>
+            <label className="rh-label">RIF / Cédula</label>
             <input
               type="text"
               value={form.rif}
@@ -309,7 +309,7 @@ export function CustomersPage() {
 
           {/* Phone */}
           <div className="rh-field">
-            <label className="rh-label">Telefono</label>
+            <label className="rh-label">Teléfono</label>
             <input
               type="tel"
               value={form.phone}
@@ -334,10 +334,10 @@ export function CustomersPage() {
           {/* Address — Google Maps Autocomplete */}
           <div className="col-span-2">
             <div className="rh-field">
-              <label className="rh-label">Direccion de envio</label>
+              <label className="rh-label">Dirección de envío</label>
               <GooglePlacesAutocomplete
                 className="rh-input"
-                placeholder="Escribe la direccion y selecciona de las sugerencias..."
+                placeholder="Escribe la dirección y selecciona de las sugerencias..."
                 value={form.address}
                 onChange={(addr) => {
                   // If user edits text manually after selecting, clear coordinates
@@ -365,19 +365,19 @@ export function CustomersPage() {
                 <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginTop: 4 }}>
                   <div style={{ width: 6, height: 6, borderRadius: '50%', background: '#10B981' }} />
                   <span style={{ fontSize: 11, color: '#10B981' }}>
-                    Direccion verificada por Google Maps ({form.lat.toFixed(4)}, {form.lng.toFixed(4)})
+                    Dirección verificada por Google Maps ({form.lat.toFixed(4)}, {form.lng.toFixed(4)})
                   </span>
                 </div>
               ) : form.address ? (
                 <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginTop: 4 }}>
                   <div style={{ width: 6, height: 6, borderRadius: '50%', background: '#F59E0B' }} />
                   <span style={{ fontSize: 11, color: '#D97706' }}>
-                    Selecciona una direccion de las sugerencias de Google Maps para guardar las coordenadas
+                    Selecciona una dirección de las sugerencias de Google Maps para guardar las coordenadas
                   </span>
                 </div>
               ) : (
                 <span style={{ fontSize: 11, color: '#94A3B8', marginTop: 2, display: 'block' }}>
-                  Escribe y selecciona una direccion de las sugerencias de Google Maps
+                  Escribe y selecciona una dirección de las sugerencias de Google Maps
                 </span>
               )}
             </div>
@@ -432,7 +432,7 @@ export function CustomersPage() {
         onConfirm={handleDelete}
       >
         <p style={{ fontWeight: 500, marginBottom: 8 }}>
-          ¿Estas seguro de eliminar al cliente <strong>{deleteConfirm?.name}</strong>?
+          ¿Estás seguro de eliminar al cliente <strong>{deleteConfirm?.name}</strong>?
         </p>
         {deleteConfirm?.rif && (
           <p style={{ color: '#94A3B8', fontSize: 14, marginBottom: 8 }}>
@@ -440,7 +440,7 @@ export function CustomersPage() {
           </p>
         )}
         <p style={{ color: '#F59E0B', fontSize: 13 }}>
-          Esta accion no se puede deshacer.
+          Esta acción no se puede deshacer.
         </p>
       </ConfirmDeleteModal>
     </div>

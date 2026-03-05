@@ -29,7 +29,7 @@ export const products: Product[] = [
     id: 'prod-4',
     name: 'Alternador',
     category: 'electrico',
-    description: 'Alternador reconstruido con garantia para Toyota Corolla y Yaris.',
+    description: 'Alternador reconstruido con garantía para Toyota Corolla y Yaris.',
     imageUrl: '/products/alternator.webp',
     featured: false,
   },
@@ -54,9 +54,9 @@ export const products: Product[] = [
 export const CATEGORY_LABELS: Record<string, string> = {
   motor: 'Motor',
   frenos: 'Frenos',
-  suspension: 'Suspension',
-  electrico: 'Electrico',
-  carroceria: 'Carroceria',
+  suspension: 'Suspensión',
+  electrico: 'Eléctrico',
+  carroceria: 'Carrocería',
   accesorios: 'Accesorios',
   todos: 'Todos',
 };

@@ -87,7 +87,7 @@ export function SummaryView({
       {/* Stats cards */}
       <div className="rh-stats-grid mb-6">
         <StatsCard title="Total Filas" value={result.totalRows} icon="📊" color="#6366F1" />
-        <StatsCard title="Validos" value={result.validRows.length} icon="✅" color="#10B981" />
+        <StatsCard title="Válidos" value={result.validRows.length} icon="✅" color="#10B981" />
         <StatsCard title="Con Errores" value={errorRowCount} icon="❌" color="#D3010A" />
         <StatsCard title="Advertencias" value={result.warnings.length} icon="⚠️" color="#F59E0B" />
       </div>
@@ -206,7 +206,7 @@ export function SummaryView({
                   <tr key={i}>
                     <td className="cell-mono">{err.rowNumber}</td>
                     <td className="cell-muted">{err.field}</td>
-                    <td className="cell-mono">{err.value || '(vacio)'}</td>
+                    <td className="cell-mono">{err.value || '(vacío)'}</td>
                     <td style={{ color: '#D3010A' }}>{err.message}</td>
                   </tr>
                 ))}
@@ -228,7 +228,7 @@ export function SummaryView({
         <div className="rh-card mb-6" style={{ padding: 0, overflow: 'hidden' }}>
           <div style={{ padding: '16px 20px 0' }}>
             <h3 className="rh-card-title">
-              Vista Previa — Productos Validos ({result.validRows.length})
+              Vista Previa — Productos Válidos ({result.validRows.length})
             </h3>
           </div>
           <div className="rh-table-wrapper" style={{ overflowX: 'auto' }}>
@@ -292,7 +292,7 @@ export function SummaryView({
         <div style={{ display: 'flex', gap: 12, alignItems: 'center' }}>
           {result.validRows.length === 0 ? (
             <p style={{ color: '#D3010A', fontSize: 14, fontWeight: 500 }}>
-              No hay productos validos para cargar
+              No hay productos válidos para cargar
             </p>
           ) : (
             <button onClick={onConfirm} className="rh-btn rh-btn-primary">

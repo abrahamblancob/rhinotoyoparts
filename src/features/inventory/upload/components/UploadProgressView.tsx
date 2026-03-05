@@ -33,7 +33,7 @@ export function UploadProgressView({ progress }: Props) {
       </div>
       <p style={{ fontSize: 13, color: '#8A8886', marginTop: 8 }}>{pct}%</p>
       <p style={{ fontSize: 12, color: '#F59E0B', marginTop: 16 }}>
-        No cierres esta pagina mientras se completa la carga
+        No cierres esta página mientras se completa la carga
       </p>
     </div>
   );

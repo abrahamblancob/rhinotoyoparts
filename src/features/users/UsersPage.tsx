@@ -186,10 +186,10 @@ export function UsersPage() {
                 <th>Nombre</th>
                 <th>Email</th>
                 <th>Rol</th>
-                {(isPlatform || isAggregator) && <th>Organizacion</th>}
-                <th>Telefono</th>
+                {(isPlatform || isAggregator) && <th>Organización</th>}
+                <th>Teléfono</th>
                 <th>Estado</th>
-                <th>Ultimo Login</th>
+                <th>Último Login</th>
                 {canWrite('users') && <th style={{ width: 1, whiteSpace: 'nowrap' }}>Acciones</th>}
               </tr>
             </thead>
@@ -245,7 +245,7 @@ export function UsersPage() {
                               disabled={resendLoading === user.id}
                               className="rh-btn rh-btn-ghost"
                               style={{ padding: '4px 10px', fontSize: 13 }}
-                              title="Reenviar invitacion"
+                              title="Reenviar invitación"
                             >
                               {resendLoading === user.id ? '⏳' : '📧'} Reenviar
                             </button>
@@ -256,7 +256,7 @@ export function UsersPage() {
                               disabled={resendLoading === user.id}
                               className="rh-btn rh-btn-ghost"
                               style={{ padding: '4px 10px', fontSize: 13 }}
-                              title="Enviar reset de contrasena"
+                              title="Enviar reset de contraseña"
                             >
                               {resendLoading === user.id ? '⏳' : '🔑'} Reset
                             </button>
@@ -305,7 +305,7 @@ export function UsersPage() {
         onConfirm={handleDeleteUser}
       >
         <p style={{ fontWeight: 500, marginBottom: 8 }}>
-          ¿Estas seguro que deseas eliminar a este usuario?
+          ¿Estás seguro que deseas eliminar a este usuario?
         </p>
         {deleteTarget && (
           <p style={{ color: '#8A8886', fontSize: 14, marginBottom: 16 }}>
@@ -313,7 +313,7 @@ export function UsersPage() {
           </p>
         )}
         <p style={{ color: '#DC2626', fontSize: 13 }}>
-          Esta accion es irreversible. Se eliminara el usuario, su perfil y todos sus roles.
+          Esta acción es irreversible. Se eliminará el usuario, su perfil y todos sus roles.
         </p>
       </ConfirmDeleteModal>
 

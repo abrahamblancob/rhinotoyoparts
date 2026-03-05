@@ -72,7 +72,7 @@ export function TiendaSection() {
     <SectionWrapper id="tienda">
       <SectionTitle
         title="Tienda"
-        subtitle="Visita nuestra tienda fisica o compra en linea a traves de Mercado Libre."
+        subtitle="Visita nuestra tienda física o compra en línea a través de Mercado Libre."
       />
 
       <div className="rhino-tienda-grid">
@@ -100,7 +100,7 @@ export function TiendaSection() {
           </div>
           <h3 className="rhino-ml-title">Mercado Libre</h3>
           <p className="rhino-ml-desc">
-            Compra repuestos Toyota con envio a toda Venezuela. Pago seguro y garantizado.
+            Compra repuestos Toyota con envío a toda Venezuela. Pago seguro y garantizado.
           </p>
           <span className="rhino-ml-btn">
             Visitar Tienda
