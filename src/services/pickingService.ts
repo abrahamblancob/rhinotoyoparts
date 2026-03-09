@@ -1,0 +1,111 @@
+import { query, supabase } from './base.ts';
+import type { PickList, PickListItem } from '@/types/warehouse.ts';
+
+export async function getPickLists(opts?: { orgId?: string; isPlatform?: boolean; warehouseId?: string; status?: string }) {
+  return query<PickList[]>((sb) => {
+    let q = sb.from('pick_lists')
+      .select('*, order:orders(order_number, status), assignee:profiles!pick_lists_assigned_to_fkey(full_name)')
+      .order('created_at', { ascending: false });
+    if (!opts?.isPlatform && opts?.orgId) q = q.eq('org_id', opts.orgId);
+    if (opts?.warehouseId) q = q.eq('warehouse_id', opts.warehouseId);
+    if (opts?.status) q = q.eq('status', opts.status);
+    return q;
+  });
+}
+
+export async function getPickList(id: string) {
+  return query<PickList>((sb) =>
+    sb.from('pick_lists')
+      .select('*, order:orders(order_number, status), assignee:profiles!pick_lists_assigned_to_fkey(full_name)')
+      .eq('id', id)
+      .single()
+  );
+}
+
+export async function getPickListItems(pickListId: string) {
+  return query<PickListItem[]>((sb) =>
+    sb.from('pick_list_items')
+      .select('*, product:products(name, sku), location:warehouse_locations(code)')
+      .eq('pick_list_id', pickListId)
+      .order('sequence_order')
+  );
+}
+
+export async function getPickListForOrder(orderId: string) {
+  return query<PickList>((sb) =>
+    sb.from('pick_lists')
+      .select('*, order:orders(order_number, status), assignee:profiles!pick_lists_assigned_to_fkey(full_name)')
+      .eq('order_id', orderId)
+      .order('created_at', { ascending: false })
+      .limit(1)
+      .single()
+  );
+}
+
+export async function createPickListForOrder(orderId: string, warehouseId: string, assignedTo?: string) {
+  return query<string>((sb) =>
+    sb.rpc('create_pick_list_for_order', {
+      p_order_id: orderId,
+      p_warehouse_id: warehouseId,
+      p_assigned_to: assignedTo ?? null,
+    })
+  );
+}
+
+export async function assignPicker(pickListId: string, userId: string) {
+  return query<PickList>((sb) =>
+    sb.from('pick_lists')
+      .update({ assigned_to: userId, status: 'assigned' })
+      .eq('id', pickListId)
+      .select()
+      .single()
+  );
+}
+
+export async function startPicking(pickListId: string) {
+  return query<PickList>((sb) =>
+    sb.from('pick_lists')
+      .update({ status: 'in_progress' })
+      .eq('id', pickListId)
+      .select()
+      .single()
+  );
+}
+
+export async function pickItem(itemId: string, quantityPicked: number, pickedBy: string) {
+  return query<PickListItem>((sb) =>
+    sb.from('pick_list_items')
+      .update({
+        quantity_picked: quantityPicked,
+        status: 'picked',
+        picked_at: new Date().toISOString(),
+        picked_by: pickedBy,
+        scan_verified: true,
+      })
+      .eq('id', itemId)
+      .select()
+      .single()
+  );
+}
+
+export async function completePickList(pickListId: string) {
+  return query<PickList>((sb) =>
+    sb.from('pick_lists')
+      .update({ status: 'completed', completed_at: new Date().toISOString() })
+      .eq('id', pickListId)
+      .select()
+      .single()
+  );
+}
+
+export function subscribeToPickLists(orgId: string, callback: () => void) {
+  return supabase
+    .channel(`pick-lists-${orgId}`)
+    .on('postgres_changes', {
+      event: '*',
+      schema: 'public',
+      table: 'pick_lists',
+      filter: `org_id=eq.${orgId}`,
+    }, callback)
+    .subscribe();
+}

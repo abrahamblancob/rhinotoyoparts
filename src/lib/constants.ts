@@ -35,6 +35,11 @@ export const MODULES = [
   'settings',
   'upload',
   'dispatches',
+  'warehouse',
+  'picking',
+  'packing',
+  'receiving',
+  'stock',
 ] as const;
 
 export const ACTIONS = ['read', 'write', 'delete', 'manage'] as const;
@@ -50,12 +55,20 @@ export const ROLES = {
   ASSOCIATE_EDITOR: 'associate_editor',
   ASSOCIATE_VIEWER: 'associate_viewer',
   ASSOCIATE_DISPATCHER: 'associate_dispatcher',
+  WAREHOUSE_MANAGER: 'warehouse_manager',
+  WAREHOUSE_PICKER: 'warehouse_picker',
+  WAREHOUSE_PACKER: 'warehouse_packer',
+  WAREHOUSE_RECEIVER: 'warehouse_receiver',
 } as const;
 
 export const ORDER_STATUSES = [
   'draft',
   'pending',
   'confirmed',
+  'picking',
+  'picked',
+  'packing',
+  'packed',
   'assigned',
   'preparing',
   'ready_to_ship',

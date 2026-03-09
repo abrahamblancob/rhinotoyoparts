@@ -1,0 +1,111 @@
+import type { WarehouseLocation, InventoryStock } from '@/types/warehouse.ts';
+
+interface LocationCellProps {
+  location: WarehouseLocation;
+  stock?: InventoryStock | null;
+  onClick: (location: WarehouseLocation) => void;
+}
+
+function getOccupancyColor(location: WarehouseLocation, stock?: InventoryStock | null): string {
+  if (!location.is_active) return '#E2E8F0';       // gray - inactive
+  if (!stock || stock.quantity === 0) return '#D1FAE5'; // green - empty
+  if (stock.reserved_quantity > 0 && stock.reserved_quantity < stock.quantity) return '#FEF3C7'; // yellow - partial
+  if (stock.quantity > 0 && stock.reserved_quantity >= stock.quantity) return '#FEE2E2'; // red - full/reserved
+  if (stock.quantity > 0) return '#FEF3C7'; // yellow - has stock
+  return '#D1FAE5'; // green - empty
+}
+
+function getOccupancyBorderColor(location: WarehouseLocation, stock?: InventoryStock | null): string {
+  if (!location.is_active) return '#CBD5E1';
+  if (!stock || stock.quantity === 0) return '#6EE7B7';
+  if (stock.reserved_quantity > 0 && stock.reserved_quantity < stock.quantity) return '#FCD34D';
+  if (stock.quantity > 0 && stock.reserved_quantity >= stock.quantity) return '#FCA5A5';
+  if (stock.quantity > 0) return '#FCD34D';
+  return '#6EE7B7';
+}
+
+function abbreviateCode(code: string): string {
+  // Show last segment after last dash, or last 6 chars
+  const parts = code.split('-');
+  if (parts.length >= 3) {
+    return parts.slice(-2).join('-');
+  }
+  return code.length > 8 ? code.slice(-8) : code;
+}
+
+export function LocationCell({ location, stock, onClick }: LocationCellProps) {
+  const bgColor = getOccupancyColor(location, stock);
+  const borderColor = getOccupancyBorderColor(location, stock);
+  const hasStock = stock && stock.quantity > 0;
+
+  return (
+    <div
+      onClick={() => onClick(location)}
+      style={{
+        backgroundColor: bgColor,
+        border: `2px solid ${borderColor}`,
+        borderRadius: 8,
+        padding: '6px 8px',
+        cursor: location.is_active ? 'pointer' : 'default',
+        opacity: location.is_active ? 1 : 0.5,
+        minWidth: 72,
+        minHeight: 52,
+        display: 'flex',
+        flexDirection: 'column',
+        alignItems: 'center',
+        justifyContent: 'center',
+        gap: 2,
+        transition: 'transform 0.15s ease, box-shadow 0.15s ease',
+        position: 'relative',
+      }}
+      onMouseEnter={(e) => {
+        if (location.is_active) {
+          e.currentTarget.style.transform = 'scale(1.05)';
+          e.currentTarget.style.boxShadow = '0 2px 8px rgba(0,0,0,0.15)';
+        }
+      }}
+      onMouseLeave={(e) => {
+        e.currentTarget.style.transform = 'scale(1)';
+        e.currentTarget.style.boxShadow = 'none';
+      }}
+      title={`${location.code}${hasStock ? ` | Cant: ${stock.quantity}` : ' | Vacio'}`}
+    >
+      <span
+        style={{
+          fontSize: 10,
+          fontWeight: 600,
+          color: '#475569',
+          textAlign: 'center',
+          lineHeight: 1.2,
+          wordBreak: 'break-all',
+        }}
+      >
+        {abbreviateCode(location.code)}
+      </span>
+
+      {hasStock && (
+        <span
+          style={{
+            fontSize: 11,
+            fontWeight: 700,
+            color: '#FFFFFF',
+            backgroundColor: stock.reserved_quantity >= stock.quantity ? '#EF4444' : '#F59E0B',
+            borderRadius: 10,
+            padding: '1px 6px',
+            lineHeight: 1.4,
+            minWidth: 20,
+            textAlign: 'center',
+          }}
+        >
+          {stock.quantity}
+        </span>
+      )}
+
+      {!location.is_active && (
+        <span style={{ fontSize: 9, color: '#94A3B8', fontStyle: 'italic' }}>
+          Inactiva
+        </span>
+      )}
+    </div>
+  );
+}
