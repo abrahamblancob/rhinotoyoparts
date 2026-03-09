@@ -1,20 +1,42 @@
-import { useCallback } from 'react';
+import { useCallback, useEffect, useState } from 'react';
 import { useAsyncData } from './useAsyncData.ts';
 import { useAuthStore } from '@/stores/authStore.ts';
 import { usePermissions } from './usePermissions.ts';
 import * as warehouseService from '@/services/warehouseService.ts';
+import * as orgService from '@/services/orgService.ts';
 import type { Warehouse } from '@/types/warehouse.ts';
 
-export function useWarehouses() {
+/**
+ * Resolves the effective org_id for warehouse operations.
+ * - Platform: undefined (sees all)
+ * - Aggregator: own org_id
+ * - Associate: parent aggregator's org_id
+ */
+export function useWarehouseOrgId(): string | undefined {
   const organization = useAuthStore((s) => s.organization);
+  const { isPlatform, isAssociate } = usePermissions();
+  const [parentOrgId, setParentOrgId] = useState<string | null>(null);
+
+  useEffect(() => {
+    if (isAssociate && organization?.id) {
+      orgService.getParentOrgId(organization.id).then(setParentOrgId);
+    }
+  }, [isAssociate, organization?.id]);
+
+  if (isPlatform) return undefined;
+  return isAssociate ? (parentOrgId ?? undefined) : organization?.id;
+}
+
+export function useWarehouses() {
   const { isPlatform } = usePermissions();
+  const effectiveOrgId = useWarehouseOrgId();
 
   const fetcher = useCallback(
-    () => warehouseService.getWarehouses({ orgId: organization?.id, isPlatform }),
-    [organization?.id, isPlatform]
+    () => warehouseService.getWarehouses({ orgId: effectiveOrgId, isPlatform }),
+    [effectiveOrgId, isPlatform]
   );
 
-  return useAsyncData<Warehouse[]>(fetcher, [organization?.id]);
+  return useAsyncData<Warehouse[]>(fetcher, [effectiveOrgId]);
 }
 
 export function useWarehouseDetail(warehouseId: string | undefined) {

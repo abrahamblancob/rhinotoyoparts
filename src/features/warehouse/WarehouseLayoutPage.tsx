@@ -10,7 +10,6 @@ import {
   ChevronRight,
   RefreshCw,
 } from 'lucide-react';
-import { useAuthStore } from '@/stores/authStore.ts';
 import { usePermissions } from '@/hooks/usePermissions.ts';
 import {
   useWarehouses,
@@ -31,7 +30,6 @@ const ZONE_TYPE_LABELS: Record<string, string> = {
 
 export function WarehouseLayoutPage() {
   const navigate = useNavigate();
-  const organization = useAuthStore((s) => s.organization);
   const { canWrite } = usePermissions();
 
   const { data: warehouses, loading: warehousesLoading } = useWarehouses();
@@ -151,7 +149,7 @@ export function WarehouseLayoutPage() {
         <RackDetailView
           rack={selectedRack}
           warehouseId={activeWarehouse.id}
-          orgId={organization?.id ?? ''}
+          orgId={activeWarehouse.org_id}
           onBack={handleBackToRacks}
         />
       </div>

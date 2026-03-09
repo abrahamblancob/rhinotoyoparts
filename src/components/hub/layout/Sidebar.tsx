@@ -121,7 +121,6 @@ const NAV_CONFIG: Record<OrgType, NavSection[]> = {
     {
       title: 'ALMACÉN (WMS)',
       items: [
-        { label: 'Layout Almacén', path: '/hub/warehouse', icon: '🏭', module: 'warehouse' },
         { label: 'Picking', path: '/hub/picking', icon: '📋', module: 'picking' },
         { label: 'Packing', path: '/hub/packing', icon: '📦', module: 'packing' },
         { label: 'Recepción', path: '/hub/receiving', icon: '📥', module: 'receiving' },

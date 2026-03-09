@@ -1,8 +1,11 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { ArrowLeft, ArrowRight, Check, Plus, Trash2, Warehouse, MapPin, Grid3X3, ClipboardCheck, Package } from 'lucide-react';
 import { useAuthStore } from '@/stores/authStore.ts';
+import { usePermissions } from '@/hooks/usePermissions.ts';
 import * as warehouseService from '@/services/warehouseService.ts';
+import * as orgService from '@/services/orgService.ts';
+import type { Organization } from '@/lib/database.types.ts';
 import type { ZoneType } from '@/types/warehouse.ts';
 
 type WizardStep = 'warehouse' | 'zones' | 'racks' | 'confirm';
@@ -61,10 +64,30 @@ function tempId() {
 export function WarehouseSetupWizard() {
   const navigate = useNavigate();
   const organization = useAuthStore((s) => s.organization);
+  const { isPlatform, isAssociate } = usePermissions();
 
   const [currentStep, setCurrentStep] = useState<WizardStep>('warehouse');
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState('');
+
+  // Platform: needs to select which aggregator owns the warehouse
+  const [aggregators, setAggregators] = useState<Organization[]>([]);
+  const [selectedAggregatorId, setSelectedAggregatorId] = useState<string>('');
+
+  useEffect(() => {
+    if (isPlatform) {
+      orgService.getOrganizations({ type: 'aggregator', status: 'active' }).then((res) => {
+        setAggregators(res.data ?? []);
+      });
+    }
+  }, [isPlatform]);
+
+  // Associates cannot create warehouses — redirect
+  useEffect(() => {
+    if (isAssociate) {
+      navigate('/hub/warehouse', { replace: true });
+    }
+  }, [isAssociate, navigate]);
 
   // Step 1: Warehouse data
   const [warehouse, setWarehouse] = useState<WarehouseForm>({
@@ -86,6 +109,7 @@ export function WarehouseSetupWizard() {
   const canProceed = (): boolean => {
     switch (currentStep) {
       case 'warehouse':
+        if (isPlatform && !selectedAggregatorId) return false;
         return warehouse.name.trim().length > 0 && warehouse.code.trim().length > 0;
       case 'zones':
         return zones.length > 0 && zones.every((z) => z.name.trim() && z.code.trim());
@@ -174,9 +198,13 @@ export function WarehouseSetupWizard() {
 
   // ── Save all ──
 
+  // Resolve which org_id to use:
+  // Platform → selected aggregator, Aggregator → own org
+  const resolvedOrgId = isPlatform ? selectedAggregatorId : organization?.id;
+
   const handleCreate = async () => {
-    if (!organization?.id) {
-      setError('No se encontro la organizacion activa.');
+    if (!resolvedOrgId) {
+      setError(isPlatform ? 'Selecciona un agregador para el almacen.' : 'No se encontro la organizacion activa.');
       return;
     }
 
@@ -194,7 +222,7 @@ export function WarehouseSetupWizard() {
         latitude: null,
         longitude: null,
         pick_expiry_minutes: warehouse.pick_expiry_minutes,
-        org_id: organization.id,
+        org_id: resolvedOrgId,
       });
 
       if (whResult.error || !whResult.data) {
@@ -364,6 +392,28 @@ export function WarehouseSetupWizard() {
               Datos del Almacen
             </h3>
             <div className="rh-form-grid">
+              {/* Platform: Select which aggregator owns the warehouse */}
+              {isPlatform && (
+                <div className="col-span-2">
+                  <div className="rh-field">
+                    <label className="rh-label">Agregador propietario *</label>
+                    <select
+                      value={selectedAggregatorId}
+                      onChange={(e) => setSelectedAggregatorId(e.target.value)}
+                      className="rh-select"
+                    >
+                      <option value="">Selecciona un agregador...</option>
+                      {aggregators.map((agg) => (
+                        <option key={agg.id} value={agg.id}>{agg.name}</option>
+                      ))}
+                    </select>
+                    <p style={{ fontSize: 11, color: '#94A3B8', marginTop: 4 }}>
+                      El almacen pertenecera a este agregador y usara su catalogo de productos
+                    </p>
+                  </div>
+                </div>
+              )}
+
               <div className="col-span-2">
                 <div className="rh-field">
                   <label className="rh-label">Nombre del almacen *</label>
