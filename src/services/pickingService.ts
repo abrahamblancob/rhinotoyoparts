@@ -1,5 +1,5 @@
 import { query, supabase } from './base.ts';
-import type { PickList, PickListItem, WarehouseLocation, WarehouseRack } from '@/types/warehouse.ts';
+import type { Warehouse, WarehouseZone, PickList, PickListItem, WarehouseLocation, WarehouseRack } from '@/types/warehouse.ts';
 
 export async function getPickLists(opts?: { orgId?: string; isPlatform?: boolean; isAggregator?: boolean; warehouseId?: string; status?: string }) {
   // If aggregator, fetch child org IDs to include their pick lists
@@ -115,7 +115,26 @@ export async function getPickListLocations(locationIds: string[]) {
 export async function getWarehouseRacks(warehouseId: string) {
   return query<WarehouseRack[]>((sb) =>
     sb.from('warehouse_racks')
-      .select('id, name, code, levels, positions_per_level')
+      .select('id, name, code, levels, positions_per_level, position_x, position_y, rack_width_m, rack_depth_m, orientation')
+      .eq('warehouse_id', warehouseId)
+      .eq('is_active', true)
+      .order('name')
+  );
+}
+
+export async function getWarehouseDetail(warehouseId: string) {
+  return query<Warehouse>((sb) =>
+    sb.from('warehouses')
+      .select('*')
+      .eq('id', warehouseId)
+      .single()
+  );
+}
+
+export async function getWarehouseZones(warehouseId: string) {
+  return query<WarehouseZone[]>((sb) =>
+    sb.from('warehouse_zones')
+      .select('*')
       .eq('warehouse_id', warehouseId)
       .eq('is_active', true)
       .order('name')
