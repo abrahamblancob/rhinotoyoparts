@@ -16,6 +16,7 @@ import {
   Layers,
 } from 'lucide-react';
 import { useAuthStore } from '@/stores/authStore.ts';
+import { toast } from '@/stores/toastStore.ts';
 import { usePermissions } from '@/hooks/usePermissions.ts';
 import * as warehouseService from '@/services/warehouseService.ts';
 import * as orgService from '@/services/orgService.ts';
@@ -357,8 +358,9 @@ export function WarehouseSetupWizard() {
       );
 
       if (whResult.error || !whResult.data) {
-        setError(whResult.error ?? 'Error al guardar el almacen.');
-        setSaving(false);
+        const msg = whResult.error ?? 'Error al guardar el almacen.';
+        setError(msg);
+        toast('error', msg);
         return;
       }
 
@@ -415,8 +417,9 @@ export function WarehouseSetupWizard() {
         );
 
         if (zoneResult.error || !zoneResult.data) {
-          setError(`Error al guardar zona "${zone.name}": ${zoneResult.error}`);
-          setSaving(false);
+          const msg = `Error al guardar zona "${zone.name}": ${zoneResult.error}`;
+          setError(msg);
+          toast('error', msg);
           return;
         }
         zoneIdMap.set(zone.id, zoneResult.data.id);
@@ -436,22 +439,23 @@ export function WarehouseSetupWizard() {
 
       for (const rack of racks) {
         const placement = placedRacks.find((p) => p.rackId === rack.id);
-        if (!placement) continue;
 
-        // Find zone containing rack center
-        const rackCenterX = placement.gridX + placement.widthCells / 2;
-        const rackCenterY = placement.gridY + placement.depthCells / 2;
+        // Determine zone assignment
         let assignedZoneId: string | null = null;
-
-        for (const zone of effectiveZones) {
-          if (
-            rackCenterX >= zone.x &&
-            rackCenterX <= zone.x + zone.width &&
-            rackCenterY >= zone.y &&
-            rackCenterY <= zone.y + zone.height
-          ) {
-            assignedZoneId = zoneIdMap.get(zone.id) ?? null;
-            break;
+        if (placement) {
+          // Find zone containing rack center
+          const rackCenterX = placement.gridX + placement.widthCells / 2;
+          const rackCenterY = placement.gridY + placement.depthCells / 2;
+          for (const zone of effectiveZones) {
+            if (
+              rackCenterX >= zone.x &&
+              rackCenterX <= zone.x + zone.width &&
+              rackCenterY >= zone.y &&
+              rackCenterY <= zone.y + zone.height
+            ) {
+              assignedZoneId = zoneIdMap.get(zone.id) ?? null;
+              break;
+            }
           }
         }
         // Fallback: first zone
@@ -459,7 +463,7 @@ export function WarehouseSetupWizard() {
           assignedZoneId = Array.from(zoneIdMap.values())[0];
         }
 
-        const orientation: RackOrientation = placement.rotated
+        const orientation: RackOrientation = placement?.rotated
           ? 'horizontal'
           : 'vertical';
 
@@ -480,13 +484,14 @@ export function WarehouseSetupWizard() {
         );
 
         if (rackResult.error) {
-          setError(`Error al guardar estante "${rack.name}": ${rackResult.error}`);
-          setSaving(false);
+          const msg = `Error al guardar estante "${rack.name}": ${rackResult.error}`;
+          setError(msg);
+          toast('error', msg);
           return;
         }
 
-        // Update position
-        if (rackResult.data) {
+        // Update position if placement exists
+        if (rackResult.data && placement) {
           await warehouseService.updateRackPosition(rackResult.data.id, {
             position_x: placement.gridX,
             position_y: placement.gridY,
@@ -495,9 +500,13 @@ export function WarehouseSetupWizard() {
         }
       }
 
+      toast('success', editId ? 'Almacen actualizado exitosamente.' : 'Almacen creado exitosamente.');
       navigate('/hub/warehouse');
     } catch (err) {
-      setError((err as Error).message);
+      const msg = (err as Error).message ?? 'Error inesperado al guardar.';
+      setError(msg);
+      toast('error', msg);
+    } finally {
       setSaving(false);
     }
   };

@@ -30,7 +30,7 @@ import { RackDetailView } from './RackDetailView.tsx';
 import { RackMiniGrid } from './components/RackMiniGrid.tsx';
 import { ConfirmDeleteModal } from '@/components/hub/shared/ConfirmDeleteModal.tsx';
 import * as warehouseService from '@/services/warehouseService.ts';
-import type { Warehouse, WarehouseZone, WarehouseRack, WarehouseLocation, InventoryStock } from '@/types/warehouse.ts';
+import type { Warehouse, WarehouseRack, WarehouseLocation, InventoryStock } from '@/types/warehouse.ts';
 
 const ZONE_TYPE_LABELS: Record<string, string> = {
   storage: 'Almacenamiento',
