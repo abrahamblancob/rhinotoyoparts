@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useState, useMemo } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { usePermissions } from '@/hooks/usePermissions.ts';
 import { useAuthStore } from '@/stores/authStore.ts';
@@ -15,6 +15,7 @@ export function OrdersPage() {
   const [loading, setLoading] = useState(true);
   const [statusFilter, setStatusFilter] = useState('all');
   const [showCreate, setShowCreate] = useState(false);
+  const [dateSortAsc, setDateSortAsc] = useState(false); // default: most recent first
   const { isPlatform, canWrite, isAggregator, isDispatcher } = usePermissions();
   const organization = useAuthStore((s) => s.organization);
   const profile = useAuthStore((s) => s.profile);
@@ -29,6 +30,7 @@ export function OrdersPage() {
     const result = await getOrders({
       orgId: organization?.id,
       isPlatform,
+      isAggregator,
       isDispatcher,
       assignedTo: profile?.id,
       status: statusFilter,
@@ -39,9 +41,16 @@ export function OrdersPage() {
 
   const totalRevenue = orders.reduce((s, o) => s + Number(o.total), 0);
   const pendingCount = orders.filter((o) => ['draft', 'pending', 'confirmed'].includes(o.status)).length;
-  const inProgressCount = orders.filter((o) => ['assigned', 'preparing', 'ready_to_ship', 'processing'].includes(o.status)).length;
+  const inProgressCount = orders.filter((o) => ['picking', 'packing', 'packed', 'assigned', 'picked'].includes(o.status)).length;
 
-  const statuses = ['all', 'draft', 'pending', 'confirmed', 'assigned', 'preparing', 'ready_to_ship', 'shipped', 'in_transit', 'delivered', 'cancelled'];
+  const sortedOrders = useMemo(() => {
+    return [...orders].sort((a, b) => {
+      const diff = new Date(a.created_at).getTime() - new Date(b.created_at).getTime();
+      return dateSortAsc ? diff : -diff;
+    });
+  }, [orders, dateSortAsc]);
+
+  const statuses = ['all', 'draft', 'pending', 'confirmed', 'picking', 'packing', 'packed', 'assigned', 'picked', 'shipped', 'in_transit', 'delivered', 'cancelled'];
   const statusLabels = ORDER_STATUS_LABELS;
 
   return (
@@ -50,7 +59,7 @@ export function OrdersPage() {
         <div>
           <h1 className="rh-page-title">Órdenes</h1>
         </div>
-        {canWrite('orders') && !isAggregator && !isDispatcher && (
+        {canWrite('orders') && !isDispatcher && (
           <button className="rh-btn rh-btn-primary" onClick={() => setShowCreate(true)}>
             + Nueva Orden
           </button>
@@ -89,14 +98,19 @@ export function OrdersPage() {
               <tr>
                 <th>Orden #</th>
                 <th>Cliente</th>
-                <th>Fecha</th>
+                <th
+                  style={{ cursor: 'pointer', userSelect: 'none' }}
+                  onClick={() => setDateSortAsc((prev) => !prev)}
+                >
+                  Fecha {dateSortAsc ? '↑' : '↓'}
+                </th>
                 <th>Origen</th>
                 <th className="text-right">Total</th>
                 <th>Estado</th>
               </tr>
             </thead>
             <tbody>
-              {orders.map((order) => {
+              {sortedOrders.map((order) => {
                 const customerName = (order as unknown as { customers: { name: string } | null }).customers?.name;
                 return (
                   <tr key={order.id} className="cursor-pointer" onClick={() => navigate(`/hub/orders/${order.id}`)}>

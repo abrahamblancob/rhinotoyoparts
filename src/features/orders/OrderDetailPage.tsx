@@ -8,6 +8,8 @@ import { TrackingMap } from '@/components/tracking/TrackingMap.tsx';
 import { DeliveryPinMap } from '@/components/tracking/DeliveryPinMap.tsx';
 import { OrderCreateModal } from './OrderCreateModal.tsx';
 import type { Order, Customer, Profile, Carrier } from '@/lib/database.types.ts';
+import { reserveOrderStock } from '@/services/orderService.ts';
+import { createPickListForOrder } from '@/services/pickingService.ts';
 
 import { OrderProgressBar } from './detail/OrderProgressBar.tsx';
 import { OrderStatusActions } from './detail/OrderStatusActions.tsx';
@@ -195,13 +197,41 @@ export function OrderDetailPage() {
 
   // ── Status change handler ──
   const changeStatus = async (newStatus: string, notes?: string, metadata?: Record<string, unknown>) => {
-    if (!orderId || !profile) return;
+    if (!orderId || !profile || !order) return;
     setUpdating(true);
+
+    // Reserve stock when confirming a draft/pending order with a warehouse
+    if (newStatus === 'confirmed' && order.warehouse_id && !order.stock_reserved) {
+      try {
+        const reserveResult = await reserveOrderStock(orderId, order.warehouse_id);
+        if (!reserveResult?.success) {
+          alert(`Error al reservar stock: ${reserveResult?.error ?? 'Stock insuficiente'}`);
+          setUpdating(false);
+          return;
+        }
+      } catch (reserveErr: unknown) {
+        const msg = reserveErr instanceof Error ? reserveErr.message : 'Error desconocido';
+        alert(`Error al reservar stock: ${msg}`);
+        setUpdating(false);
+        return;
+      }
+    }
+
     const { data } = await supabase.rpc('change_order_status', {
       p_order_id: orderId, p_new_status: newStatus, p_notes: notes ?? null, p_metadata: metadata ?? {},
     });
     const result = data as { success: boolean; error?: string } | null;
-    if (result?.success) await loadOrder();
+    if (result?.success) {
+      // Auto-create pick list when confirming with warehouse (non-fatal)
+      if (newStatus === 'confirmed' && order.warehouse_id) {
+        try {
+          await createPickListForOrder(orderId, order.warehouse_id);
+        } catch (pickErr) {
+          console.error('Pick list auto-creation failed:', pickErr);
+        }
+      }
+      await loadOrder();
+    }
     else alert(result?.error ?? 'Error al cambiar estado');
     setUpdating(false);
   };

@@ -2,7 +2,7 @@ import { useState, useCallback, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import {
   Search,
-  UserPlus,
+  Hand,
   Package,
 } from 'lucide-react';
 import { useAuthStore } from '@/stores/authStore.ts';
@@ -12,6 +12,7 @@ import { StatsCard } from '@/components/hub/shared/StatsCard.tsx';
 import { EmptyState } from '@/components/hub/shared/EmptyState.tsx';
 import * as pickingService from '@/services/pickingService.ts';
 import { supabase } from '@/lib/supabase.ts';
+import { toast } from '@/stores/toastStore.ts';
 import type { PickList, PickListStatus } from '@/types/warehouse.ts';
 
 const STATUS_LABELS: Record<string, string> = {
@@ -46,17 +47,20 @@ export function PickingDashboard() {
   const [statusFilter, setStatusFilter] = useState('all');
   const [search, setSearch] = useState('');
   const navigate = useNavigate();
-  const { isPlatform, canWrite } = usePermissions();
+  const { isPlatform, isAggregator, roles } = usePermissions();
   const organization = useAuthStore((s) => s.organization);
+  const user = useAuthStore((s) => s.user);
+  const [claiming, setClaiming] = useState<string | null>(null);
 
   const fetcher = useCallback(
     () =>
       pickingService.getPickLists({
         orgId: organization?.id,
         isPlatform,
+        isAggregator,
         status: statusFilter === 'all' ? undefined : statusFilter,
       }),
-    [organization?.id, isPlatform, statusFilter],
+    [organization?.id, isPlatform, isAggregator, statusFilter],
   );
 
   const { data: pickLists, loading, reload } = useAsyncData<PickList[]>(fetcher, [
@@ -94,9 +98,23 @@ export function PickingDashboard() {
 
   const statuses = ['all', 'pending', 'assigned', 'in_progress', 'completed', 'expired'];
 
-  const handleAssignPicker = async (pickListId: string) => {
-    // For now, navigate to the detail page where assignment can be done
-    navigate(`/hub/picking/${pickListId}`);
+  const isPicker = roles.includes('warehouse_picker') || roles.includes('warehouse_manager') || roles.includes('platform_owner');
+
+  const handleClaimPickList = async (pickListId: string) => {
+    if (!user) return;
+    setClaiming(pickListId);
+    try {
+      const { data, error } = await pickingService.claimPickList(pickListId, user.id);
+      if (error || !data) {
+        toast('error', 'No se pudo tomar la lista. Puede que otro almacenista ya la haya tomado.');
+      } else {
+        toast('success', 'Lista tomada exitosamente');
+        reload();
+      }
+    } catch {
+      toast('error', 'Error al tomar la lista de picking');
+    }
+    setClaiming(null);
   };
 
   return (
@@ -230,17 +248,18 @@ export function PickingDashboard() {
                       </div>
                     </td>
                     <td>
-                      {pl.status === 'pending' && canWrite('warehouse') && (
+                      {pl.status === 'pending' && isPicker && (
                         <button
                           className="rh-btn rh-btn-primary"
                           style={{ fontSize: 12, padding: '4px 10px' }}
+                          disabled={claiming === pl.id}
                           onClick={(e) => {
                             e.stopPropagation();
-                            handleAssignPicker(pl.id);
+                            handleClaimPickList(pl.id);
                           }}
                         >
-                          <UserPlus size={14} style={{ marginRight: 4 }} />
-                          Asignar almacenista
+                          <Hand size={14} style={{ marginRight: 4 }} />
+                          {claiming === pl.id ? 'Tomando...' : 'Tomar'}
                         </button>
                       )}
                     </td>

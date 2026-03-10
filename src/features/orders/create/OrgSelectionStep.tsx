@@ -1,15 +1,36 @@
 import type { Organization } from '@/lib/database.types.ts';
+import type { Warehouse } from '@/types/warehouse.ts';
 
-interface OrgSelectionStepProps {
-  orgSubStep: 'aggregator' | 'store';
-  organizations: Organization[];
+interface OrgSelectionStepBaseProps {
+  orgSubStep: string;
   orgsLoading: boolean;
   selectedOrg: Organization | null;
   childOrgs: Organization[];
+}
+
+interface PlatformOrgSelectionStepProps extends OrgSelectionStepBaseProps {
+  mode: 'platform';
+  organizations: Organization[];
   onSelectAggregator: (org: Organization) => void;
   onSelectStore: (store: Organization) => void;
   onUseAggregatorDirectly: () => void;
+  warehouses?: never;
+  onSelectAssociate?: never;
+  onSelectWarehouse?: never;
 }
+
+interface AggregatorOrgSelectionStepProps extends OrgSelectionStepBaseProps {
+  mode: 'aggregator';
+  organizations?: never;
+  onSelectAggregator?: never;
+  onSelectStore?: never;
+  onUseAggregatorDirectly?: never;
+  warehouses: Warehouse[];
+  onSelectAssociate: (org: Organization) => void;
+  onSelectWarehouse: (wh: Warehouse) => void;
+}
+
+type OrgSelectionStepProps = PlatformOrgSelectionStepProps | AggregatorOrgSelectionStepProps;
 
 function OrgCard({ onClick, title, subtitle }: { onClick: () => void; title: string; subtitle: string }) {
   return (
@@ -32,10 +53,18 @@ function OrgCard({ onClick, title, subtitle }: { onClick: () => void; title: str
   );
 }
 
-export function OrgSelectionStep({
+export function OrgSelectionStep(props: OrgSelectionStepProps) {
+  if (props.mode === 'aggregator') {
+    return <AggregatorSelectionStep {...props} />;
+  }
+  return <PlatformSelectionStep {...props} />;
+}
+
+/* ─── Platform flow: Aggregator → Store ─── */
+function PlatformSelectionStep({
   orgSubStep, organizations, orgsLoading, selectedOrg, childOrgs,
   onSelectAggregator, onSelectStore, onUseAggregatorDirectly,
-}: OrgSelectionStepProps) {
+}: PlatformOrgSelectionStepProps) {
   return (
     <div>
       {/* Sub-step indicator */}
@@ -67,7 +96,7 @@ export function OrgSelectionStep({
           </p>
           {orgsLoading ? (
             <p style={{ textAlign: 'center', color: '#94A3B8', padding: 20 }}>Cargando agregadores...</p>
-          ) : organizations.length === 0 ? (
+          ) : !organizations || organizations.length === 0 ? (
             <p style={{ textAlign: 'center', color: '#94A3B8', padding: 20 }}>No hay agregadores activos</p>
           ) : (
             <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
@@ -116,6 +145,96 @@ export function OrgSelectionStep({
               />
             ))}
           </div>
+        </>
+      )}
+    </div>
+  );
+}
+
+/* ─── Aggregator flow: Associate → Warehouse ─── */
+function AggregatorSelectionStep({
+  orgSubStep, orgsLoading, selectedOrg, childOrgs,
+  warehouses, onSelectAssociate, onSelectWarehouse,
+}: AggregatorOrgSelectionStepProps) {
+  return (
+    <div>
+      {/* Sub-step indicator */}
+      <div style={{ display: 'flex', gap: 8, marginBottom: 16, alignItems: 'center' }}>
+        <div style={{
+          display: 'flex', alignItems: 'center', gap: 6,
+          padding: '4px 12px', borderRadius: 20, fontSize: 12, fontWeight: 600,
+          background: orgSubStep === 'associate' ? '#D3010A' : '#E2E8F0',
+          color: orgSubStep === 'associate' ? '#fff' : '#64748B',
+        }}>
+          1. Asociado
+        </div>
+        <span style={{ color: '#CBD5E1' }}>→</span>
+        <div style={{
+          display: 'flex', alignItems: 'center', gap: 6,
+          padding: '4px 12px', borderRadius: 20, fontSize: 12, fontWeight: 600,
+          background: orgSubStep === 'warehouse' ? '#D3010A' : '#E2E8F0',
+          color: orgSubStep === 'warehouse' ? '#fff' : '#64748B',
+        }}>
+          2. Almacén
+        </div>
+      </div>
+
+      {/* Sub-step A: Select Associate */}
+      {orgSubStep === 'associate' && (
+        <>
+          <p style={{ fontSize: 14, color: '#64748B', marginBottom: 16 }}>
+            Selecciona el asociado para el cual se creará la orden de compra.
+          </p>
+          {orgsLoading ? (
+            <p style={{ textAlign: 'center', color: '#94A3B8', padding: 20 }}>Cargando asociados...</p>
+          ) : childOrgs.length === 0 ? (
+            <p style={{ textAlign: 'center', color: '#94A3B8', padding: 20 }}>No hay asociados registrados</p>
+          ) : (
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+              {childOrgs.map((org) => (
+                <OrgCard
+                  key={org.id}
+                  onClick={() => onSelectAssociate(org)}
+                  title={org.name}
+                  subtitle={`Asociado${org.rif ? ` · RIF: ${org.rif}` : ''}`}
+                />
+              ))}
+            </div>
+          )}
+        </>
+      )}
+
+      {/* Sub-step B: Select Warehouse */}
+      {orgSubStep === 'warehouse' && (
+        <>
+          <div style={{
+            display: 'flex', alignItems: 'center', gap: 8,
+            padding: '8px 14px', borderRadius: 8, marginBottom: 16,
+            background: '#F1F5F9', border: '1px solid #E2E8F0',
+          }}>
+            <span style={{ fontSize: 14 }}>👤</span>
+            <span style={{ fontSize: 13, color: '#475569' }}>Asociado:</span>
+            <span style={{ fontSize: 13, fontWeight: 700, color: '#1E293B' }}>{selectedOrg?.name}</span>
+          </div>
+
+          <p style={{ fontSize: 14, color: '#64748B', marginBottom: 16 }}>
+            Selecciona el almacén de donde se tomarán los productos.
+          </p>
+
+          {warehouses.length === 0 ? (
+            <p style={{ textAlign: 'center', color: '#94A3B8', padding: 20 }}>No hay almacenes activos</p>
+          ) : (
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+              {warehouses.map((wh) => (
+                <OrgCard
+                  key={wh.id}
+                  onClick={() => onSelectWarehouse(wh)}
+                  title={wh.name}
+                  subtitle={`Código: ${wh.code}${wh.address ? ` · ${wh.address}` : ''}`}
+                />
+              ))}
+            </div>
+          )}
         </>
       )}
     </div>

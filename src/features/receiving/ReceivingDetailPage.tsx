@@ -1,4 +1,4 @@
-import { useState, useCallback } from 'react';
+import { useState, useCallback, useRef, useEffect } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import {
   ArrowLeft,
@@ -7,11 +7,15 @@ import {
   MapPin,
   Package,
   Plus,
+  Search,
   Truck,
   User,
+  X,
 } from 'lucide-react';
 import { useAuthStore } from '@/stores/authStore.ts';
+import { usePermissions } from '@/hooks/usePermissions.ts';
 import { useAsyncData } from '@/hooks/useAsyncData.ts';
+import { supabase } from '@/lib/supabase.ts';
 import { Modal } from '@/components/hub/shared/Modal.tsx';
 import * as receivingService from '@/services/receivingService.ts';
 import type {
@@ -20,6 +24,7 @@ import type {
   ReceivingStatus,
   ReceivingItemStatus,
 } from '@/types/warehouse.ts';
+import type { Product } from '@/lib/database.types.ts';
 
 const STATUS_LABELS: Record<ReceivingStatus, string> = {
   pending: 'Pendiente',
@@ -39,7 +44,7 @@ const ITEM_STATUS_LABELS: Record<ReceivingItemStatus, string> = {
   pending: 'Pendiente',
   received: 'Recibido',
   partial: 'Parcial',
-  damaged: 'Danado',
+  damaged: 'Dañado',
 };
 
 const ITEM_STATUS_COLORS: Record<ReceivingItemStatus, { bg: string; text: string }> = {
@@ -58,9 +63,12 @@ export function ReceivingDetailPage() {
   const { receivingId } = useParams<{ receivingId: string }>();
   const navigate = useNavigate();
   const user = useAuthStore((s) => s.user);
+  const { canWrite } = usePermissions();
   const [actionLoading, setActionLoading] = useState(false);
   const [receiveModal, setReceiveModal] = useState<ReceivingOrderItem | null>(null);
   const [showAddProduct, setShowAddProduct] = useState(false);
+
+  const hasWritePermission = canWrite('receiving');
 
   const orderFetcher = useCallback(
     () =>
@@ -117,7 +125,7 @@ export function ReceivingDetailPage() {
   }
 
   const statusStyle = STATUS_COLORS[order.status];
-  const allReceived = allItems.length > 0 && allItems.every((i) => i.status === 'received');
+  const allReceived = allItems.length > 0 && allItems.every((i) => i.status !== 'pending');
 
   return (
     <div>
@@ -175,7 +183,7 @@ export function ReceivingDetailPage() {
         </div>
 
         {/* Actions */}
-        {order.status !== 'completed' && order.status !== 'cancelled' && (
+        {hasWritePermission && order.status !== 'completed' && order.status !== 'cancelled' && (
           <div style={{ marginTop: 16, display: 'flex', gap: 8, flexWrap: 'wrap' }}>
             <button
               className="rh-btn"
@@ -184,7 +192,7 @@ export function ReceivingDetailPage() {
               <Plus size={16} style={{ marginRight: 4 }} />
               Agregar Producto
             </button>
-            {allReceived && (
+            {allReceived && allItems.length > 0 && (
               <button
                 className="rh-btn rh-btn-primary"
                 disabled={actionLoading}
@@ -192,7 +200,7 @@ export function ReceivingDetailPage() {
                 style={{ backgroundColor: '#10B981' }}
               >
                 <CheckCircle2 size={16} style={{ marginRight: 4 }} />
-                Completar Recepcion
+                {actionLoading ? 'Completando...' : 'Completar Recepcion'}
               </button>
             )}
           </div>
@@ -214,7 +222,7 @@ export function ReceivingDetailPage() {
 
         {allItems.length === 0 ? (
           <p style={{ color: '#8A8886' }}>
-            No hay productos agregados. Usa el boton "Agregar Producto" para comenzar.
+            No hay productos agregados. Usa el boton &quot;Agregar Producto&quot; para comenzar.
           </p>
         ) : (
           <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
@@ -277,7 +285,7 @@ export function ReceivingDetailPage() {
                   </span>
 
                   {/* Action */}
-                  {item.status === 'pending' && order.status !== 'completed' && (
+                  {hasWritePermission && item.status === 'pending' && order.status !== 'completed' && (
                     <button
                       className="rh-btn rh-btn-primary"
                       style={{ fontSize: 12, padding: '4px 12px' }}
@@ -296,6 +304,8 @@ export function ReceivingDetailPage() {
       {/* Receive Item Modal */}
       <ReceiveItemModal
         item={receiveModal}
+        warehouseId={order.warehouse_id}
+        orgId={order.warehouse?.org_id ?? order.org_id}
         onClose={() => setReceiveModal(null)}
         onReceived={() => {
           setReceiveModal(null);
@@ -304,18 +314,264 @@ export function ReceivingDetailPage() {
         }}
       />
 
-      {/* Add Product Placeholder Modal */}
-      <Modal
+      {/* Add Product Modal */}
+      <AddReceivingProductModal
         open={showAddProduct}
+        receivingOrderId={order.id}
+        warehouseOrgId={order.warehouse?.org_id ?? order.org_id}
         onClose={() => setShowAddProduct(false)}
-        title="Agregar Producto"
-      >
-        <p style={{ color: '#605E5C', fontSize: 14 }}>
-          Esta funcionalidad permite buscar y agregar productos a la orden de recepcion.
-          Proximo a implementar: busqueda de productos del catalogo con seleccion de cantidad esperada.
-        </p>
-      </Modal>
+        onAdded={() => {
+          setShowAddProduct(false);
+          reloadItems();
+        }}
+      />
+
+      <style>{`
+        @keyframes spin {
+          to { transform: translateY(-50%) rotate(360deg); }
+        }
+      `}</style>
     </div>
+  );
+}
+
+// ── Add Receiving Product Modal (Smart Search) ──
+
+interface AddReceivingProductModalProps {
+  open: boolean;
+  receivingOrderId: string;
+  warehouseOrgId: string;
+  onClose: () => void;
+  onAdded: () => void;
+}
+
+function AddReceivingProductModal({ open, receivingOrderId, warehouseOrgId, onClose, onAdded }: AddReceivingProductModalProps) {
+  const [searchTerm, setSearchTerm] = useState('');
+  const [searchResults, setSearchResults] = useState<Product[]>([]);
+  const [searching, setSearching] = useState(false);
+  const [selectedProduct, setSelectedProduct] = useState<Product | null>(null);
+  const [expectedQty, setExpectedQty] = useState(1);
+  const [saving, setSaving] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
+  const debounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const searchRef = useRef('');
+
+  useEffect(() => {
+    return () => { if (debounceRef.current) clearTimeout(debounceRef.current); };
+  }, []);
+
+  // Reset on close
+  useEffect(() => {
+    if (!open) {
+      setSearchTerm('');
+      setSearchResults([]);
+      setSearching(false);
+      setSelectedProduct(null);
+      setExpectedQty(1);
+      setError(null);
+    }
+  }, [open]);
+
+  const handleSearch = useCallback((query: string) => {
+    setSearchTerm(query);
+    searchRef.current = query;
+    if (debounceRef.current) clearTimeout(debounceRef.current);
+    if (query.length < 2) { setSearchResults([]); setSearching(false); return; }
+    setSearching(true);
+    debounceRef.current = setTimeout(async () => {
+      if (searchRef.current !== query) return;
+      const s = query.trim().toLowerCase();
+      const { data, error: err } = await supabase
+        .from('products')
+        .select('*')
+        .eq('org_id', warehouseOrgId)
+        .eq('status', 'active')
+        .gt('stock', 0)
+        .or(`name.ilike.%${s}%,sku.ilike.%${s}%,oem_number.ilike.%${s}%,brand.ilike.%${s}%`)
+        .limit(10);
+      if (err) console.error('Product search error:', err);
+      if (searchRef.current === query) {
+        setSearchResults((data as Product[]) ?? []);
+        setSearching(false);
+      }
+    }, 200);
+  }, [warehouseOrgId]);
+
+  const handleSelectProduct = (product: Product) => {
+    setSelectedProduct(product);
+    setSearchTerm('');
+    setSearchResults([]);
+    setExpectedQty(1);
+  };
+
+  const handleSubmit = async () => {
+    if (!selectedProduct) return;
+    if (expectedQty <= 0) { setError('La cantidad debe ser mayor a 0'); return; }
+    if (expectedQty > selectedProduct.stock) {
+      setError(`Stock insuficiente. Disponible: ${selectedProduct.stock}`);
+      return;
+    }
+
+    setSaving(true);
+    setError(null);
+
+    const result = await receivingService.addReceivingItem({
+      receiving_order_id: receivingOrderId,
+      product_id: selectedProduct.id,
+      expected_quantity: expectedQty,
+    });
+
+    if (result.error) {
+      setError(result.error);
+      setSaving(false);
+      return;
+    }
+
+    setSaving(false);
+    onAdded();
+  };
+
+  return (
+    <Modal
+      open={open}
+      onClose={onClose}
+      title="Agregar Producto a Recepcion"
+      width="520px"
+      footer={
+        <div style={{ display: 'flex', gap: 8, justifyContent: 'flex-end' }}>
+          <button className="rh-btn" onClick={onClose} disabled={saving}>Cancelar</button>
+          <button
+            className="rh-btn rh-btn-primary"
+            onClick={handleSubmit}
+            disabled={saving || !selectedProduct}
+          >
+            {saving ? 'Agregando...' : 'Agregar a Recepcion'}
+          </button>
+        </div>
+      }
+    >
+      <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
+        {error && <p style={{ color: '#D3010A', fontSize: 13 }}>{error}</p>}
+
+        {/* Product Search */}
+        {!selectedProduct ? (
+          <div>
+            <label className="rh-label" style={{ marginBottom: 6, display: 'block' }}>Buscar producto del catalogo</label>
+            <div style={{ position: 'relative' }}>
+              <div style={{ position: 'relative' }}>
+                <Search
+                  size={16}
+                  style={{ position: 'absolute', left: 10, top: '50%', transform: 'translateY(-50%)', color: '#94A3B8', zIndex: 1 }}
+                />
+                <input
+                  type="text"
+                  value={searchTerm}
+                  onChange={(e) => handleSearch(e.target.value)}
+                  placeholder="Buscar por nombre, SKU, OEM o marca..."
+                  className="rh-input"
+                  style={{ paddingLeft: 34, paddingRight: 36 }}
+                  autoFocus
+                />
+                {searching && (
+                  <div style={{
+                    position: 'absolute', right: 10, top: '50%', transform: 'translateY(-50%)',
+                    width: 16, height: 16, border: '2px solid #E2E8F0', borderTopColor: '#D3010A',
+                    borderRadius: '50%', animation: 'spin 0.6s linear infinite',
+                  }} />
+                )}
+              </div>
+
+              {/* Dropdown Results */}
+              {searchResults.length > 0 && (
+                <div style={{
+                  position: 'absolute', top: '100%', left: 0, right: 0,
+                  background: '#fff', border: '1px solid #E2E0DE', borderRadius: 8,
+                  maxHeight: 240, overflowY: 'auto', zIndex: 10,
+                  boxShadow: '0 4px 16px rgba(0,0,0,0.12)',
+                }}>
+                  {searchResults.map((p) => (
+                    <div
+                      key={p.id}
+                      onClick={() => handleSelectProduct(p)}
+                      style={{
+                        display: 'flex', justifyContent: 'space-between', alignItems: 'center',
+                        padding: '10px 14px', cursor: 'pointer', fontSize: 14,
+                        borderBottom: '1px solid #F1F5F9', transition: 'background 0.15s',
+                      }}
+                      onMouseEnter={(e) => { e.currentTarget.style.background = '#F8FAFC'; }}
+                      onMouseLeave={(e) => { e.currentTarget.style.background = '#fff'; }}
+                    >
+                      <div style={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
+                        <span style={{ fontWeight: 600, fontSize: 13 }}>{p.name}</span>
+                        <span style={{ color: '#8A8886', fontSize: 11 }}>
+                          SKU: {p.sku}{p.brand ? ` | ${p.brand}` : ''}
+                        </span>
+                      </div>
+                      <div style={{ textAlign: 'right', flexShrink: 0, marginLeft: 12 }}>
+                        <span style={{ fontSize: 12, fontWeight: 600, color: p.stock > 10 ? '#10B981' : '#D97706' }}>
+                          {p.stock > 10 ? `${p.stock} en stock` : `⚠ ${p.stock} en stock`}
+                        </span>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              )}
+
+              {/* No results */}
+              {searchTerm.length >= 2 && !searching && searchResults.length === 0 && (
+                <div style={{
+                  position: 'absolute', top: '100%', left: 0, right: 0,
+                  background: '#fff', border: '1px solid #E2E0DE', borderRadius: 8,
+                  padding: '14px 16px', zIndex: 10, boxShadow: '0 4px 12px rgba(0,0,0,0.08)',
+                  color: '#94A3B8', fontSize: 13, textAlign: 'center',
+                }}>
+                  No se encontraron productos para &quot;{searchTerm}&quot;
+                </div>
+              )}
+            </div>
+          </div>
+        ) : (
+          /* Selected Product Card */
+          <div>
+            <label className="rh-label" style={{ marginBottom: 6, display: 'block' }}>Producto seleccionado</label>
+            <div style={{
+              display: 'flex', alignItems: 'center', gap: 8,
+              padding: 12, backgroundColor: '#F0FDF4', borderRadius: 8, border: '1px solid #BBF7D0',
+            }}>
+              <Package size={18} style={{ color: '#10B981', flexShrink: 0 }} />
+              <div style={{ flex: 1 }}>
+                <p style={{ fontSize: 14, fontWeight: 600, color: '#1E293B', margin: 0 }}>{selectedProduct.name}</p>
+                <p style={{ fontSize: 12, color: '#64748B', margin: '2px 0 0' }}>
+                  SKU: {selectedProduct.sku}{selectedProduct.brand ? ` | ${selectedProduct.brand}` : ''} | Stock: {selectedProduct.stock}
+                </p>
+              </div>
+              <button onClick={() => setSelectedProduct(null)} style={{ background: 'none', border: 'none', cursor: 'pointer', color: '#8A8886', fontSize: 18 }}>
+                <X size={16} />
+              </button>
+            </div>
+          </div>
+        )}
+
+        {/* Expected Quantity */}
+        {selectedProduct && (
+          <div>
+            <label className="rh-label">Cantidad esperada *</label>
+            <input
+              type="number"
+              min={1}
+              max={selectedProduct.stock}
+              value={expectedQty}
+              onChange={(e) => setExpectedQty(Math.max(1, parseInt(e.target.value) || 1))}
+              className="rh-input"
+            />
+            <p style={{ fontSize: 11, color: '#94A3B8', marginTop: 4 }}>
+              Maximo disponible en catalogo: {selectedProduct.stock}
+            </p>
+          </div>
+        )}
+      </div>
+    </Modal>
   );
 }
 
@@ -323,13 +579,14 @@ export function ReceivingDetailPage() {
 
 interface ReceiveItemModalProps {
   item: ReceivingOrderItem | null;
+  warehouseId: string;
+  orgId: string;
   onClose: () => void;
   onReceived: () => void;
 }
 
-function ReceiveItemModal({ item, onClose, onReceived }: ReceiveItemModalProps) {
+function ReceiveItemModal({ item, warehouseId, orgId, onClose, onReceived }: ReceiveItemModalProps) {
   const [receivedQty, setReceivedQty] = useState('');
-  const [locationId, setLocationId] = useState('');
   const [lotNumber, setLotNumber] = useState('');
   const [status, setStatus] = useState<'received' | 'partial' | 'damaged'>('received');
   const [saving, setSaving] = useState(false);
@@ -338,8 +595,8 @@ function ReceiveItemModal({ item, onClose, onReceived }: ReceiveItemModalProps) 
   const handleSubmit = async () => {
     if (!item) return;
     const qty = parseInt(receivedQty, 10);
-    if (isNaN(qty) || qty < 0) {
-      setError('Ingresa una cantidad valida');
+    if (isNaN(qty) || qty <= 0) {
+      setError('Ingresa una cantidad valida mayor a 0');
       return;
     }
 
@@ -347,8 +604,10 @@ function ReceiveItemModal({ item, onClose, onReceived }: ReceiveItemModalProps) 
     setError(null);
 
     const result = await receivingService.receiveItem(item.id, {
+      product_id: item.product_id,
       received_quantity: qty,
-      assigned_location_id: locationId || item.assigned_location_id || '',
+      warehouse_id: warehouseId,
+      org_id: orgId,
       lot_number: lotNumber || undefined,
       status,
     });
@@ -361,7 +620,6 @@ function ReceiveItemModal({ item, onClose, onReceived }: ReceiveItemModalProps) 
 
     setSaving(false);
     setReceivedQty('');
-    setLocationId('');
     setLotNumber('');
     setStatus('received');
     onReceived();
@@ -384,7 +642,7 @@ function ReceiveItemModal({ item, onClose, onReceived }: ReceiveItemModalProps) 
             onClick={handleSubmit}
             disabled={saving}
           >
-            {saving ? 'Guardando...' : 'Confirmar Recepcion'}
+            {saving ? 'Procesando...' : 'Confirmar Recepcion'}
           </button>
         </div>
       }
@@ -404,18 +662,7 @@ function ReceiveItemModal({ item, onClose, onReceived }: ReceiveItemModalProps) 
             onChange={(e) => setReceivedQty(e.target.value)}
             className="rh-input"
             placeholder={String(item.expected_quantity)}
-            min={0}
-          />
-        </div>
-
-        <div>
-          <label className="rh-label">ID de Ubicacion</label>
-          <input
-            type="text"
-            value={locationId}
-            onChange={(e) => setLocationId(e.target.value)}
-            className="rh-input"
-            placeholder="ID de la ubicacion en almacen"
+            min={1}
           />
         </div>
 
@@ -439,7 +686,7 @@ function ReceiveItemModal({ item, onClose, onReceived }: ReceiveItemModalProps) 
           >
             <option value="received">Recibido completo</option>
             <option value="partial">Parcial</option>
-            <option value="damaged">Danado</option>
+            <option value="damaged">Dañado</option>
           </select>
         </div>
       </div>

@@ -1,10 +1,10 @@
-import { query } from './base.ts';
+import { query, supabase } from './base.ts';
 import type { ReceivingOrder, ReceivingOrderItem } from '@/types/warehouse.ts';
 
 export async function getReceivingOrders(opts?: { orgId?: string; isPlatform?: boolean; warehouseId?: string; status?: string }) {
   return query<ReceivingOrder[]>((sb) => {
     let q = sb.from('receiving_orders')
-      .select('*, warehouse:warehouses(name), receiver:profiles!receiving_orders_received_by_fkey(full_name)')
+      .select('*, warehouse:warehouses(name, org_id), receiver:profiles!receiving_orders_received_by_fkey(full_name)')
       .order('created_at', { ascending: false });
     if (!opts?.isPlatform && opts?.orgId) q = q.eq('org_id', opts.orgId);
     if (opts?.warehouseId) q = q.eq('warehouse_id', opts.warehouseId);
@@ -16,7 +16,7 @@ export async function getReceivingOrders(opts?: { orgId?: string; isPlatform?: b
 export async function getReceivingOrder(id: string) {
   return query<ReceivingOrder>((sb) =>
     sb.from('receiving_orders')
-      .select('*, warehouse:warehouses(name), receiver:profiles!receiving_orders_received_by_fkey(full_name)')
+      .select('*, warehouse:warehouses(name, org_id), receiver:profiles!receiving_orders_received_by_fkey(full_name)')
       .eq('id', id)
       .single()
   );
@@ -53,18 +53,29 @@ export async function addReceivingItem(data: {
 }
 
 export async function receiveItem(itemId: string, data: {
+  product_id: string;
   received_quantity: number;
-  assigned_location_id: string;
+  assigned_location_id?: string;
+  warehouse_id: string;
+  org_id: string;
   lot_number?: string;
   status: 'received' | 'partial' | 'damaged';
 }) {
-  return query<ReceivingOrderItem>((sb) =>
-    sb.from('receiving_order_items')
-      .update({ ...data, scanned_at: new Date().toISOString() })
-      .eq('id', itemId)
-      .select()
-      .single()
-  );
+  const { error } = await supabase.rpc('receive_item_to_warehouse', {
+    p_item_id: itemId,
+    p_product_id: data.product_id,
+    p_received_quantity: data.received_quantity,
+    p_location_id: data.assigned_location_id ?? null,
+    p_warehouse_id: data.warehouse_id,
+    p_org_id: data.org_id,
+    p_lot_number: data.lot_number ?? null,
+    p_status: data.status,
+  });
+
+  if (error) {
+    return { data: null, error: error.message };
+  }
+  return { data: null, error: null };
 }
 
 export async function completeReceiving(orderId: string, receivedBy: string) {

@@ -156,6 +156,8 @@ export interface Order {
   requires_id_check: boolean;
   shipping_address_id: string | null;
   delivery_photo_url: string | null;
+  warehouse_id: string | null;
+  stock_reserved: boolean;
   created_at: string;
   updated_at: string;
 }

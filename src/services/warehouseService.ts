@@ -170,6 +170,50 @@ export async function updateStock(id: string, data: Partial<InventoryStock>) {
   );
 }
 
+export async function removeProductFromLocation(
+  stockId: string,
+  locationId: string,
+  productId: string,
+  quantity: number,
+) {
+  // Atomic RPC: devuelve stock al catálogo del agregador + limpia ubicación
+  const { error } = await supabase.rpc('return_stock_to_catalog', {
+    p_stock_id: stockId,
+    p_product_id: productId,
+    p_quantity: quantity,
+    p_location_id: locationId,
+  });
+
+  if (error) {
+    return { data: null, error: error.message };
+  }
+  return { data: null, error: null };
+}
+
+export async function deleteStockRecord(stockId: string, locationId: string) {
+  // Delete inventory_stock record (for internal transfers, not catalog return)
+  const result = await query<null>((sb) =>
+    sb.from('inventory_stock').delete().eq('id', stockId)
+  );
+  if (result.error) return result;
+
+  // Mark location as unoccupied if no more stock there
+  const remaining = await query<InventoryStock[]>((sb) =>
+    sb.from('inventory_stock').select('id').eq('location_id', locationId).limit(1)
+  );
+  if (!remaining.data?.length) {
+    await query<WarehouseLocation>((sb) =>
+      sb.from('warehouse_locations')
+        .update({ is_occupied: false })
+        .eq('id', locationId)
+        .select()
+        .single()
+    );
+  }
+
+  return { data: null, error: null };
+}
+
 // ── Warehouse Stats ──
 
 export async function getWarehouseStats(warehouseId: string) {

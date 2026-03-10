@@ -78,7 +78,7 @@ export function ReceivingPage() {
             Gestiona la recepcion de productos en almacen
           </p>
         </div>
-        {canWrite('warehouse') && (
+        {canWrite('receiving') && (
           <button
             className="rh-btn rh-btn-primary"
             onClick={() => setShowCreateModal(true)}
@@ -133,8 +133,8 @@ export function ReceivingPage() {
           icon="📥"
           title="No hay recepciones"
           description="Las ordenes de recepcion aparecerean aqui cuando se creen"
-          actionLabel={canWrite('warehouse') ? 'Nueva Recepcion' : undefined}
-          onAction={canWrite('warehouse') ? () => setShowCreateModal(true) : undefined}
+          actionLabel={canWrite('receiving') ? 'Nueva Recepcion' : undefined}
+          onAction={canWrite('receiving') ? () => setShowCreateModal(true) : undefined}
         />
       ) : (
         <div className="rh-table-wrapper">
@@ -207,7 +207,6 @@ interface CreateReceivingModalProps {
 }
 
 function CreateReceivingModal({ open, onClose, onCreated }: CreateReceivingModalProps) {
-  const organization = useAuthStore((s) => s.organization);
   const { data: warehouses } = useWarehouses();
   const [warehouseId, setWarehouseId] = useState('');
   const [supplierName, setSupplierName] = useState('');
@@ -216,7 +215,8 @@ function CreateReceivingModal({ open, onClose, onCreated }: CreateReceivingModal
   const [error, setError] = useState<string | null>(null);
 
   const handleSubmit = async () => {
-    if (!warehouseId || !organization?.id) {
+    const selectedWarehouse = (warehouses ?? []).find((w) => w.id === warehouseId);
+    if (!warehouseId || !selectedWarehouse) {
       setError('Selecciona un almacen');
       return;
     }
@@ -225,7 +225,7 @@ function CreateReceivingModal({ open, onClose, onCreated }: CreateReceivingModal
 
     const result = await receivingService.createReceivingOrder({
       warehouse_id: warehouseId,
-      org_id: organization.id,
+      org_id: selectedWarehouse.org_id,
       supplier_name: supplierName || undefined,
       reference_number: referenceNumber || undefined,
     });

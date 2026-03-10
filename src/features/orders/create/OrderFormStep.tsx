@@ -1,12 +1,15 @@
 import type { Customer, Organization } from '@/lib/database.types.ts';
+import type { Warehouse } from '@/types/warehouse.ts';
 import type { OrderItem } from './types.ts';
 import GooglePlacesAutocomplete from '@/components/GooglePlacesAutocomplete.tsx';
 
 interface OrderFormStepProps {
   isPlatformOwner: boolean;
   isEditMode: boolean;
+  isAggregator?: boolean;
   inventoryOrg: Organization | null;
   selectedOrg: Organization | null;
+  selectedWarehouse?: Warehouse | null;
   // Customer state
   customers: Customer[];
   customerSearch: string;
@@ -45,7 +48,7 @@ interface OrderFormStepProps {
 
 export function OrderFormStep(props: OrderFormStepProps) {
   const {
-    isPlatformOwner, isEditMode, inventoryOrg, selectedOrg,
+    isPlatformOwner, isEditMode, isAggregator, inventoryOrg, selectedOrg, selectedWarehouse,
     customers, customerSearch, selectedCustomer, showNewCustomer, newCustomerName,
     customerPhone, shippingAddress,
     productSearch, productResults, productLoading, items,
@@ -85,6 +88,33 @@ export function OrderFormStep(props: OrderFormStepProps) {
           {!isEditMode && (
             <button onClick={onGoBackToOrgSelection}
               style={{ fontSize: 12, color: '#D3010A', background: 'none', border: '1px solid rgba(211,1,10,0.3)', borderRadius: 6, padding: '4px 10px', cursor: 'pointer' }}>
+              Cambiar
+            </button>
+          )}
+        </div>
+      )}
+
+      {/* Org + Warehouse banner for Aggregator */}
+      {isAggregator && inventoryOrg && selectedWarehouse && (
+        <div style={{
+          display: 'flex', flexDirection: 'column', gap: 6,
+          padding: '10px 14px', borderRadius: 8,
+          background: 'rgba(211,1,10,0.05)', border: '1px solid rgba(211,1,10,0.2)',
+        }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+            <span style={{ fontSize: 16 }}>👤</span>
+            <span style={{ fontSize: 12, color: '#64748B' }}>Asociado:</span>
+            <span style={{ fontWeight: 700, fontSize: 14, color: '#1E293B' }}>{inventoryOrg.name}</span>
+          </div>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+            <span style={{ fontSize: 16 }}>🏭</span>
+            <span style={{ fontSize: 12, color: '#64748B' }}>Almacén:</span>
+            <span style={{ fontWeight: 700, fontSize: 14, color: '#D3010A' }}>{selectedWarehouse.name}</span>
+            <span style={{ fontSize: 11, color: '#8A8886' }}>({selectedWarehouse.code})</span>
+          </div>
+          {!isEditMode && (
+            <button onClick={onGoBackToOrgSelection}
+              style={{ fontSize: 12, color: '#D3010A', background: 'none', border: '1px solid rgba(211,1,10,0.3)', borderRadius: 6, padding: '4px 10px', cursor: 'pointer', alignSelf: 'flex-end' }}>
               Cambiar
             </button>
           )}

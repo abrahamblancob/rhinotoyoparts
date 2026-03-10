@@ -1,9 +1,10 @@
-import { useState, useCallback } from 'react';
+import { useState, useCallback, useMemo } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import {
   ArrowLeft,
   CheckCircle2,
   Clock,
+  Hand,
   MapPin,
   Package,
   Play,
@@ -11,8 +12,11 @@ import {
   Hash,
 } from 'lucide-react';
 import { useAuthStore } from '@/stores/authStore.ts';
+import { usePermissions } from '@/hooks/usePermissions.ts';
 import { useAsyncData } from '@/hooks/useAsyncData.ts';
+import { toast } from '@/stores/toastStore.ts';
 import * as pickingService from '@/services/pickingService.ts';
+import { PickingMiniMap } from './PickingMiniMap.tsx';
 import type { PickList, PickListItem, PickListStatus, PickItemStatus } from '@/types/warehouse.ts';
 
 const STATUS_LABELS: Record<PickListStatus, string> = {
@@ -59,7 +63,9 @@ export function PickListDetail() {
   const { pickListId } = useParams<{ pickListId: string }>();
   const navigate = useNavigate();
   const user = useAuthStore((s) => s.user);
+  const { roles } = usePermissions();
   const [actionLoading, setActionLoading] = useState(false);
+  const isPicker = roles.includes('warehouse_picker') || roles.includes('warehouse_manager') || roles.includes('platform_owner');
 
   const pickListFetcher = useCallback(
     () =>
@@ -96,6 +102,33 @@ export function PickListDetail() {
     pickList && pickList.total_items > 0
       ? Math.round((pickList.picked_items / pickList.total_items) * 100)
       : 0;
+
+  // Compute location IDs for the mini-map
+  const sourceLocationIds = useMemo(
+    () => [...new Set(allItems.map((i) => i.source_location_id).filter(Boolean))],
+    [allItems],
+  );
+  const pickedLocationIds = useMemo(
+    () => [...new Set(allItems.filter((i) => i.status === 'picked').map((i) => i.source_location_id).filter(Boolean))],
+    [allItems],
+  );
+
+  const handleClaimPickList = async () => {
+    if (!pickListId || !user) return;
+    setActionLoading(true);
+    try {
+      const { data, error } = await pickingService.claimPickList(pickListId, user.id);
+      if (error || !data) {
+        toast('error', 'No se pudo tomar la lista. Puede que otro almacenista ya la haya tomado.');
+      } else {
+        toast('success', 'Lista tomada exitosamente');
+        await reloadPickList();
+      }
+    } catch {
+      toast('error', 'Error al tomar la lista de picking');
+    }
+    setActionLoading(false);
+  };
 
   const handleStartPicking = async () => {
     if (!pickListId) return;
@@ -226,6 +259,17 @@ export function PickListDetail() {
 
         {/* Action buttons */}
         <div style={{ marginTop: 16, display: 'flex', gap: 8, flexWrap: 'wrap' }}>
+          {pickList.status === 'pending' && isPicker && (
+            <button
+              className="rh-btn rh-btn-primary"
+              disabled={actionLoading}
+              onClick={handleClaimPickList}
+              style={{ backgroundColor: '#F97316' }}
+            >
+              <Hand size={16} style={{ marginRight: 4 }} />
+              {actionLoading ? 'Tomando...' : 'Tomar esta lista'}
+            </button>
+          )}
           {(pickList.status === 'assigned') && (
             <button
               className="rh-btn rh-btn-primary"
@@ -249,6 +293,11 @@ export function PickListDetail() {
           )}
         </div>
       </div>
+
+      {/* Mini-map */}
+      {sourceLocationIds.length > 0 && (
+        <PickingMiniMap locationIds={sourceLocationIds} pickedLocationIds={pickedLocationIds} />
+      )}
 
       {/* Route / Items list */}
       <div

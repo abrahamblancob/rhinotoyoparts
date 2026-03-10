@@ -25,12 +25,12 @@ export function RackDetailView({ rack, warehouseId, orgId, onBack }: RackDetailV
 
   const [selectedLocation, setSelectedLocation] = useState<WarehouseLocation | null>(null);
 
-  // Build a map of location_id -> stock
+  // Build a map of location_id -> stock (skip unassigned stock)
   const stockByLocation = useMemo(() => {
     const map = new Map<string, InventoryStock>();
     if (allStock) {
       for (const s of allStock) {
-        map.set(s.location_id, s);
+        if (s.location_id) map.set(s.location_id, s);
       }
     }
     return map;

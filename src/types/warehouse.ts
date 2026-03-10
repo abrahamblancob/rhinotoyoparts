@@ -78,7 +78,7 @@ export interface WarehouseLocation {
 export interface InventoryStock {
   id: string;
   product_id: string;
-  location_id: string;
+  location_id: string | null;
   warehouse_id: string;
   org_id: string;
   quantity: number;
@@ -203,7 +203,7 @@ export interface ReceivingOrder {
   created_at: string;
   completed_at: string | null;
   // Joined fields
-  warehouse?: { name: string };
+  warehouse?: { name: string; org_id: string };
   receiver?: { full_name: string };
 }
 

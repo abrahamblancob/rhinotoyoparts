@@ -85,8 +85,8 @@ export const ORDER_STATUS_LABELS: Record<string, string> = {
 
 // Canonical status flow for order progression
 export const ORDER_STATUS_FLOW: OrderStatus[] = [
-  'draft', 'confirmed', 'picking', 'picked', 'packing', 'packed',
-  'assigned', 'shipped', 'in_transit', 'delivered',
+  'draft', 'confirmed', 'picking', 'packing', 'packed',
+  'assigned', 'picked', 'shipped', 'in_transit', 'delivered',
 ];
 
 // Pipeline stages derived from status config
