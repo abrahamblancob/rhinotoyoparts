@@ -21,6 +21,9 @@ export interface Warehouse {
   usable_area_sqm: number | null;
   latitude: number | null;
   longitude: number | null;
+  width_m: number | null;
+  length_m: number | null;
+  height_m: number | null;
   pick_expiry_minutes: number;
   is_active: boolean;
   created_at: string;
@@ -51,6 +54,8 @@ export interface WarehouseRack {
   levels: number;
   positions_per_level: number;
   max_weight_kg: number | null;
+  rack_width_m: number | null;
+  rack_depth_m: number | null;
   position_x: number | null;
   position_y: number | null;
   orientation: RackOrientation;
@@ -233,6 +238,9 @@ export interface WarehouseFormData {
   usable_area_sqm: number | null;
   latitude: number | null;
   longitude: number | null;
+  width_m: number | null;
+  length_m: number | null;
+  height_m: number | null;
   pick_expiry_minutes: number;
 }
 
@@ -255,4 +263,6 @@ export interface RackFormData {
   levels: number;
   positions_per_level: number;
   max_weight_kg: number | null;
+  rack_width_m: number | null;
+  rack_depth_m: number | null;
 }

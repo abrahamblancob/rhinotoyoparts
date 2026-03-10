@@ -147,7 +147,7 @@ function RackMiniGrid({
         {grid.map((row) => (
           <div key={row.level} style={{ display: 'flex', gap: 2, alignItems: 'center' }}>
             <span style={{ fontSize: 10, color: '#8A8886', width: 20, textAlign: 'right', marginRight: 4 }}>
-              N{row.level}
+              {String.fromCharCode(64 + row.level)}
             </span>
             {row.cells.map((cell) => {
               const isTarget = cell.location !== null;
@@ -170,7 +170,7 @@ function RackMiniGrid({
               return (
                 <div
                   key={cell.position}
-                  title={cell.location ? `${cell.location.code} — ${isPicked ? 'Recogido' : 'Pendiente'}` : `N${row.level}-P${cell.position}`}
+                  title={cell.location ? `${cell.location.code} — ${isPicked ? 'Recogido' : 'Pendiente'}` : `${String.fromCharCode(64 + row.level)}-${cell.position}`}
                   style={{
                     width: 36,
                     height: 32,
@@ -194,7 +194,7 @@ function RackMiniGrid({
         <div style={{ display: 'flex', gap: 2, marginLeft: 24 }}>
           {Array.from({ length: rack.positions_per_level }, (_, i) => (
             <span key={i} style={{ width: 36, textAlign: 'center', fontSize: 10, color: '#8A8886' }}>
-              P{i + 1}
+              {i + 1}
             </span>
           ))}
         </div>

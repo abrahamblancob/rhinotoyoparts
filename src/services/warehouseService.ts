@@ -43,6 +43,13 @@ export async function deleteWarehouse(id: string) {
   return query<null>((sb) => sb.from('warehouses').delete().eq('id', id));
 }
 
+export async function getWarehouseCount(orgId?: string) {
+  let q = supabase.from('warehouses').select('id', { count: 'exact', head: true });
+  if (orgId) q = q.eq('org_id', orgId);
+  const { count } = await q;
+  return count ?? 0;
+}
+
 // ── Zones ──
 
 export async function getZones(warehouseId: string) {
@@ -92,6 +99,15 @@ export async function saveRack(
 
 export async function deleteRack(id: string) {
   return query<null>((sb) => sb.from('warehouse_racks').delete().eq('id', id));
+}
+
+export async function updateRackPosition(
+  id: string,
+  data: { position_x: number; position_y: number; orientation: string },
+) {
+  return query<WarehouseRack>((sb) =>
+    sb.from('warehouse_racks').update(data).eq('id', id).select().single()
+  );
 }
 
 // ── Locations ──

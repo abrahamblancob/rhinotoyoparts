@@ -36,12 +36,12 @@ export function RackDetailView({ rack, warehouseId, orgId, onBack }: RackDetailV
     return map;
   }, [allStock]);
 
-  // Build grid: rows = levels (bottom to top), columns = positions
+  // Build grid: rows = levels (top to bottom A→H), columns = positions
   const grid = useMemo(() => {
     if (!locations) return [];
     const rows: (WarehouseLocation | null)[][] = [];
-    // Levels go from rack.levels (top) down to 1 (bottom)
-    for (let level = rack.levels; level >= 1; level--) {
+    // Levels go from 1 (A, top) to rack.levels (bottom)
+    for (let level = 1; level <= rack.levels; level++) {
       const row: (WarehouseLocation | null)[] = [];
       for (let pos = 1; pos <= rack.positions_per_level; pos++) {
         const loc = locations.find((l) => l.level === level && l.position === pos) ?? null;
@@ -151,7 +151,7 @@ export function RackDetailView({ rack, warehouseId, orgId, onBack }: RackDetailV
             {/* Level labels column */}
             <div style={{ display: 'flex', flexDirection: 'column', gap: 4, marginRight: 4 }}>
               {grid.map((_, rowIdx) => {
-                const level = rack.levels - rowIdx;
+                const level = rowIdx + 1;
                 return (
                   <div
                     key={`label-${level}`}
@@ -166,7 +166,7 @@ export function RackDetailView({ rack, warehouseId, orgId, onBack }: RackDetailV
                       color: '#94A3B8',
                     }}
                   >
-                    N{level}
+                    {String.fromCharCode(64 + level)}
                   </div>
                 );
               })}
@@ -189,7 +189,7 @@ export function RackDetailView({ rack, warehouseId, orgId, onBack }: RackDetailV
                       paddingBottom: 4,
                     }}
                   >
-                    P{i + 1}
+                    {i + 1}
                   </div>
                 ))}
               </div>
