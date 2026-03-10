@@ -59,6 +59,7 @@ export function OrderCreateModal({ open, onClose, onCreated, editOrder, editItem
   const [notes, setNotes] = useState('');
   const [shippingCost, setShippingCost] = useState(0);
   const [saving, setSaving] = useState(false);
+  const [locationWarning, setLocationWarning] = useState<string[] | null>(null);
 
   const productDebounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const productSearchRef = useRef('');
@@ -369,6 +370,35 @@ export function OrderCreateModal({ open, onClose, onCreated, editOrder, editItem
         onCreated(); onClose(); return;
       }
 
+      // ── Validate located stock before confirming ──
+      if (!asDraft && selectedWarehouse) {
+        const { data: locatedStock } = await supabase
+          .from('inventory_stock')
+          .select('product_id, quantity, reserved_quantity')
+          .eq('warehouse_id', selectedWarehouse.id)
+          .not('location_id', 'is', null);
+
+        const locatedMap = new Map<string, number>();
+        for (const row of locatedStock ?? []) {
+          locatedMap.set(row.product_id, (locatedMap.get(row.product_id) ?? 0) + Math.max(0, row.quantity - row.reserved_quantity));
+        }
+
+        const unlocated = items.filter((i) => {
+          const available = locatedMap.get(i.product.id) ?? 0;
+          return available < i.quantity;
+        });
+
+        if (unlocated.length > 0) {
+          setLocationWarning(unlocated.map((i) => {
+            const available = locatedMap.get(i.product.id) ?? 0;
+            return `${i.product.name} — necesita ${i.quantity}, solo ${available} ubicado(s)`;
+          }));
+          setSaving(false);
+          return;
+        }
+        setLocationWarning(null);
+      }
+
       // CREATE MODE
       const { count: orderCount } = await supabase.from('orders').select('*', { count: 'exact', head: true });
       const orderNumber = `RH-${String((orderCount ?? 0) + 1).padStart(5, '0')}`;
@@ -484,7 +514,7 @@ export function OrderCreateModal({ open, onClose, onCreated, editOrder, editItem
     if (step === 3) {
       return (
         <div style={{ display: 'flex', gap: 8, justifyContent: 'flex-end' }}>
-          <button className="rh-btn rh-btn-secondary" onClick={() => setStep(2)}>Volver a editar</button>
+          <button className="rh-btn rh-btn-secondary" onClick={() => { setStep(2); setLocationWarning(null); }}>Volver a editar</button>
           <button className="rh-btn rh-btn-primary" onClick={() => handleSave(false)} disabled={saving}>
             {saving ? 'Guardando...' : isEditMode ? 'Guardar cambios' : 'Confirmar y crear orden'}
           </button>
@@ -586,6 +616,22 @@ export function OrderCreateModal({ open, onClose, onCreated, editOrder, editItem
             items={items} notes={notes} shippingCost={shippingCost}
             subtotal={subtotal} total={total}
           />
+        )}
+
+        {locationWarning && locationWarning.length > 0 && (
+          <div style={{ background: '#FFF3E0', border: '1px solid #FF9800', borderRadius: 8, padding: '12px 16px' }}>
+            <div style={{ fontWeight: 600, color: '#E65100', marginBottom: 8, display: 'flex', alignItems: 'center', gap: 6 }}>
+              ⚠️ Productos sin ubicación asignada en almacén
+            </div>
+            <p style={{ fontSize: 13, color: '#BF360C', margin: '0 0 8px' }}>
+              Los siguientes productos no tienen suficiente stock con ubicación asignada. Asígnalos en el inventario del almacén antes de confirmar la orden.
+            </p>
+            <ul style={{ margin: 0, paddingLeft: 20, fontSize: 13, color: '#4E342E' }}>
+              {locationWarning.map((msg, i) => <li key={i}>{msg}</li>)}
+            </ul>
+            <button className="rh-btn rh-btn-secondary" style={{ marginTop: 10, fontSize: 12 }}
+              onClick={() => setLocationWarning(null)}>Entendido</button>
+          </div>
         )}
       </div>
 
