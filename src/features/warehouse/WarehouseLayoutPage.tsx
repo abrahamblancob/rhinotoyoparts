@@ -57,7 +57,6 @@ export function WarehouseLayoutPage() {
   const { stats, loading: statsLoading, reload: reloadStats } = useWarehouseStats(activeWarehouse?.id);
   const { data: zones, loading: zonesLoading, reload: reloadZones } = useWarehouseZones(activeWarehouse?.id);
 
-  const [selectedZone, setSelectedZone] = useState<WarehouseZone | null>(null);
   const [selectedRack, setSelectedRack] = useState<WarehouseRack | null>(null);
   const [deleteTarget, setDeleteTarget] = useState<Warehouse | null>(null);
   const [deleteLoading, setDeleteLoading] = useState(false);
@@ -69,16 +68,23 @@ export function WarehouseLayoutPage() {
   const { data: allLocations, reload: reloadAllLocations } = useWarehouseLocations(activeWarehouse?.id);
   const { data: allStock, reload: reloadAllStock } = useWarehouseStock(activeWarehouse?.id);
 
-  const { data: zoneRacks, loading: racksLoading, reload: reloadRacks } = useWarehouseRacks(
-    activeWarehouse?.id,
-    selectedZone?.id,
-  );
-
   // Reset selections when warehouse changes
   useEffect(() => {
-    setSelectedZone(null);
     setSelectedRack(null);
   }, [selectedWarehouseId]);
+
+  // Group racks by zone for the unified zone map
+  const racksByZone = useMemo(() => {
+    const map = new Map<string, WarehouseRack[]>();
+    if (allRacks) {
+      for (const rack of allRacks) {
+        const arr = map.get(rack.zone_id) || [];
+        arr.push(rack);
+        map.set(rack.zone_id, arr);
+      }
+    }
+    return map;
+  }, [allRacks]);
 
   // Lookup maps for lateral view occupancy
   const locationsByRack = useMemo(() => {
@@ -109,7 +115,6 @@ export function WarehouseLayoutPage() {
     reloadAllRacks();
     reloadAllLocations();
     reloadAllStock();
-    if (selectedZone) reloadRacks();
   };
 
   const handleDeleteWarehouse = async () => {
@@ -126,7 +131,6 @@ export function WarehouseLayoutPage() {
       // If we just deleted the active warehouse, deselect it
       if (selectedWarehouseId === deleteTarget.id) {
         setSelectedWarehouseId(null);
-        setSelectedZone(null);
         setSelectedRack(null);
       }
       setDeleteTarget(null);
@@ -139,17 +143,7 @@ export function WarehouseLayoutPage() {
     }
   };
 
-  const handleSelectZone = (zone: WarehouseZone) => {
-    setSelectedZone(zone);
-    setSelectedRack(null);
-  };
-
-  const handleBackToZones = () => {
-    setSelectedZone(null);
-    setSelectedRack(null);
-  };
-
-  const handleBackToRacks = () => {
+  const handleBackToMap = () => {
     setSelectedRack(null);
   };
 
@@ -370,7 +364,6 @@ export function WarehouseLayoutPage() {
 
   const handleBackToWarehouses = () => {
     setSelectedWarehouseId(null);
-    setSelectedZone(null);
     setSelectedRack(null);
   };
 
@@ -398,19 +391,21 @@ export function WarehouseLayoutPage() {
               </>
             )}
             <span
-              onClick={handleBackToZones}
+              onClick={handleBackToMap}
               style={{ cursor: 'pointer', color: '#6366F1', fontWeight: 500 }}
             >
-              Zonas
+              Mapa de Zonas
             </span>
             <ChevronRight size={14} />
-            <span
-              onClick={handleBackToRacks}
-              style={{ cursor: 'pointer', color: '#6366F1', fontWeight: 500 }}
-            >
-              {selectedZone?.name}
-            </span>
-            <ChevronRight size={14} />
+            {(() => {
+              const rackZone = zones?.find((z) => z.id === selectedRack.zone_id);
+              return rackZone ? (
+                <>
+                  <span style={{ color: '#64748B', fontWeight: 500 }}>{rackZone.name}</span>
+                  <ChevronRight size={14} />
+                </>
+              ) : null;
+            })()}
             <span style={{ fontWeight: 600, color: '#1E293B' }}>{selectedRack.name}</span>
           </div>
         </div>
@@ -419,7 +414,7 @@ export function WarehouseLayoutPage() {
           rack={selectedRack}
           warehouseId={activeWarehouse.id}
           orgId={activeWarehouse.org_id}
-          onBack={handleBackToRacks}
+          onBack={handleBackToMap}
         />
       </div>
     );
@@ -614,7 +609,7 @@ export function WarehouseLayoutPage() {
       </div>
 
       {/* ── Visual views: Cenital + Lateral ── */}
-      {!selectedZone && activeWarehouse.width_m && activeWarehouse.length_m && (() => {
+      {activeWarehouse.width_m && activeWarehouse.length_m && (() => {
         const whW = activeWarehouse.width_m!;
         const whL = activeWarehouse.length_m!;
         const gridW = Math.ceil(whW);
@@ -901,109 +896,64 @@ export function WarehouseLayoutPage() {
         );
       })()}
 
-      {/* Breadcrumb for zone view */}
-      {selectedZone && (
-        <div
-          style={{
-            display: 'flex',
-            alignItems: 'center',
-            gap: 6,
-            fontSize: 13,
-            color: '#94A3B8',
-            marginBottom: 16,
-          }}
-        >
-          <span
-            onClick={handleBackToZones}
-            style={{ cursor: 'pointer', color: '#6366F1', fontWeight: 500 }}
-          >
-            Zonas
+      {/* ═══ Mapa de Zonas con Estantes ═══ */}
+      <div>
+        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 16 }}>
+          <h3 style={{ fontSize: 16, fontWeight: 700, color: '#1E293B', margin: 0, display: 'flex', alignItems: 'center', gap: 8 }}>
+            <MapPin size={18} style={{ color: '#6366F1' }} />
+            Mapa de Zonas
+          </h3>
+          <span style={{ fontSize: 12, color: '#94A3B8' }}>
+            Haz clic en un estante para ver sus ubicaciones
           </span>
-          <ChevronRight size={14} />
-          <span style={{ fontWeight: 600, color: '#1E293B' }}>{selectedZone.name}</span>
         </div>
-      )}
 
-      {/* ═══ Zone Map or Rack List ═══ */}
-      {!selectedZone ? (
-        // Zone Grid Map
-        <div>
-          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 16 }}>
-            <h3 style={{ fontSize: 16, fontWeight: 700, color: '#1E293B', margin: 0, display: 'flex', alignItems: 'center', gap: 8 }}>
-              <MapPin size={18} style={{ color: '#6366F1' }} />
-              Mapa de Zonas
-            </h3>
-            <span style={{ fontSize: 12, color: '#94A3B8' }}>
-              Haz clic en una zona para ver sus estantes
-            </span>
+        {zonesLoading ? (
+          <p className="rh-loading">Cargando zonas...</p>
+        ) : !zones || zones.length === 0 ? (
+          <div className="rh-card" style={{ padding: 40, textAlign: 'center' }}>
+            <MapPin size={48} style={{ color: '#CBD5E1', margin: '0 auto 12px' }} />
+            <p style={{ fontSize: 16, fontWeight: 600, color: '#64748B' }}>No hay zonas configuradas</p>
+            <p style={{ fontSize: 13, color: '#94A3B8', marginTop: 4 }}>
+              Ve a la configuracion del almacen para agregar zonas.
+            </p>
           </div>
+        ) : (
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 20 }}>
+            {zones.map((zone) => {
+              const zoneColor = zone.color ?? '#6366F1';
+              const zoneRacksForMap = racksByZone.get(zone.id) ?? [];
+              const totalRacks = zoneRacksForMap.length;
+              const totalLocations = zoneRacksForMap.reduce(
+                (sum, r) => sum + r.levels * r.positions_per_level, 0,
+              );
 
-          {zonesLoading ? (
-            <p className="rh-loading">Cargando zonas...</p>
-          ) : !zones || zones.length === 0 ? (
-            <div
-              className="rh-card"
-              style={{ padding: 40, textAlign: 'center' }}
-            >
-              <MapPin size={48} style={{ color: '#CBD5E1', margin: '0 auto 12px' }} />
-              <p style={{ fontSize: 16, fontWeight: 600, color: '#64748B' }}>
-                No hay zonas configuradas
-              </p>
-              <p style={{ fontSize: 13, color: '#94A3B8', marginTop: 4 }}>
-                Ve a la configuracion del almacen para agregar zonas.
-              </p>
-            </div>
-          ) : (
-            <div
-              style={{
-                display: 'grid',
-                gridTemplateColumns: 'repeat(auto-fill, minmax(220px, 1fr))',
-                gap: 16,
-              }}
-            >
-              {zones.map((zone) => {
-                const zoneColor = zone.color ?? '#6366F1';
-                return (
+              return (
+                <div
+                  key={zone.id}
+                  style={{
+                    backgroundColor: '#FFFFFF',
+                    border: `1px solid ${zoneColor}30`,
+                    borderRadius: 14,
+                    overflow: 'hidden',
+                  }}
+                >
+                  {/* Zone Header */}
                   <div
-                    key={zone.id}
-                    onClick={() => handleSelectZone(zone)}
                     style={{
-                      backgroundColor: '#FFFFFF',
-                      border: `2px solid ${zoneColor}40`,
-                      borderLeft: `5px solid ${zoneColor}`,
-                      borderRadius: 12,
-                      padding: 20,
-                      cursor: 'pointer',
-                      transition: 'transform 0.15s ease, box-shadow 0.15s ease',
-                      position: 'relative',
-                      overflow: 'hidden',
-                    }}
-                    onMouseEnter={(e) => {
-                      e.currentTarget.style.transform = 'translateY(-2px)';
-                      e.currentTarget.style.boxShadow = `0 4px 16px ${zoneColor}20`;
-                    }}
-                    onMouseLeave={(e) => {
-                      e.currentTarget.style.transform = 'translateY(0)';
-                      e.currentTarget.style.boxShadow = 'none';
+                      display: 'flex',
+                      alignItems: 'center',
+                      justifyContent: 'space-between',
+                      padding: '14px 20px',
+                      borderBottom: `1px solid ${zoneColor}20`,
+                      background: `linear-gradient(135deg, ${zoneColor}08 0%, ${zoneColor}03 100%)`,
                     }}
                   >
-                    {/* Color accent bar */}
-                    <div
-                      style={{
-                        position: 'absolute',
-                        top: 0,
-                        left: 0,
-                        right: 0,
-                        height: 3,
-                        backgroundColor: zoneColor,
-                      }}
-                    />
-
-                    <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', marginBottom: 12 }}>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
                       <div
                         style={{
-                          width: 36,
-                          height: 36,
+                          width: 34,
+                          height: 34,
                           borderRadius: 8,
                           backgroundColor: zoneColor + '15',
                           display: 'flex',
@@ -1011,144 +961,126 @@ export function WarehouseLayoutPage() {
                           justifyContent: 'center',
                         }}
                       >
-                        <MapPin size={18} style={{ color: zoneColor }} />
+                        <MapPin size={17} style={{ color: zoneColor }} />
                       </div>
-                      <span
-                        style={{
-                          fontSize: 10,
-                          fontWeight: 600,
-                          color: zoneColor,
-                          backgroundColor: zoneColor + '15',
-                          padding: '3px 8px',
-                          borderRadius: 12,
-                          textTransform: 'uppercase',
-                          letterSpacing: 0.5,
-                        }}
-                      >
-                        {ZONE_TYPE_LABELS[zone.zone_type] ?? zone.zone_type}
-                      </span>
-                    </div>
-
-                    <h4 style={{ fontSize: 16, fontWeight: 700, color: '#1E293B', margin: '0 0 4px' }}>
-                      {zone.name}
-                    </h4>
-                    <p style={{ fontSize: 12, color: '#94A3B8', margin: 0, fontFamily: 'monospace' }}>
-                      {zone.code}
-                    </p>
-
-                    <div
-                      style={{
-                        display: 'flex',
-                        alignItems: 'center',
-                        gap: 4,
-                        marginTop: 12,
-                        fontSize: 12,
-                        color: '#64748B',
-                      }}
-                    >
-                      <ChevronRight size={14} style={{ color: zoneColor }} />
-                      Ver estantes
-                    </div>
-                  </div>
-                );
-              })}
-            </div>
-          )}
-        </div>
-      ) : (
-        // Rack List for selected zone
-        <div>
-          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 16 }}>
-            <h3 style={{ fontSize: 16, fontWeight: 700, color: '#1E293B', margin: 0, display: 'flex', alignItems: 'center', gap: 8 }}>
-              <Grid3X3 size={18} style={{ color: selectedZone.color ?? '#10B981' }} />
-              Estantes de {selectedZone.name}
-            </h3>
-            <span style={{ fontSize: 12, color: '#94A3B8' }}>
-              Haz clic en un estante para ver las ubicaciones
-            </span>
-          </div>
-
-          {racksLoading ? (
-            <p className="rh-loading">Cargando estantes...</p>
-          ) : !zoneRacks || zoneRacks.length === 0 ? (
-            <div className="rh-card" style={{ padding: 40, textAlign: 'center' }}>
-              <Grid3X3 size={48} style={{ color: '#CBD5E1', margin: '0 auto 12px' }} />
-              <p style={{ fontSize: 16, fontWeight: 600, color: '#64748B' }}>
-                No hay estantes en esta zona
-              </p>
-              <p style={{ fontSize: 13, color: '#94A3B8', marginTop: 4 }}>
-                Agrega estantes desde la configuracion del almacen.
-              </p>
-            </div>
-          ) : (
-            <div
-              style={{
-                display: 'grid',
-                gridTemplateColumns: 'repeat(auto-fill, minmax(260px, 1fr))',
-                gap: 12,
-              }}
-            >
-              {zoneRacks.map((rack) => {
-                const totalLocs = rack.levels * rack.positions_per_level;
-                return (
-                  <div
-                    key={rack.id}
-                    onClick={() => setSelectedRack(rack)}
-                    className="rh-card"
-                    style={{
-                      padding: 16,
-                      cursor: 'pointer',
-                      transition: 'transform 0.15s ease, box-shadow 0.15s ease',
-                      borderLeft: `4px solid ${selectedZone.color ?? '#10B981'}`,
-                    }}
-                    onMouseEnter={(e) => {
-                      e.currentTarget.style.transform = 'translateY(-1px)';
-                      e.currentTarget.style.boxShadow = '0 4px 12px rgba(0,0,0,0.08)';
-                    }}
-                    onMouseLeave={(e) => {
-                      e.currentTarget.style.transform = 'translateY(0)';
-                      e.currentTarget.style.boxShadow = 'none';
-                    }}
-                  >
-                    <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 10 }}>
-                      <Grid3X3 size={20} style={{ color: selectedZone.color ?? '#10B981' }} />
                       <div>
-                        <h4 style={{ fontSize: 15, fontWeight: 700, color: '#1E293B', margin: 0 }}>
-                          {rack.name}
-                        </h4>
-                        <p style={{ fontSize: 11, color: '#94A3B8', margin: 0, fontFamily: 'monospace' }}>
-                          {rack.code}
+                        <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                          <h4 style={{ fontSize: 15, fontWeight: 700, color: '#1E293B', margin: 0 }}>
+                            {zone.name}
+                          </h4>
+                          <span
+                            style={{
+                              fontSize: 10,
+                              fontWeight: 600,
+                              color: zoneColor,
+                              backgroundColor: zoneColor + '15',
+                              padding: '2px 8px',
+                              borderRadius: 10,
+                              textTransform: 'uppercase',
+                              letterSpacing: 0.5,
+                            }}
+                          >
+                            {ZONE_TYPE_LABELS[zone.zone_type] ?? zone.zone_type}
+                          </span>
+                        </div>
+                        <p style={{ fontSize: 11, color: '#94A3B8', margin: '2px 0 0', fontFamily: 'monospace' }}>
+                          {zone.code}
                         </p>
                       </div>
                     </div>
-
                     <div style={{ display: 'flex', gap: 16, fontSize: 12, color: '#64748B' }}>
-                      <span>{rack.levels} niveles</span>
-                      <span>{rack.positions_per_level} posiciones</span>
-                      <span style={{ fontWeight: 600, color: '#1E293B' }}>{totalLocs} ubicaciones</span>
-                    </div>
-
-                    <div
-                      style={{
-                        display: 'flex',
-                        alignItems: 'center',
-                        gap: 4,
-                        marginTop: 10,
-                        fontSize: 12,
-                        color: selectedZone.color ?? '#10B981',
-                        fontWeight: 500,
-                      }}
-                    >
-                      <ChevronRight size={14} />
-                      Ver ubicaciones
+                      <span><strong style={{ color: '#1E293B' }}>{totalRacks}</strong> estantes</span>
+                      <span><strong style={{ color: '#1E293B' }}>{totalLocations}</strong> ubicaciones</span>
                     </div>
                   </div>
-                );
-              })}
-            </div>
-          )}
-        </div>
-      )}
+
+                  {/* Rack Cards */}
+                  <div style={{ padding: '14px 16px' }}>
+                    {zoneRacksForMap.length === 0 ? (
+                      <div style={{ textAlign: 'center', padding: '20px 0', color: '#94A3B8', fontSize: 13 }}>
+                        <Grid3X3 size={28} style={{ color: '#CBD5E1', margin: '0 auto 8px', display: 'block' }} />
+                        No hay estantes en esta zona
+                      </div>
+                    ) : (
+                      <div
+                        style={{
+                          display: 'grid',
+                          gridTemplateColumns: 'repeat(auto-fill, minmax(220px, 1fr))',
+                          gap: 10,
+                        }}
+                      >
+                        {zoneRacksForMap.map((rack) => {
+                          const totalLocs = rack.levels * rack.positions_per_level;
+                          return (
+                            <div
+                              key={rack.id}
+                              onClick={() => setSelectedRack(rack)}
+                              style={{
+                                backgroundColor: '#FAFBFC',
+                                border: `1px solid ${zoneColor}25`,
+                                borderLeft: `4px solid ${zoneColor}`,
+                                borderRadius: 10,
+                                padding: '12px 14px',
+                                cursor: 'pointer',
+                                transition: 'all 0.15s ease',
+                              }}
+                              onMouseEnter={(e) => {
+                                e.currentTarget.style.transform = 'translateY(-1px)';
+                                e.currentTarget.style.boxShadow = `0 4px 12px ${zoneColor}15`;
+                                e.currentTarget.style.backgroundColor = '#FFFFFF';
+                                e.currentTarget.style.borderColor = `${zoneColor}50`;
+                              }}
+                              onMouseLeave={(e) => {
+                                e.currentTarget.style.transform = 'translateY(0)';
+                                e.currentTarget.style.boxShadow = 'none';
+                                e.currentTarget.style.backgroundColor = '#FAFBFC';
+                                e.currentTarget.style.borderColor = `${zoneColor}25`;
+                              }}
+                            >
+                              <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 8 }}>
+                                <Grid3X3 size={16} style={{ color: zoneColor, flexShrink: 0 }} />
+                                <div style={{ minWidth: 0 }}>
+                                  <h5 style={{ fontSize: 14, fontWeight: 700, color: '#1E293B', margin: 0, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
+                                    {rack.name}
+                                  </h5>
+                                  <p style={{ fontSize: 10, color: '#94A3B8', margin: 0, fontFamily: 'monospace' }}>
+                                    {rack.code}
+                                  </p>
+                                </div>
+                              </div>
+
+                              <div style={{ display: 'flex', gap: 10, fontSize: 11, color: '#64748B' }}>
+                                <span>{rack.levels} <span style={{ color: '#94A3B8' }}>niv</span></span>
+                                <span>{rack.positions_per_level} <span style={{ color: '#94A3B8' }}>pos</span></span>
+                                <span style={{ fontWeight: 600, color: '#1E293B' }}>{totalLocs} <span style={{ fontWeight: 400, color: '#94A3B8' }}>ubic</span></span>
+                              </div>
+
+                              <div
+                                style={{
+                                  display: 'flex',
+                                  alignItems: 'center',
+                                  gap: 3,
+                                  marginTop: 8,
+                                  fontSize: 11,
+                                  color: zoneColor,
+                                  fontWeight: 500,
+                                }}
+                              >
+                                <ChevronRight size={12} />
+                                Ver ubicaciones
+                              </div>
+                            </div>
+                          );
+                        })}
+                      </div>
+                    )}
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+        )}
+      </div>
 
       {/* Delete Warehouse Modal */}
       <ConfirmDeleteModal
