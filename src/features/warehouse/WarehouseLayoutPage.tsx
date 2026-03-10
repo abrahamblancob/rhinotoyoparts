@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useMemo } from 'react';
 import { useNavigate } from 'react-router-dom';
 import {
   Warehouse as WarehouseIcon,
@@ -23,11 +23,14 @@ import {
   useWarehouseStats,
   useWarehouseZones,
   useWarehouseRacks,
+  useWarehouseLocations,
+  useWarehouseStock,
 } from '@/hooks/useWarehouse.ts';
 import { RackDetailView } from './RackDetailView.tsx';
+import { RackMiniGrid } from './components/RackMiniGrid.tsx';
 import { ConfirmDeleteModal } from '@/components/hub/shared/ConfirmDeleteModal.tsx';
 import * as warehouseService from '@/services/warehouseService.ts';
-import type { Warehouse, WarehouseZone, WarehouseRack } from '@/types/warehouse.ts';
+import type { Warehouse, WarehouseZone, WarehouseRack, WarehouseLocation, InventoryStock } from '@/types/warehouse.ts';
 
 const ZONE_TYPE_LABELS: Record<string, string> = {
   storage: 'Almacenamiento',
@@ -62,6 +65,10 @@ export function WarehouseLayoutPage() {
   // All racks (for cenital/lateral views)
   const { data: allRacks, reload: reloadAllRacks } = useWarehouseRacks(activeWarehouse?.id);
 
+  // All locations & stock (for lateral view occupancy)
+  const { data: allLocations, reload: reloadAllLocations } = useWarehouseLocations(activeWarehouse?.id);
+  const { data: allStock, reload: reloadAllStock } = useWarehouseStock(activeWarehouse?.id);
+
   const { data: zoneRacks, loading: racksLoading, reload: reloadRacks } = useWarehouseRacks(
     activeWarehouse?.id,
     selectedZone?.id,
@@ -73,10 +80,35 @@ export function WarehouseLayoutPage() {
     setSelectedRack(null);
   }, [selectedWarehouseId]);
 
+  // Lookup maps for lateral view occupancy
+  const locationsByRack = useMemo(() => {
+    const map = new Map<string, WarehouseLocation[]>();
+    if (allLocations) {
+      for (const loc of allLocations) {
+        const arr = map.get(loc.rack_id) || [];
+        arr.push(loc);
+        map.set(loc.rack_id, arr);
+      }
+    }
+    return map;
+  }, [allLocations]);
+
+  const stockByLocation = useMemo(() => {
+    const map = new Map<string, InventoryStock>();
+    if (allStock) {
+      for (const s of allStock) {
+        if (s.location_id) map.set(s.location_id, s);
+      }
+    }
+    return map;
+  }, [allStock]);
+
   const handleRefresh = () => {
     reloadStats();
     reloadZones();
     reloadAllRacks();
+    reloadAllLocations();
+    reloadAllStock();
     if (selectedZone) reloadRacks();
   };
 
@@ -821,48 +853,20 @@ export function WarehouseLayoutPage() {
                 ) : (
                   displayRacks.map((rack, rIdx) => {
                     const color = RACK_COLORS[rIdx % RACK_COLORS.length];
-                    const maxLevels = Math.min(rack.levels, 10);
-                    const maxPos = Math.min(rack.positions_per_level, 6);
-                    const cellSzW = 18;
-                    const cellSzH = 16;
                     return (
-                      <div
-                        key={rack.id}
-                        style={{
-                          flexShrink: 0,
-                          textAlign: 'center',
-                        }}
-                      >
-                        <div
-                          style={{
-                            border: `2px solid ${color}`,
-                            borderRadius: 4,
-                            overflow: 'hidden',
-                            backgroundColor: '#FFFFFF',
+                      <div key={rack.id} style={{ flexShrink: 0, textAlign: 'center' }}>
+                        <RackMiniGrid
+                          rack={rack}
+                          rackColor={color}
+                          data={{
+                            mode: 'occupancy',
+                            locations: locationsByRack.get(rack.id) ?? [],
+                            stockByLocation,
                           }}
-                        >
-                          {Array.from({ length: maxLevels }, (_, li) => (
-                            <div
-                              key={li}
-                              style={{
-                                display: 'flex',
-                                borderBottom: li < maxLevels - 1 ? `1px solid ${color}30` : undefined,
-                              }}
-                            >
-                              {Array.from({ length: maxPos }, (_, pi) => (
-                                <div
-                                  key={pi}
-                                  style={{
-                                    width: cellSzW,
-                                    height: cellSzH,
-                                    borderRight: pi < maxPos - 1 ? `1px solid ${color}20` : undefined,
-                                    backgroundColor: color + '10',
-                                  }}
-                                />
-                              ))}
-                            </div>
-                          ))}
-                        </div>
+                          cellSize={{ width: 20, height: 18 }}
+                          maxLevels={10}
+                          maxPositions={6}
+                        />
                         <p style={{ fontSize: 9, fontWeight: 700, color, margin: '4px 0 0', fontFamily: 'monospace' }}>
                           {rack.code}
                         </p>
@@ -874,6 +878,24 @@ export function WarehouseLayoutPage() {
                   })
                 )}
               </div>
+
+              {/* Occupancy legend */}
+              {displayRacks.length > 0 && (
+                <div style={{ display: 'flex', gap: 14, marginTop: 10, fontSize: 10, color: '#64748B', flexWrap: 'wrap' }}>
+                  <span style={{ display: 'flex', alignItems: 'center', gap: 3 }}>
+                    <span style={{ width: 10, height: 10, borderRadius: 2, backgroundColor: 'rgba(59,130,246,0.15)', border: '1px solid rgba(59,130,246,0.3)', display: 'inline-block' }} />
+                    Vacio
+                  </span>
+                  <span style={{ display: 'flex', alignItems: 'center', gap: 3 }}>
+                    <span style={{ width: 10, height: 10, borderRadius: 2, backgroundColor: 'rgba(59,130,246,0.7)', border: '1px solid rgba(59,130,246,0.85)', display: 'inline-block' }} />
+                    Con stock
+                  </span>
+                  <span style={{ display: 'flex', alignItems: 'center', gap: 3 }}>
+                    <span style={{ width: 10, height: 10, borderRadius: 2, backgroundColor: '#E2E8F0', border: '1px solid #CBD5E1', display: 'inline-block' }} />
+                    Inactiva
+                  </span>
+                </div>
+              )}
             </div>
           </div>
         );
