@@ -294,9 +294,13 @@ export function PickListDetail() {
         </div>
       </div>
 
-      {/* Mini-map */}
-      {sourceLocationIds.length > 0 && (
-        <PickingMiniMap locationIds={sourceLocationIds} pickedLocationIds={pickedLocationIds} />
+      {/* Mini-map — show full warehouse layout with pick targets highlighted */}
+      {pickList.warehouse_id && (
+        <PickingMiniMap
+          warehouseId={pickList.warehouse_id}
+          locationIds={sourceLocationIds}
+          pickedLocationIds={pickedLocationIds}
+        />
       )}
 
       {/* Route / Items list */}

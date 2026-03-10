@@ -112,6 +112,16 @@ export async function getPickListLocations(locationIds: string[]) {
   );
 }
 
+export async function getWarehouseRacks(warehouseId: string) {
+  return query<WarehouseRack[]>((sb) =>
+    sb.from('warehouse_racks')
+      .select('id, name, code, levels, positions_per_level')
+      .eq('warehouse_id', warehouseId)
+      .eq('is_active', true)
+      .order('name')
+  );
+}
+
 export async function pickItem(itemId: string, quantityPicked: number, pickedBy: string) {
   return query<PickListItem>((sb) =>
     sb.from('pick_list_items')
