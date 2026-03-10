@@ -249,8 +249,8 @@ export function OrderCreateModal({ open, onClose, onCreated, editOrder, editItem
     productDebounceRef.current = setTimeout(async () => {
       if (productSearchRef.current !== query) return;
 
-      if (isAggregator && selectedWarehouse) {
-        // Aggregator flow: search products from warehouse's inventory_stock
+      if (selectedWarehouse) {
+        // Warehouse flow: search products from inventory_stock (respects reserved_quantity)
         const { data: stockRows, error } = await supabase
           .from('inventory_stock')
           .select('product_id, quantity, reserved_quantity, product:products!inner(*)')
@@ -282,7 +282,7 @@ export function OrderCreateModal({ open, onClose, onCreated, editOrder, editItem
           setProductLoading(false);
         }
       } else {
-        // Platform / Store flow: search products table directly
+        // No-warehouse flow: search products table directly (legacy non-WMS)
         let q = supabase.from('products').select('*').eq('status', 'active').gt('stock', 0)
           .or(`name.ilike.%${query}%,sku.ilike.%${query}%`).limit(10);
         if (isPlatformOwner && inventoryOrg) q = q.eq('org_id', inventoryOrg.id);
