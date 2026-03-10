@@ -114,6 +114,33 @@ export function OrderCreateModal({ open, onClose, onCreated, editOrder, editItem
     }
   }, [open, isAggregator, organization]);
 
+  // ── Load warehouses for associates (non-aggregator, non-platform) ──
+  useEffect(() => {
+    if (open && !isPlatformOwner && !isAggregator && organization) {
+      supabase
+        .from('warehouses').select('*').eq('org_id', organization.id).eq('is_active', true).order('name')
+        .then(({ data }) => {
+          const whs = (data as Warehouse[]) ?? [];
+          setWarehouses(whs);
+          // Auto-select if only one warehouse
+          if (whs.length === 1) setSelectedWarehouse(whs[0]);
+        });
+    }
+  }, [open, isPlatformOwner, isAggregator, organization]);
+
+  // ── Load warehouses for platform owners after org selection ──
+  useEffect(() => {
+    if (open && isPlatformOwner && inventoryOrg) {
+      supabase
+        .from('warehouses').select('*').eq('org_id', inventoryOrg.id).eq('is_active', true).order('name')
+        .then(({ data }) => {
+          const whs = (data as Warehouse[]) ?? [];
+          setWarehouses(whs);
+          if (whs.length === 1) setSelectedWarehouse(whs[0]);
+        });
+    }
+  }, [open, isPlatformOwner, inventoryOrg]);
+
   // ── Org selection handlers ──
   const handleSelectAggregator = useCallback((org: Organization) => {
     setSelectedOrg(org);
@@ -523,6 +550,8 @@ export function OrderCreateModal({ open, onClose, onCreated, editOrder, editItem
             isAggregator={isAggregator}
             inventoryOrg={inventoryOrg} selectedOrg={selectedOrg}
             selectedWarehouse={selectedWarehouse}
+            warehouses={warehouses}
+            onWarehouseChange={setSelectedWarehouse}
             customers={customers} customerSearch={customerSearch}
             selectedCustomer={selectedCustomer} showNewCustomer={showNewCustomer}
             newCustomerName={newCustomerName} customerPhone={customerPhone}

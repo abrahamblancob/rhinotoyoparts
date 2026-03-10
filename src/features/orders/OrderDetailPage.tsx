@@ -9,7 +9,8 @@ import { DeliveryPinMap } from '@/components/tracking/DeliveryPinMap.tsx';
 import { OrderCreateModal } from './OrderCreateModal.tsx';
 import type { Order, Customer, Profile, Carrier } from '@/lib/database.types.ts';
 import { reserveOrderStock } from '@/services/orderService.ts';
-import { createPickListForOrder } from '@/services/pickingService.ts';
+import { createPickListForOrder, getPickListForOrder } from '@/services/pickingService.ts';
+import type { PickList } from '@/types/warehouse.ts';
 
 import { OrderProgressBar } from './detail/OrderProgressBar.tsx';
 import { OrderStatusActions } from './detail/OrderStatusActions.tsx';
@@ -48,6 +49,7 @@ export function OrderDetailPage() {
   const [carriers, setCarriers] = useState<Carrier[]>([]);
   const [showCancelModal, setShowCancelModal] = useState(false);
   const [showEditModal, setShowEditModal] = useState(false);
+  const [pickList, setPickList] = useState<PickList | null>(null);
 
   const [updating, setUpdating] = useState(false);
   const [realtimeStatus, setRealtimeStatus] = useState<RealtimeStatus>('connecting');
@@ -114,6 +116,13 @@ export function OrderDetailPage() {
           .single();
         if (newQr) setOrderQr(newQr as OrderQr);
       }
+    }
+
+    // Load associated pick list (if any)
+    if (orderId) {
+      getPickListForOrder(orderId).then(({ data }) => {
+        setPickList((data as PickList) ?? null);
+      }).catch(() => setPickList(null));
     }
 
     setLoading(false);
@@ -350,6 +359,50 @@ export function OrderDetailPage() {
       </div>
 
       <OrderProgressBar status={order.status} />
+
+      {/* Pick List card */}
+      {pickList && (
+        <div
+          style={{
+            display: 'flex', alignItems: 'center', justifyContent: 'space-between',
+            padding: '14px 20px', borderRadius: 10, marginBottom: 20,
+            background: pickList.status === 'completed' ? '#F0FDF4' : '#FFFBEB',
+            border: `1px solid ${pickList.status === 'completed' ? '#BBF7D0' : '#FDE68A'}`,
+          }}
+        >
+          <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
+            <span style={{ fontSize: 20 }}>📦</span>
+            <div>
+              <div style={{ fontWeight: 600, fontSize: 14, color: '#1E293B' }}>
+                Pick List — {pickList.status === 'completed' ? 'Completado' : pickList.status === 'in_progress' ? 'En progreso' : pickList.status === 'assigned' ? 'Asignado' : 'Pendiente'}
+              </div>
+              <div style={{ fontSize: 12, color: '#64748B' }}>
+                {pickList.picked_items} / {pickList.total_items} items recogidos
+                {pickList.assignee?.full_name && ` · ${pickList.assignee.full_name}`}
+              </div>
+            </div>
+          </div>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+            {pickList.total_items > 0 && (
+              <div style={{ width: 80, height: 6, borderRadius: 3, backgroundColor: '#E2E8F0', overflow: 'hidden' }}>
+                <div style={{
+                  width: `${Math.round((pickList.picked_items / pickList.total_items) * 100)}%`,
+                  height: '100%', borderRadius: 3,
+                  backgroundColor: pickList.picked_items === pickList.total_items ? '#10B981' : '#F97316',
+                  transition: 'width 0.3s ease',
+                }} />
+              </div>
+            )}
+            <button
+              className="rh-btn rh-btn-primary"
+              onClick={() => navigate(`/hub/picking/${pickList.id}`)}
+              style={{ fontSize: 12, padding: '6px 14px', backgroundColor: '#F97316' }}
+            >
+              Ver Pick List →
+            </button>
+          </div>
+        </div>
+      )}
 
       {/* Delivery pin map */}
       {isPlatformOwner && !order.dispatcher_current_lat
