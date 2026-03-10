@@ -1,4 +1,4 @@
-import { useState, useCallback, useMemo } from 'react';
+import { useState, useCallback, useMemo, useEffect, useRef } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import {
   ArrowLeft,
@@ -10,6 +10,7 @@ import {
   Play,
   User,
   Hash,
+  Timer,
 } from 'lucide-react';
 import { useAuthStore } from '@/stores/authStore.ts';
 import { usePermissions } from '@/hooks/usePermissions.ts';
@@ -59,6 +60,23 @@ function formatDateTime(iso: string | null): string {
   });
 }
 
+/** Format seconds as MM:SS */
+function formatCountdown(totalSeconds: number): string {
+  if (totalSeconds <= 0) return '00:00';
+  const mins = Math.floor(totalSeconds / 60);
+  const secs = totalSeconds % 60;
+  return `${String(mins).padStart(2, '0')}:${String(secs).padStart(2, '0')}`;
+}
+
+/** Get countdown color based on percentage of time remaining */
+function getCountdownColor(secondsLeft: number, totalSeconds: number): string {
+  if (totalSeconds <= 0) return '#D3010A';
+  const pct = secondsLeft / totalSeconds;
+  if (pct > 0.5) return '#10B981';   // green
+  if (pct > 0.25) return '#F59E0B';  // yellow
+  return '#D3010A';                   // red
+}
+
 export function PickListDetail() {
   const { pickListId } = useParams<{ pickListId: string }>();
   const navigate = useNavigate();
@@ -66,6 +84,10 @@ export function PickListDetail() {
   const { roles } = usePermissions();
   const [actionLoading, setActionLoading] = useState(false);
   const isPicker = roles.includes('warehouse_picker') || roles.includes('warehouse_manager') || roles.includes('platform_owner');
+
+  // Countdown timer state
+  const [timeLeft, setTimeLeft] = useState<number | null>(null);
+  const expiredHandled = useRef(false);
 
   const pickListFetcher = useCallback(
     () =>
@@ -102,6 +124,61 @@ export function PickListDetail() {
     pickList && pickList.total_items > 0
       ? Math.round((pickList.picked_items / pickList.total_items) * 100)
       : 0;
+
+  // Total expiry duration for color calculation
+  const totalExpirySeconds = useMemo(() => {
+    if (!pickList?.expires_at || !pickList?.created_at) return 0;
+    return Math.max(0, Math.round(
+      (new Date(pickList.expires_at).getTime() - new Date(pickList.created_at).getTime()) / 1000
+    ));
+  }, [pickList?.expires_at, pickList?.created_at]);
+
+  // Active statuses that should show countdown
+  const isActiveStatus = pickList && ['pending', 'assigned', 'in_progress'].includes(pickList.status);
+
+  // Countdown timer effect
+  useEffect(() => {
+    if (!pickList?.expires_at || !isActiveStatus) {
+      setTimeLeft(null);
+      return;
+    }
+
+    const computeTimeLeft = () => {
+      const diff = new Date(pickList.expires_at!).getTime() - Date.now();
+      return Math.max(0, Math.floor(diff / 1000));
+    };
+
+    setTimeLeft(computeTimeLeft());
+    expiredHandled.current = false;
+
+    const interval = setInterval(() => {
+      const remaining = computeTimeLeft();
+      setTimeLeft(remaining);
+
+      if (remaining <= 0) {
+        clearInterval(interval);
+      }
+    }, 1000);
+
+    return () => clearInterval(interval);
+  }, [pickList?.expires_at, isActiveStatus]);
+
+  // Handle expiry when timer reaches 0
+  useEffect(() => {
+    if (timeLeft !== 0 || expiredHandled.current || !pickListId || !isActiveStatus) return;
+    expiredHandled.current = true;
+
+    (async () => {
+      try {
+        await pickingService.expirePickList(pickListId);
+        toast('error', 'Tiempo agotado — stock liberado, orden devuelta a borrador');
+        navigate('/hub/picking');
+      } catch {
+        toast('error', 'Error al expirar el pick list');
+        await reloadPickList();
+      }
+    })();
+  }, [timeLeft, pickListId, isActiveStatus, navigate, reloadPickList]);
 
   // Compute location IDs for the mini-map
   const sourceLocationIds = useMemo(
@@ -170,6 +247,8 @@ export function PickListDetail() {
   }
 
   const statusStyle = STATUS_COLORS[pickList.status];
+  const countdownColor = timeLeft != null ? getCountdownColor(timeLeft, totalExpirySeconds) : '#605E5C';
+  const isUrgent = timeLeft != null && timeLeft <= 60 && timeLeft > 0;
 
   return (
     <div>
@@ -229,6 +308,77 @@ export function PickListDetail() {
             </span>
           </div>
         </div>
+
+        {/* Countdown Timer */}
+        {timeLeft != null && isActiveStatus && (
+          <div
+            style={{
+              marginTop: 16,
+              display: 'flex',
+              alignItems: 'center',
+              gap: 12,
+              padding: '12px 16px',
+              borderRadius: 8,
+              backgroundColor: countdownColor + '12',
+              border: `1.5px solid ${countdownColor}40`,
+              animation: isUrgent ? 'pulse 1s ease-in-out infinite' : undefined,
+            }}
+          >
+            <Timer size={20} style={{ color: countdownColor, flexShrink: 0 }} />
+            <div style={{ flex: 1 }}>
+              <div style={{ fontSize: 12, color: '#605E5C', marginBottom: 2 }}>
+                Tiempo restante para completar picking
+              </div>
+              <div style={{ fontSize: 24, fontWeight: 800, color: countdownColor, fontFamily: 'monospace', letterSpacing: 2 }}>
+                {formatCountdown(timeLeft)}
+              </div>
+            </div>
+            {/* Timer progress bar */}
+            <div style={{ width: 120, flexShrink: 0 }}>
+              <div
+                style={{
+                  width: '100%',
+                  height: 6,
+                  borderRadius: 3,
+                  backgroundColor: '#E1DFDD',
+                  overflow: 'hidden',
+                }}
+              >
+                <div
+                  style={{
+                    width: `${totalExpirySeconds > 0 ? (timeLeft / totalExpirySeconds) * 100 : 0}%`,
+                    height: '100%',
+                    borderRadius: 3,
+                    backgroundColor: countdownColor,
+                    transition: 'width 1s linear',
+                  }}
+                />
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* Expired banner */}
+        {pickList.status === 'expired' && (
+          <div
+            style={{
+              marginTop: 16,
+              padding: '12px 16px',
+              borderRadius: 8,
+              backgroundColor: '#D3010A12',
+              border: '1.5px solid #D3010A40',
+              display: 'flex',
+              alignItems: 'center',
+              gap: 8,
+              color: '#D3010A',
+              fontSize: 14,
+              fontWeight: 600,
+            }}
+          >
+            <Timer size={18} />
+            Pick list expirado — stock liberado y orden devuelta a borrador
+          </div>
+        )}
 
         {/* Progress bar */}
         <div style={{ marginTop: 20 }}>
@@ -418,6 +568,14 @@ export function PickListDetail() {
           </div>
         )}
       </div>
+
+      {/* Pulse animation for urgent countdown */}
+      <style>{`
+        @keyframes pulse {
+          0%, 100% { opacity: 1; }
+          50% { opacity: 0.7; }
+        }
+      `}</style>
     </div>
   );
 }

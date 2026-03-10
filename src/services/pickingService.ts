@@ -157,6 +157,14 @@ export async function pickItem(itemId: string, quantityPicked: number, pickedBy:
   );
 }
 
+export async function expirePickList(pickListId: string) {
+  const { data, error } = await supabase.rpc('expire_pick_list', {
+    p_pick_list_id: pickListId,
+  });
+  if (error) throw error;
+  return data as { success: boolean; error?: string; message?: string };
+}
+
 export async function completePickList(pickListId: string) {
   return query<PickList>((sb) =>
     sb.from('pick_lists')
