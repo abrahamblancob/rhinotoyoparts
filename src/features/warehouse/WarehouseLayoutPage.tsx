@@ -16,6 +16,7 @@ import {
   LayoutGrid,
   Layers,
   Trash2,
+  Ban,
 } from 'lucide-react';
 import { usePermissions } from '@/hooks/usePermissions.ts';
 import {
@@ -60,6 +61,7 @@ export function WarehouseLayoutPage() {
   const [selectedRack, setSelectedRack] = useState<WarehouseRack | null>(null);
   const [deleteTarget, setDeleteTarget] = useState<Warehouse | null>(null);
   const [deleteLoading, setDeleteLoading] = useState(false);
+  const [showUnlocated, setShowUnlocated] = useState(false);
 
   // All racks (for cenital/lateral views)
   const { data: allRacks, reload: reloadAllRacks } = useWarehouseRacks(activeWarehouse?.id);
@@ -108,6 +110,16 @@ export function WarehouseLayoutPage() {
     }
     return map;
   }, [allStock]);
+
+  // Unlocated stock items
+  const unlocatedItems = useMemo(
+    () => (allStock ?? []).filter((s) => s.location_id === null),
+    [allStock],
+  );
+  const unlocatedUnits = useMemo(
+    () => unlocatedItems.reduce((sum, s) => sum + s.quantity, 0),
+    [unlocatedItems],
+  );
 
   const handleRefresh = () => {
     reloadStats();
@@ -483,7 +495,7 @@ export function WarehouseLayoutPage() {
       </div>
 
       {/* Stats Cards */}
-      <div className="rh-stats-grid mb-6">
+      <div className="rh-stats-grid-5 mb-6">
         <div
           className="rh-card"
           style={{
@@ -606,7 +618,84 @@ export function WarehouseLayoutPage() {
             <p style={{ fontSize: 12, color: '#94A3B8', margin: 0 }}>Ocupacion</p>
           </div>
         </div>
+
+        {/* Sin Ubicar - clickable */}
+        <div
+          onClick={() => unlocatedItems.length > 0 && setShowUnlocated(!showUnlocated)}
+          className="rh-card"
+          style={{
+            padding: '16px 20px',
+            display: 'flex',
+            alignItems: 'center',
+            gap: 12,
+            cursor: unlocatedItems.length > 0 ? 'pointer' : 'default',
+            outline: showUnlocated ? '2px solid #F59E0B' : 'none',
+            outlineOffset: -1,
+            transition: 'outline 0.2s',
+          }}
+        >
+          <div
+            style={{
+              width: 40,
+              height: 40,
+              borderRadius: 10,
+              backgroundColor: '#FFF7ED',
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+            }}
+          >
+            <Ban size={20} style={{ color: '#F59E0B' }} />
+          </div>
+          <div>
+            <p style={{ fontSize: 22, fontWeight: 700, color: '#1E293B', margin: 0 }}>
+              {unlocatedUnits} uds
+            </p>
+            <p style={{ fontSize: 12, color: '#94A3B8', margin: 0 }}>Sin Ubicar</p>
+          </div>
+        </div>
       </div>
+
+      {/* ═══ Unlocated items panel ═══ */}
+      {showUnlocated && unlocatedItems.length > 0 && (
+        <div className="rh-card" style={{ padding: 0, overflow: 'hidden', marginBottom: 24, border: '1px solid #F59E0B' }}>
+          <div style={{ padding: '16px 24px', display: 'flex', justifyContent: 'space-between', alignItems: 'center',
+            backgroundColor: '#FFF7ED', borderBottom: '1px solid #FED7AA' }}>
+            <div>
+              <h3 style={{ fontSize: 15, fontWeight: 600, color: '#9A3412', margin: 0 }}>
+                🚫 Productos sin ubicación asignada
+              </h3>
+              <p style={{ fontSize: 12, color: '#C2410C', margin: '4px 0 0' }}>
+                Estos productos están en el almacén pero no tienen estante asignado
+              </p>
+            </div>
+            <button onClick={() => setShowUnlocated(false)}
+              style={{ background: 'none', border: 'none', cursor: 'pointer', fontSize: 18, color: '#9A3412', padding: 4 }}>✕</button>
+          </div>
+          <div className="rh-table-wrapper">
+            <table className="rh-table">
+              <thead>
+                <tr>
+                  <th>Producto</th>
+                  <th>SKU</th>
+                  <th>Marca</th>
+                  <th style={{ textAlign: 'right' }}>Cantidad</th>
+                </tr>
+              </thead>
+              <tbody>
+                {unlocatedItems.map((s) => (
+                  <tr key={s.id}>
+                    <td style={{ fontWeight: 500 }}>{s.product?.name ?? '—'}</td>
+                    <td style={{ color: '#64748B', fontFamily: 'monospace', fontSize: 13 }}>{s.product?.sku ?? '—'}</td>
+                    <td>{s.product?.brand ?? '—'}</td>
+                    <td style={{ textAlign: 'right', fontWeight: 600 }}>{s.quantity}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        </div>
+      )}
 
       {/* ── Visual views: Cenital + Lateral ── */}
       {activeWarehouse.width_m && activeWarehouse.length_m && (() => {
