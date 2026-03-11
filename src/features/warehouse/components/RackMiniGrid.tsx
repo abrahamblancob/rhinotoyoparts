@@ -133,7 +133,8 @@ export function RackMiniGrid({
             bg = hexToRgba(color, 0.7);
             border = darkenHex(color, 0.1);
           }
-          title = `${location.code} | Cant: ${qty}${reserved > 0 ? ` (Res: ${reserved})` : ''}`;
+          const productName = stock?.product?.name ?? '';
+          title = `${location.code} | Cant: ${qty}${reserved > 0 ? ` (Res: ${reserved})` : ''}${productName ? ` | ${productName}` : ''}`;
         } else {
           // Empty → light tint of rack color
           bg = hexToRgba(color, 0.15);
