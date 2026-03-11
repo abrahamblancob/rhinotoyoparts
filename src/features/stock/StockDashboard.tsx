@@ -3,24 +3,100 @@ import {
   Search,
   AlertTriangle,
   MapPin,
+  ChevronDown,
 } from 'lucide-react';
 import { useAuthStore } from '@/stores/authStore.ts';
 import { usePermissions } from '@/hooks/usePermissions.ts';
 import { useAsyncData } from '@/hooks/useAsyncData.ts';
-import { useWarehouses } from '@/hooks/useWarehouse.ts';
+import { useWarehouses, useWarehouseStats } from '@/hooks/useWarehouse.ts';
 import { StatsCard } from '@/components/hub/shared/StatsCard.tsx';
 import { EmptyState } from '@/components/hub/shared/EmptyState.tsx';
 import * as warehouseService from '@/services/warehouseService.ts';
 import { supabase } from '@/lib/supabase.ts';
 import type { InventoryStock } from '@/types/warehouse.ts';
 
-// Arbitrary threshold for demo — in production this would come from the product's min_stock field
 const LOW_STOCK_THRESHOLD = 5;
+
+/* ─── SVG Donut Chart ─── */
+function DonutChart({ located, unlocated }: { located: number; unlocated: number }) {
+  const total = located + unlocated;
+  const pct = total > 0 ? Math.round((located / total) * 100) : 0;
+  const radius = 70;
+  const circumference = 2 * Math.PI * radius;
+  const locatedArc = total > 0 ? (located / total) * circumference : 0;
+
+  return (
+    <svg width={180} height={180} viewBox="0 0 180 180" style={{ display: 'block', margin: '0 auto' }}>
+      {/* Background ring */}
+      <circle cx={90} cy={90} r={radius} fill="none" stroke="#F1F5F9" strokeWidth={18} />
+      {/* Located (green) */}
+      {locatedArc > 0 && (
+        <circle cx={90} cy={90} r={radius} fill="none"
+          stroke="#10B981" strokeWidth={18} strokeLinecap="round"
+          strokeDasharray={`${locatedArc} ${circumference}`}
+          transform="rotate(-90 90 90)"
+          style={{ transition: 'stroke-dasharray 0.6s ease' }}
+        />
+      )}
+      {/* Unlocated (orange) */}
+      {total > 0 && located < total && (
+        <circle cx={90} cy={90} r={radius} fill="none"
+          stroke="#F59E0B" strokeWidth={18} strokeLinecap="round"
+          strokeDasharray={`${circumference - locatedArc} ${circumference}`}
+          strokeDashoffset={-locatedArc}
+          transform="rotate(-90 90 90)"
+          style={{ transition: 'stroke-dasharray 0.6s ease, stroke-dashoffset 0.6s ease' }}
+        />
+      )}
+      {/* Center text */}
+      <text x={90} y={82} textAnchor="middle" fontSize={30} fontWeight={700} fill="#1E293B">{pct}%</text>
+      <text x={90} y={104} textAnchor="middle" fontSize={12} fill="#94A3B8">Ubicados</text>
+    </svg>
+  );
+}
+
+/* ─── Stacked Bar ─── */
+function StackedBar({ segments }: { segments: { color: string; value: number }[] }) {
+  const total = segments.reduce((s, seg) => s + seg.value, 0);
+  return (
+    <div style={{ height: 24, backgroundColor: '#F1F5F9', borderRadius: 12, overflow: 'hidden', display: 'flex' }}>
+      {segments.map((seg, i) => {
+        const w = total > 0 ? (seg.value / total) * 100 : 0;
+        return w > 0 ? (
+          <div key={i} style={{ width: `${w}%`, height: '100%', backgroundColor: seg.color, transition: 'width 0.4s ease' }} />
+        ) : null;
+      })}
+    </div>
+  );
+}
+
+/* ─── Occupancy Gauge ─── */
+function OccupancyGauge({ occupied, total, rate }: { occupied: number; total: number; rate: number }) {
+  const color = rate < 70 ? '#10B981' : rate < 90 ? '#F59E0B' : '#D3010A';
+  return (
+    <div className="rh-card" style={{ padding: 24, marginBottom: 24 }}>
+      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 16 }}>
+        <h3 style={{ fontSize: 15, fontWeight: 600, color: '#1E293B', margin: 0 }}>🏗️ Ocupación del Almacén</h3>
+        <span style={{ fontSize: 24, fontWeight: 700, color }}>{rate}%</span>
+      </div>
+      <div style={{ height: 16, backgroundColor: '#F1F5F9', borderRadius: 8, overflow: 'hidden', marginBottom: 12 }}>
+        <div style={{ width: `${Math.min(rate, 100)}%`, height: '100%', backgroundColor: color, borderRadius: 8, transition: 'width 0.4s ease' }} />
+      </div>
+      <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 13, color: '#64748B' }}>
+        <span><strong style={{ color: '#1E293B' }}>{occupied}</strong> ubicaciones ocupadas</span>
+        <span><strong style={{ color: '#1E293B' }}>{total - occupied}</strong> disponibles de <strong>{total}</strong></span>
+      </div>
+    </div>
+  );
+}
+
+/* ═══════════════════════════════════════════════════════════════ */
 
 export function StockDashboard() {
   const [search, setSearch] = useState('');
   const [warehouseFilter, setWarehouseFilter] = useState('all');
   const [showLowStockOnly, setShowLowStockOnly] = useState(false);
+  const [showTable, setShowTable] = useState(false);
   usePermissions();
   const organization = useAuthStore((s) => s.organization);
   const { data: warehouses } = useWarehouses();
@@ -28,205 +104,274 @@ export function StockDashboard() {
   const fetcher = useCallback(
     () => {
       if (!organization?.id) return Promise.resolve({ data: [] as InventoryStock[], error: null });
-      if (warehouseFilter !== 'all') {
-        return warehouseService.getStockByWarehouse(warehouseFilter);
-      }
+      if (warehouseFilter !== 'all') return warehouseService.getStockByWarehouse(warehouseFilter);
       return warehouseService.getStockByOrg(organization.id);
     },
     [organization?.id, warehouseFilter],
   );
 
-  const { data: stockItems, loading, reload } = useAsyncData<InventoryStock[]>(fetcher, [
-    organization?.id,
-    warehouseFilter,
-  ]);
+  const { data: stockItems, loading, reload } = useAsyncData<InventoryStock[]>(fetcher, [organization?.id, warehouseFilter]);
 
-  // Realtime subscription for stock changes
+  // Warehouse stats (only when specific warehouse selected)
+  const { stats } = useWarehouseStats(warehouseFilter !== 'all' ? warehouseFilter : undefined);
+
+  // Realtime subscription
   useEffect(() => {
     if (!organization?.id) return;
-    // Subscribe to all stock changes for the org's warehouses
     const whIds = (warehouses ?? []).map((w) => w.id);
-    const channels = whIds.map((whId) =>
-      warehouseService.subscribeToStock(whId, reload),
-    );
-    return () => {
-      channels.forEach((ch) => supabase.removeChannel(ch));
-    };
+    const channels = whIds.map((whId) => warehouseService.subscribeToStock(whId, reload));
+    return () => { channels.forEach((ch) => supabase.removeChannel(ch)); };
   }, [organization?.id, warehouses, reload]);
 
   const items = stockItems ?? [];
 
-  // Filter by search
+  // ── Filters ──
   let filtered = search.trim()
-    ? items.filter(
-        (s) =>
-          s.product?.name?.toLowerCase().includes(search.toLowerCase()) ||
-          s.product?.sku?.toLowerCase().includes(search.toLowerCase()) ||
-          s.product?.brand?.toLowerCase().includes(search.toLowerCase()),
+    ? items.filter((s) =>
+        s.product?.name?.toLowerCase().includes(search.toLowerCase()) ||
+        s.product?.sku?.toLowerCase().includes(search.toLowerCase()) ||
+        s.product?.brand?.toLowerCase().includes(search.toLowerCase()),
       )
     : items;
+  if (showLowStockOnly) filtered = filtered.filter((s) => s.quantity <= LOW_STOCK_THRESHOLD);
 
-  // Filter low stock only
-  if (showLowStockOnly) {
-    filtered = filtered.filter((s) => s.quantity <= LOW_STOCK_THRESHOLD);
-  }
-
-  // Aggregate stats
+  // ── Metrics ──
   const uniqueProducts = new Set(items.map((s) => s.product_id)).size;
   const totalUnits = items.reduce((sum, s) => sum + s.quantity, 0);
-  const lowStockCount = items.filter((s) => s.quantity <= LOW_STOCK_THRESHOLD).length;
   const totalReserved = items.reduce((sum, s) => sum + s.reserved_quantity, 0);
+  const totalAvailable = totalUnits - totalReserved;
+
+  // Location metrics
+  const locatedItems = items.filter((s) => s.location_id !== null);
+  const unlocatedItems = items.filter((s) => s.location_id === null);
+  const locatedUnits = locatedItems.reduce((sum, s) => sum + s.quantity, 0);
+  const unlocatedUnits = unlocatedItems.reduce((sum, s) => sum + s.quantity, 0);
+  const totalRows = items.length;
+  const locationCoveragePct = totalRows > 0 ? Math.round((locatedItems.length / totalRows) * 100) : 0;
+
+  // Health metrics
+  const lowStockCount = items.filter((s) => s.quantity <= LOW_STOCK_THRESHOLD).length;
+  const normalStockCount = items.filter((s) => s.quantity > LOW_STOCK_THRESHOLD).length;
+  const zeroStockCount = items.filter((s) => s.quantity === 0).length;
+  const lowButPositiveCount = items.filter((s) => s.quantity > 0 && s.quantity <= LOW_STOCK_THRESHOLD).length;
+  const healthTotal = normalStockCount + lowButPositiveCount + zeroStockCount;
+
+  const healthData = [
+    { label: 'Stock Normal', count: normalStockCount, color: '#10B981' },
+    { label: 'Stock Bajo', count: lowButPositiveCount, color: '#F59E0B' },
+    { label: 'Sin Stock', count: zeroStockCount, color: '#D3010A' },
+  ];
+
+  const selectedWarehouseName = warehouseFilter !== 'all'
+    ? warehouses?.find((w) => w.id === warehouseFilter)?.name ?? 'Almacén'
+    : null;
 
   return (
     <div>
-      <div className="rh-page-header">
+      {/* ── Header + warehouse filter ── */}
+      <div className="rh-page-header" style={{ marginBottom: 24 }}>
         <div>
           <h1 className="rh-page-title">Stock de Inventario</h1>
           <p style={{ color: '#8A8886', fontSize: 14, marginTop: 4 }}>
-            Vista general del stock disponible en todos los almacenes
+            {selectedWarehouseName
+              ? `Dashboard de stock — ${selectedWarehouseName}`
+              : 'Vista general del stock en todos los almacenes'}
           </p>
         </div>
-      </div>
-
-      {/* Stats */}
-      <div className="rh-stats-grid mb-6">
-        <StatsCard title="Productos con Stock" value={uniqueProducts} icon="📦" color="#6366F1" />
-        <StatsCard title="Unidades Totales" value={totalUnits} icon="📊" color="#10B981" />
-        <StatsCard title="Alertas Stock Bajo" value={lowStockCount} icon="⚠️" color="#D3010A" />
-        <StatsCard title="Unidades Reservadas" value={totalReserved} icon="🔒" color="#F59E0B" />
-      </div>
-
-      {/* Filters row */}
-      <div
-        style={{
-          display: 'flex',
-          gap: 12,
-          marginBottom: 16,
-          flexWrap: 'wrap',
-          alignItems: 'center',
-        }}
-      >
-        {/* Warehouse filter */}
-        <select
-          value={warehouseFilter}
-          onChange={(e) => setWarehouseFilter(e.target.value)}
-          className="rh-input"
-          style={{ maxWidth: 220 }}
-        >
+        <select value={warehouseFilter} onChange={(e) => setWarehouseFilter(e.target.value)}
+          className="rh-input" style={{ maxWidth: 220 }}>
           <option value="all">Todos los almacenes</option>
           {(warehouses ?? []).map((wh) => (
-            <option key={wh.id} value={wh.id}>
-              {wh.name} ({wh.code})
-            </option>
+            <option key={wh.id} value={wh.id}>{wh.name} ({wh.code})</option>
           ))}
         </select>
-
-        {/* Search */}
-        <div style={{ position: 'relative', flex: 1, maxWidth: 320 }}>
-          <Search
-            size={16}
-            style={{ position: 'absolute', left: 12, top: '50%', transform: 'translateY(-50%)', color: '#8A8886' }}
-          />
-          <input
-            type="text"
-            placeholder="Buscar producto, SKU, marca..."
-            value={search}
-            onChange={(e) => setSearch(e.target.value)}
-            className="rh-input"
-            style={{ paddingLeft: 36 }}
-          />
-        </div>
-
-        {/* Low stock toggle */}
-        <button
-          className={`rh-filter-pill ${showLowStockOnly ? 'active' : ''}`}
-          onClick={() => setShowLowStockOnly(!showLowStockOnly)}
-          style={showLowStockOnly ? { backgroundColor: '#D3010A15', color: '#D3010A', borderColor: '#D3010A' } : {}}
-        >
-          <AlertTriangle size={14} style={{ marginRight: 4 }} />
-          Stock bajo ({lowStockCount})
-        </button>
       </div>
 
       {loading ? (
-        <p className="rh-loading">Cargando...</p>
-      ) : filtered.length === 0 ? (
-        <EmptyState
-          icon="📦"
-          title="No hay stock registrado"
-          description="El inventario apareceraa aqui cuando se registren productos en las ubicaciones del almacen"
-        />
+        <p className="rh-loading">Cargando dashboard...</p>
+      ) : items.length === 0 ? (
+        <EmptyState icon="📦" title="No hay stock registrado"
+          description="El inventario aparecerá aquí cuando se registren productos en las ubicaciones del almacén" />
       ) : (
-        <div className="rh-table-wrapper">
-          <table className="rh-table">
-            <thead>
-              <tr>
-                <th>Producto</th>
-                <th>SKU</th>
-                <th>Marca</th>
-                <th className="text-right">Stock Total</th>
-                <th className="text-right">Reservado</th>
-                <th className="text-right">Disponible</th>
-                <th>Ubicacion</th>
-                <th>Estado</th>
-              </tr>
-            </thead>
-            <tbody>
-              {filtered.map((stock) => {
-                const available = stock.quantity - stock.reserved_quantity;
-                const isLow = stock.quantity <= LOW_STOCK_THRESHOLD;
+        <>
+          {/* ═══ ROW 1: KPI Stats ═══ */}
+          <div className="rh-stats-grid-5">
+            <StatsCard title="Productos en Almacén" value={uniqueProducts} icon="📦" color="#6366F1" />
+            <StatsCard title="En Estantería" value={`${locatedItems.length} reg`} icon="📍" color="#10B981"
+              trend={{ value: locationCoveragePct, label: 'ubicados' }} />
+            <StatsCard title="Sin Ubicar" value={`${unlocatedItems.length} reg`} icon="🚫" color="#F59E0B" />
+            <StatsCard title="Alertas Stock Bajo" value={lowStockCount} icon="⚠️" color="#D3010A" />
+            <StatsCard title="Reservadas" value={`${totalReserved} uds`} icon="🔒" color="#8B5CF6" />
+          </div>
 
-                return (
-                  <tr key={stock.id} style={isLow ? { backgroundColor: '#FEF2F2' } : {}}>
-                    <td className="cell-primary">
-                      {stock.product?.name ?? '-'}
-                    </td>
-                    <td className="cell-mono" style={{ fontSize: 12, color: '#605E5C' }}>
-                      {stock.product?.sku ?? '-'}
-                    </td>
-                    <td style={{ color: '#605E5C' }}>
-                      {stock.product?.brand ?? '-'}
-                    </td>
-                    <td className="text-right cell-bold">{stock.quantity}</td>
-                    <td className="text-right" style={{ color: '#F59E0B' }}>
-                      {stock.reserved_quantity}
-                    </td>
-                    <td
-                      className="text-right cell-bold"
-                      style={{ color: available > 0 ? '#10B981' : '#D3010A' }}
-                    >
-                      {available}
-                    </td>
-                    <td>
-                      <span style={{ display: 'flex', alignItems: 'center', gap: 4, fontFamily: 'monospace', fontSize: 12 }}>
-                        <MapPin size={12} style={{ color: '#8A8886' }} />
-                        {stock.location?.code ?? '-'}
-                      </span>
-                    </td>
-                    <td>
-                      {isLow ? (
-                        <span
-                          className="rh-badge"
-                          style={{ backgroundColor: '#D3010A15', color: '#D3010A' }}
-                        >
-                          <AlertTriangle size={12} style={{ marginRight: 2 }} />
-                          Stock bajo
-                        </span>
-                      ) : (
-                        <span
-                          className="rh-badge"
-                          style={{ backgroundColor: '#10B98115', color: '#10B981' }}
-                        >
-                          Normal
-                        </span>
-                      )}
-                    </td>
-                  </tr>
-                );
-              })}
-            </tbody>
-          </table>
-        </div>
+          {/* ═══ ROW 2: Charts ═══ */}
+          <div className="stock-charts-grid">
+            {/* Donut: Location Coverage */}
+            <div className="rh-card" style={{ padding: 24 }}>
+              <h3 style={{ fontSize: 15, fontWeight: 600, color: '#1E293B', marginBottom: 20 }}>
+                📊 Cobertura de Ubicación
+              </h3>
+              <DonutChart located={locatedItems.length} unlocated={unlocatedItems.length} />
+              <div style={{ marginTop: 20, display: 'flex', flexDirection: 'column', gap: 10 }}>
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                    <span style={{ width: 12, height: 12, borderRadius: '50%', backgroundColor: '#10B981', display: 'inline-block' }} />
+                    <span style={{ fontSize: 13, color: '#475569' }}>En estantería</span>
+                  </div>
+                  <span style={{ fontSize: 13, fontWeight: 600, color: '#1E293B' }}>
+                    {locatedItems.length} reg · {locatedUnits} uds
+                  </span>
+                </div>
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                    <span style={{ width: 12, height: 12, borderRadius: '50%', backgroundColor: '#F59E0B', display: 'inline-block' }} />
+                    <span style={{ fontSize: 13, color: '#475569' }}>Sin ubicar</span>
+                  </div>
+                  <span style={{ fontSize: 13, fontWeight: 600, color: '#1E293B' }}>
+                    {unlocatedItems.length} reg · {unlocatedUnits} uds
+                  </span>
+                </div>
+              </div>
+            </div>
+
+            {/* Stacked Bar: Health Distribution */}
+            <div className="rh-card" style={{ padding: 24 }}>
+              <h3 style={{ fontSize: 15, fontWeight: 600, color: '#1E293B', marginBottom: 20 }}>
+                🩺 Salud del Inventario
+              </h3>
+              <StackedBar segments={healthData.map((d) => ({ color: d.color, value: d.count }))} />
+              <div style={{ marginTop: 20, display: 'flex', flexDirection: 'column', gap: 12 }}>
+                {healthData.map((d) => (
+                  <div key={d.label} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                      <span style={{ width: 12, height: 12, borderRadius: '50%', backgroundColor: d.color, display: 'inline-block' }} />
+                      <span style={{ fontSize: 13, color: '#475569' }}>{d.label}</span>
+                    </div>
+                    <span style={{ fontSize: 13, fontWeight: 600, color: '#1E293B' }}>
+                      {d.count} ({healthTotal > 0 ? Math.round((d.count / healthTotal) * 100) : 0}%)
+                    </span>
+                  </div>
+                ))}
+              </div>
+
+              {/* Disponibilidad sub-section */}
+              <div style={{ marginTop: 24, paddingTop: 20, borderTop: '1px solid #E2E8F0' }}>
+                <h4 style={{ fontSize: 13, fontWeight: 600, color: '#64748B', marginBottom: 12, textTransform: 'uppercase', letterSpacing: '0.5px' }}>
+                  Disponibilidad
+                </h4>
+                <div style={{ display: 'flex', gap: 12 }}>
+                  <div style={{ flex: 1, textAlign: 'center', padding: '12px 8px', backgroundColor: '#F0FDF4', borderRadius: 8 }}>
+                    <div style={{ fontSize: 22, fontWeight: 700, color: '#10B981' }}>{totalAvailable}</div>
+                    <div style={{ fontSize: 11, color: '#64748B', marginTop: 2 }}>Disponibles</div>
+                  </div>
+                  <div style={{ flex: 1, textAlign: 'center', padding: '12px 8px', backgroundColor: '#F5F3FF', borderRadius: 8 }}>
+                    <div style={{ fontSize: 22, fontWeight: 700, color: '#8B5CF6' }}>{totalReserved}</div>
+                    <div style={{ fontSize: 11, color: '#64748B', marginTop: 2 }}>Reservadas</div>
+                  </div>
+                  <div style={{ flex: 1, textAlign: 'center', padding: '12px 8px', backgroundColor: '#F8FAFC', borderRadius: 8 }}>
+                    <div style={{ fontSize: 22, fontWeight: 700, color: '#1E293B' }}>{totalUnits}</div>
+                    <div style={{ fontSize: 11, color: '#64748B', marginTop: 2 }}>Total</div>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          {/* ═══ ROW 2B: Occupancy Gauge (only for specific warehouse) ═══ */}
+          {warehouseFilter !== 'all' && stats && stats.totalLocations > 0 && (
+            <OccupancyGauge occupied={stats.occupiedLocations} total={stats.totalLocations} rate={stats.occupancyRate} />
+          )}
+
+          {/* ═══ ROW 3: Collapsible Table ═══ */}
+          <div className="rh-card" style={{ padding: 0, overflow: 'hidden' }}>
+            {/* Header with toggle */}
+            <button onClick={() => setShowTable(!showTable)}
+              style={{ width: '100%', padding: '16px 24px', display: 'flex', justifyContent: 'space-between',
+                alignItems: 'center', border: 'none', background: 'none', cursor: 'pointer', fontSize: 15, fontWeight: 600, color: '#1E293B' }}>
+              <span>📋 Detalle de Inventario ({filtered.length} registros)</span>
+              <ChevronDown size={20} style={{ color: '#64748B', transform: showTable ? 'rotate(180deg)' : 'none', transition: 'transform 0.2s' }} />
+            </button>
+
+            {showTable && (
+              <div style={{ padding: '0 24px 24px' }}>
+                {/* Filters inside table */}
+                <div style={{ display: 'flex', gap: 12, marginBottom: 16, flexWrap: 'wrap', alignItems: 'center' }}>
+                  <div style={{ position: 'relative', flex: 1, maxWidth: 320 }}>
+                    <Search size={16} style={{ position: 'absolute', left: 12, top: '50%', transform: 'translateY(-50%)', color: '#8A8886' }} />
+                    <input type="text" placeholder="Buscar producto, SKU, marca..." value={search}
+                      onChange={(e) => setSearch(e.target.value)} className="rh-input" style={{ paddingLeft: 36 }} />
+                  </div>
+                  <button className={`rh-filter-pill ${showLowStockOnly ? 'active' : ''}`}
+                    onClick={() => setShowLowStockOnly(!showLowStockOnly)}
+                    style={showLowStockOnly ? { backgroundColor: '#D3010A15', color: '#D3010A', borderColor: '#D3010A' } : {}}>
+                    <AlertTriangle size={14} style={{ marginRight: 4 }} />
+                    Stock bajo ({lowStockCount})
+                  </button>
+                </div>
+
+                {filtered.length === 0 ? (
+                  <p style={{ textAlign: 'center', color: '#94A3B8', padding: 24 }}>No se encontraron registros</p>
+                ) : (
+                  <div className="rh-table-wrapper">
+                    <table className="rh-table">
+                      <thead>
+                        <tr>
+                          <th>Producto</th>
+                          <th>SKU</th>
+                          <th>Marca</th>
+                          <th className="text-right">Stock</th>
+                          <th className="text-right">Reservado</th>
+                          <th className="text-right">Disponible</th>
+                          <th>Ubicación</th>
+                          <th>Estado</th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {filtered.map((stock) => {
+                          const available = stock.quantity - stock.reserved_quantity;
+                          const isLow = stock.quantity <= LOW_STOCK_THRESHOLD;
+                          const isUnlocated = !stock.location_id;
+
+                          return (
+                            <tr key={stock.id} style={isLow ? { backgroundColor: '#FEF2F2' } : {}}>
+                              <td className="cell-primary">{stock.product?.name ?? '-'}</td>
+                              <td className="cell-mono" style={{ fontSize: 12, color: '#605E5C' }}>{stock.product?.sku ?? '-'}</td>
+                              <td style={{ color: '#605E5C' }}>{stock.product?.brand ?? '-'}</td>
+                              <td className="text-right cell-bold">{stock.quantity}</td>
+                              <td className="text-right" style={{ color: '#8B5CF6' }}>{stock.reserved_quantity}</td>
+                              <td className="text-right cell-bold" style={{ color: available > 0 ? '#10B981' : '#D3010A' }}>{available}</td>
+                              <td>
+                                {isUnlocated ? (
+                                  <span className="rh-badge" style={{ backgroundColor: '#FFF7ED', color: '#EA580C', border: '1px solid #FDBA74' }}>
+                                    🚫 Sin ubicar
+                                  </span>
+                                ) : (
+                                  <span style={{ display: 'flex', alignItems: 'center', gap: 4, fontFamily: 'monospace', fontSize: 12 }}>
+                                    <MapPin size={12} style={{ color: '#10B981' }} />
+                                    {stock.location?.code ?? '-'}
+                                  </span>
+                                )}
+                              </td>
+                              <td>
+                                {isLow ? (
+                                  <span className="rh-badge" style={{ backgroundColor: '#D3010A15', color: '#D3010A' }}>
+                                    <AlertTriangle size={12} style={{ marginRight: 2 }} /> Stock bajo
+                                  </span>
+                                ) : (
+                                  <span className="rh-badge" style={{ backgroundColor: '#10B98115', color: '#10B981' }}>Normal</span>
+                                )}
+                              </td>
+                            </tr>
+                          );
+                        })}
+                      </tbody>
+                    </table>
+                  </div>
+                )}
+              </div>
+            )}
+          </div>
+        </>
       )}
     </div>
   );
