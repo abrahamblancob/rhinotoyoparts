@@ -97,6 +97,7 @@ export function StockDashboard() {
   const [warehouseFilter, setWarehouseFilter] = useState('all');
   const [showLowStockOnly, setShowLowStockOnly] = useState(false);
   const [showTable, setShowTable] = useState(false);
+  const [showUnlocated, setShowUnlocated] = useState(false);
   usePermissions();
   const organization = useAuthStore((s) => s.organization);
   const { data: warehouses } = useWarehouses();
@@ -199,10 +200,65 @@ export function StockDashboard() {
             <StatsCard title="Productos en Almacén" value={uniqueProducts} icon="📦" color="#6366F1" />
             <StatsCard title="En Estantería" value={`${locatedUnits} uds`} icon="📍" color="#10B981"
               trend={{ value: locationCoveragePct, label: 'ubicados' }} />
-            <StatsCard title="Sin Ubicar" value={`${unlocatedUnits} uds`} icon="🚫" color="#F59E0B" />
+            <div onClick={() => unlocatedItems.length > 0 && setShowUnlocated(!showUnlocated)}
+              style={{ cursor: unlocatedItems.length > 0 ? 'pointer' : 'default', borderRadius: 16,
+                outline: showUnlocated ? '2px solid #F59E0B' : 'none', outlineOffset: -1, transition: 'outline 0.2s' }}>
+              <StatsCard title="Sin Ubicar" value={`${unlocatedUnits} uds`} icon="🚫" color="#F59E0B" />
+            </div>
             <StatsCard title="Alertas Stock Bajo" value={lowStockCount} icon="⚠️" color="#D3010A" />
             <StatsCard title="Reservadas" value={`${totalReserved} uds`} icon="🔒" color="#8B5CF6" />
           </div>
+
+          {/* ═══ Unlocated items panel ═══ */}
+          {showUnlocated && unlocatedItems.length > 0 && (
+            <div className="rh-card" style={{ padding: 0, overflow: 'hidden', marginBottom: 24, border: '1px solid #F59E0B' }}>
+              <div style={{ padding: '16px 24px', display: 'flex', justifyContent: 'space-between', alignItems: 'center',
+                backgroundColor: '#FFF7ED', borderBottom: '1px solid #FED7AA' }}>
+                <div>
+                  <h3 style={{ fontSize: 15, fontWeight: 600, color: '#9A3412', margin: 0 }}>
+                    🚫 Productos sin ubicación asignada
+                  </h3>
+                  <p style={{ fontSize: 12, color: '#C2410C', margin: '4px 0 0' }}>
+                    Estos productos están en el almacén pero no tienen estante asignado. Asígnalos desde el Layout del Almacén.
+                  </p>
+                </div>
+                <button onClick={() => setShowUnlocated(false)}
+                  style={{ background: 'none', border: 'none', cursor: 'pointer', fontSize: 18, color: '#9A3412', padding: 4 }}>✕</button>
+              </div>
+              <div className="rh-table-wrapper">
+                <table className="rh-table">
+                  <thead>
+                    <tr>
+                      <th>Producto</th>
+                      <th>SKU</th>
+                      <th>Marca</th>
+                      <th className="text-right">Cantidad</th>
+                      <th className="text-right">Reservado</th>
+                      <th className="text-right">Disponible</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {unlocatedItems.map((stock) => {
+                      const available = stock.quantity - stock.reserved_quantity;
+                      return (
+                        <tr key={stock.id}>
+                          <td className="cell-primary">{stock.product?.name ?? '-'}</td>
+                          <td className="cell-mono" style={{ fontSize: 12, color: '#605E5C' }}>{stock.product?.sku ?? '-'}</td>
+                          <td style={{ color: '#605E5C' }}>{stock.product?.brand ?? '-'}</td>
+                          <td className="text-right cell-bold">{stock.quantity}</td>
+                          <td className="text-right" style={{ color: '#8B5CF6' }}>{stock.reserved_quantity}</td>
+                          <td className="text-right cell-bold" style={{ color: available > 0 ? '#10B981' : '#D3010A' }}>{available}</td>
+                        </tr>
+                      );
+                    })}
+                  </tbody>
+                </table>
+              </div>
+              <div style={{ padding: '12px 24px', backgroundColor: '#FFFBEB', borderTop: '1px solid #FED7AA', fontSize: 13, color: '#92400E' }}>
+                Total: <strong>{unlocatedItems.length}</strong> registros · <strong>{unlocatedUnits}</strong> unidades sin ubicar
+              </div>
+            </div>
+          )}
 
           {/* ═══ ROW 2: Charts ═══ */}
           <div className="stock-charts-grid">
