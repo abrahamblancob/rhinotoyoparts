@@ -197,9 +197,9 @@ export function StockDashboard() {
           {/* ═══ ROW 1: KPI Stats ═══ */}
           <div className="rh-stats-grid-5">
             <StatsCard title="Productos en Almacén" value={uniqueProducts} icon="📦" color="#6366F1" />
-            <StatsCard title="En Estantería" value={`${locatedItems.length} reg`} icon="📍" color="#10B981"
+            <StatsCard title="En Estantería" value={`${locatedUnits} uds`} icon="📍" color="#10B981"
               trend={{ value: locationCoveragePct, label: 'ubicados' }} />
-            <StatsCard title="Sin Ubicar" value={`${unlocatedItems.length} reg`} icon="🚫" color="#F59E0B" />
+            <StatsCard title="Sin Ubicar" value={`${unlocatedUnits} uds`} icon="🚫" color="#F59E0B" />
             <StatsCard title="Alertas Stock Bajo" value={lowStockCount} icon="⚠️" color="#D3010A" />
             <StatsCard title="Reservadas" value={`${totalReserved} uds`} icon="🔒" color="#8B5CF6" />
           </div>
@@ -219,7 +219,7 @@ export function StockDashboard() {
                     <span style={{ fontSize: 13, color: '#475569' }}>En estantería</span>
                   </div>
                   <span style={{ fontSize: 13, fontWeight: 600, color: '#1E293B' }}>
-                    {locatedItems.length} reg · {locatedUnits} uds
+                    {locatedUnits} unidades
                   </span>
                 </div>
                 <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
@@ -228,7 +228,7 @@ export function StockDashboard() {
                     <span style={{ fontSize: 13, color: '#475569' }}>Sin ubicar</span>
                   </div>
                   <span style={{ fontSize: 13, fontWeight: 600, color: '#1E293B' }}>
-                    {unlocatedItems.length} reg · {unlocatedUnits} uds
+                    {unlocatedUnits} unidades
                   </span>
                 </div>
               </div>
