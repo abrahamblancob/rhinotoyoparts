@@ -427,6 +427,7 @@ export function WarehouseLayoutPage() {
           warehouseId={activeWarehouse.id}
           orgId={activeWarehouse.org_id}
           onBack={handleBackToMap}
+          onStockChanged={handleRefresh}
         />
       </div>
     );
@@ -580,7 +581,7 @@ export function WarehouseLayoutPage() {
           </div>
           <div>
             <p style={{ fontSize: 22, fontWeight: 700, color: '#1E293B', margin: 0 }}>
-              {statsLoading ? '...' : stats?.totalLocations ?? 0}
+              {statsLoading ? '...' : `${stats?.occupiedLocations ?? 0}/${stats?.totalLocations ?? 0}`}
             </p>
             <p style={{ fontSize: 12, color: '#94A3B8', margin: 0 }}>Ubicaciones</p>
           </div>

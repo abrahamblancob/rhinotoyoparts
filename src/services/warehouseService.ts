@@ -163,6 +163,7 @@ export async function getStockByOrg(orgId: string) {
     sb.from('inventory_stock')
       .select('*, product:products(name, sku, brand), location:warehouse_locations(code)')
       .eq('org_id', orgId)
+      .not('warehouse_id', 'is', null)
       .order('updated_at', { ascending: false })
   );
 }

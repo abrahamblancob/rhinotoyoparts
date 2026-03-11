@@ -12,9 +12,10 @@ interface RackDetailViewProps {
   warehouseId: string;
   orgId: string;
   onBack: () => void;
+  onStockChanged?: () => void;
 }
 
-export function RackDetailView({ rack, warehouseId, orgId, onBack }: RackDetailViewProps) {
+export function RackDetailView({ rack, warehouseId, orgId, onBack, onStockChanged }: RackDetailViewProps) {
   const { data: locations, loading: locationsLoading, reload: reloadLocations } = useWarehouseLocations(warehouseId, rack.id);
 
   const stockFetcher = useCallback(
@@ -59,6 +60,7 @@ export function RackDetailView({ rack, warehouseId, orgId, onBack }: RackDetailV
     setSelectedLocation(null);
     reloadLocations();
     reloadStock();
+    onStockChanged?.();
   };
 
   return (

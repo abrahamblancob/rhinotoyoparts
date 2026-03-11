@@ -47,9 +47,27 @@ export async function addReceivingItem(data: {
   product_id: string;
   expected_quantity: number;
 }) {
-  return query<ReceivingOrderItem>((sb) =>
+  const result = await query<ReceivingOrderItem>((sb) =>
     sb.from('receiving_order_items').insert(data).select().single()
   );
+  // Translate UNIQUE constraint error to user-friendly message
+  if (result.error && result.error.includes('uq_receiving_order_product')) {
+    return { data: null, error: 'Este producto ya fue agregado a esta orden de recepcion.' };
+  }
+  return result;
+}
+
+export async function deleteReceivingItem(itemId: string) {
+  const { error } = await supabase
+    .from('receiving_order_items')
+    .delete()
+    .eq('id', itemId)
+    .eq('status', 'pending');
+
+  if (error) {
+    return { data: null, error: error.message };
+  }
+  return { data: null, error: null };
 }
 
 export async function receiveItem(itemId: string, data: {

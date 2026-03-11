@@ -1,4 +1,4 @@
-import { useState, useCallback, useRef, useEffect } from 'react';
+import { useState, useCallback, useRef, useEffect, useMemo } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import {
   ArrowLeft,
@@ -7,11 +7,15 @@ import {
   MapPin,
   Package,
   Plus,
+  Printer,
+  QrCode,
   Search,
+  Trash2,
   Truck,
   User,
   X,
 } from 'lucide-react';
+import { QRCodeSVG } from 'qrcode.react';
 import { useAuthStore } from '@/stores/authStore.ts';
 import { usePermissions } from '@/hooks/usePermissions.ts';
 import { useAsyncData } from '@/hooks/useAsyncData.ts';
@@ -67,6 +71,9 @@ export function ReceivingDetailPage() {
   const [actionLoading, setActionLoading] = useState(false);
   const [receiveModal, setReceiveModal] = useState<ReceivingOrderItem | null>(null);
   const [showAddProduct, setShowAddProduct] = useState(false);
+  const [confirmDeleteId, setConfirmDeleteId] = useState<string | null>(null);
+  const [deletingId, setDeletingId] = useState<string | null>(null);
+  const [qrItemId, setQrItemId] = useState<string | null>(null);
 
   const hasWritePermission = canWrite('receiving');
 
@@ -107,6 +114,54 @@ export function ReceivingDetailPage() {
     await receivingService.completeReceiving(receivingId, user.id);
     await reloadOrder();
     setActionLoading(false);
+  };
+
+  const handleDeleteItem = async (itemId: string) => {
+    setDeletingId(itemId);
+    const result = await receivingService.deleteReceivingItem(itemId);
+    setDeletingId(null);
+    setConfirmDeleteId(null);
+    if (!result.error) {
+      reloadItems();
+    }
+  };
+
+  const handlePrintProductQR = (item: ReceivingOrderItem) => {
+    const sku = item.product?.sku ?? '—';
+    const name = item.product?.name ?? 'Producto';
+    const printWindow = window.open('', '_blank', 'width=400,height=550');
+    if (!printWindow) return;
+    printWindow.document.write(`
+      <!DOCTYPE html>
+      <html>
+      <head>
+        <title>QR - ${sku}</title>
+        <style>
+          body { margin: 0; display: flex; flex-direction: column; align-items: center; justify-content: center; min-height: 100vh; font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; }
+          .sku { font-size: 24px; font-weight: 800; color: #1E293B; margin-bottom: 4px; letter-spacing: 1px; font-family: monospace; }
+          .name { font-size: 13px; color: #64748B; margin-bottom: 14px; text-align: center; max-width: 280px; }
+          .qr-container { padding: 20px; border: 2px solid #E2E8F0; border-radius: 12px; }
+          .location { font-size: 12px; color: #94A3B8; margin-top: 10px; }
+          @media print { body { margin: 0; } .qr-container { border: none; } }
+        </style>
+      </head>
+      <body>
+        <div class="sku">${sku}</div>
+        <div class="name">${name}</div>
+        <div class="qr-container" id="qr-target"></div>
+        ${item.location?.code ? `<div class="location">Ubicacion: ${item.location.code}</div>` : ''}
+      </body>
+      </html>
+    `);
+    printWindow.document.close();
+    const size = 200;
+    const svgEl = document.getElementById(`qr-product-${item.id}`)?.cloneNode(true) as SVGElement | null;
+    if (svgEl) {
+      svgEl.setAttribute('width', String(size));
+      svgEl.setAttribute('height', String(size));
+      printWindow.document.getElementById('qr-target')?.appendChild(svgEl);
+    }
+    setTimeout(() => { printWindow.print(); }, 300);
   };
 
   if (loading) {
@@ -228,71 +283,183 @@ export function ReceivingDetailPage() {
           <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
             {allItems.map((item) => {
               const itemStatusStyle = ITEM_STATUS_COLORS[item.status];
+              const isQRExpanded = qrItemId === item.id;
               return (
                 <div
                   key={item.id}
                   style={{
-                    display: 'flex',
-                    alignItems: 'center',
-                    gap: 16,
-                    padding: 16,
                     borderRadius: 8,
                     border: '1px solid #E1DFDD',
                     backgroundColor: item.status === 'received' ? '#F0FDF4' : '#fff',
-                    flexWrap: 'wrap',
+                    overflow: 'hidden',
                   }}
                 >
-                  {/* Product */}
-                  <div style={{ flex: 1, minWidth: 150 }}>
-                    <div style={{ fontWeight: 500, fontSize: 14, color: '#323130' }}>
-                      {item.product?.name ?? '-'}
-                    </div>
-                    <div style={{ fontSize: 12, color: '#8A8886' }}>
-                      SKU: {item.product?.sku ?? '-'}
-                    </div>
-                  </div>
-
-                  {/* Expected qty */}
-                  <div style={{ minWidth: 100 }}>
-                    <div style={{ fontSize: 12, color: '#605E5C' }}>Esperado</div>
-                    <div style={{ fontWeight: 600 }}>{item.expected_quantity}</div>
-                  </div>
-
-                  {/* Received qty */}
-                  <div style={{ minWidth: 100 }}>
-                    <div style={{ fontSize: 12, color: '#605E5C' }}>Recibido</div>
-                    <div style={{ fontWeight: 600, color: item.received_quantity >= item.expected_quantity ? '#10B981' : '#F97316' }}>
-                      {item.received_quantity}
-                    </div>
-                  </div>
-
-                  {/* Location */}
-                  <div style={{ minWidth: 100 }}>
-                    <div style={{ display: 'flex', alignItems: 'center', gap: 4, fontSize: 12, color: '#605E5C' }}>
-                      <MapPin size={12} /> Ubicacion
-                    </div>
-                    <div style={{ fontFamily: 'monospace', fontSize: 13 }}>
-                      {item.location?.code ?? 'Sin asignar'}
-                    </div>
-                  </div>
-
-                  {/* Status */}
-                  <span
-                    className="rh-badge"
-                    style={{ backgroundColor: itemStatusStyle.bg, color: itemStatusStyle.text }}
+                  {/* Item row */}
+                  <div
+                    style={{
+                      display: 'flex',
+                      alignItems: 'center',
+                      gap: 16,
+                      padding: 16,
+                      flexWrap: 'wrap',
+                    }}
                   >
-                    {ITEM_STATUS_LABELS[item.status]}
-                  </span>
+                    {/* Product */}
+                    <div style={{ flex: 1, minWidth: 150 }}>
+                      <div style={{ fontWeight: 500, fontSize: 14, color: '#323130' }}>
+                        {item.product?.name ?? '-'}
+                      </div>
+                      <div style={{ fontSize: 12, color: '#8A8886' }}>
+                        SKU: {item.product?.sku ?? '-'}
+                      </div>
+                    </div>
 
-                  {/* Action */}
-                  {hasWritePermission && item.status === 'pending' && order.status !== 'completed' && (
-                    <button
-                      className="rh-btn rh-btn-primary"
-                      style={{ fontSize: 12, padding: '4px 12px' }}
-                      onClick={() => setReceiveModal(item)}
+                    {/* Expected qty */}
+                    <div style={{ minWidth: 100 }}>
+                      <div style={{ fontSize: 12, color: '#605E5C' }}>Esperado</div>
+                      <div style={{ fontWeight: 600 }}>{item.expected_quantity}</div>
+                    </div>
+
+                    {/* Received qty */}
+                    <div style={{ minWidth: 100 }}>
+                      <div style={{ fontSize: 12, color: '#605E5C' }}>Recibido</div>
+                      <div style={{ fontWeight: 600, color: item.received_quantity >= item.expected_quantity ? '#10B981' : '#F97316' }}>
+                        {item.received_quantity}
+                      </div>
+                    </div>
+
+                    {/* Location */}
+                    <div style={{ minWidth: 100 }}>
+                      <div style={{ display: 'flex', alignItems: 'center', gap: 4, fontSize: 12, color: '#605E5C' }}>
+                        <MapPin size={12} /> Ubicacion
+                      </div>
+                      <div style={{ fontFamily: 'monospace', fontSize: 13 }}>
+                        {item.location?.code ?? 'Sin asignar'}
+                      </div>
+                    </div>
+
+                    {/* Status */}
+                    <span
+                      className="rh-badge"
+                      style={{ backgroundColor: itemStatusStyle.bg, color: itemStatusStyle.text }}
                     >
-                      Recibir
-                    </button>
+                      {ITEM_STATUS_LABELS[item.status]}
+                    </span>
+
+                    {/* Actions */}
+                    <div style={{ display: 'flex', gap: 6, alignItems: 'center' }}>
+                      {/* QR Button */}
+                      <button
+                        className="rh-btn"
+                        style={{
+                          fontSize: 12, padding: '4px 10px',
+                          display: 'flex', alignItems: 'center', gap: 4,
+                          color: isQRExpanded ? '#16A34A' : '#64748B',
+                          borderColor: isQRExpanded ? '#BBF7D0' : undefined,
+                          backgroundColor: isQRExpanded ? '#F0FDF4' : undefined,
+                        }}
+                        onClick={() => setQrItemId(isQRExpanded ? null : item.id)}
+                      >
+                        <QrCode size={14} />
+                        {isQRExpanded ? 'Ocultar QR' : 'Ver QR'}
+                      </button>
+
+                      {hasWritePermission && item.status === 'pending' && order.status !== 'completed' && (
+                        <>
+                          <button
+                            className="rh-btn rh-btn-primary"
+                            style={{ fontSize: 12, padding: '4px 12px' }}
+                            onClick={() => setReceiveModal(item)}
+                          >
+                            Recibir
+                          </button>
+                          {confirmDeleteId === item.id ? (
+                            <div style={{ display: 'flex', gap: 4, alignItems: 'center' }}>
+                              <span style={{ fontSize: 11, color: '#D3010A', fontWeight: 500 }}>Eliminar?</span>
+                              <button
+                                className="rh-btn"
+                                style={{ fontSize: 11, padding: '2px 8px', color: '#D3010A', borderColor: '#D3010A' }}
+                                onClick={() => handleDeleteItem(item.id)}
+                                disabled={deletingId === item.id}
+                              >
+                                {deletingId === item.id ? '...' : 'Si'}
+                              </button>
+                              <button
+                                className="rh-btn"
+                                style={{ fontSize: 11, padding: '2px 8px' }}
+                                onClick={() => setConfirmDeleteId(null)}
+                              >
+                                No
+                              </button>
+                            </div>
+                          ) : (
+                            <button
+                              className="rh-btn"
+                              style={{ fontSize: 12, padding: '4px 8px', color: '#D3010A' }}
+                              onClick={() => setConfirmDeleteId(item.id)}
+                              title="Eliminar item"
+                            >
+                              <Trash2 size={14} />
+                            </button>
+                          )}
+                        </>
+                      )}
+                    </div>
+                  </div>
+
+                  {/* Expandable QR Section */}
+                  {isQRExpanded && (
+                    <div
+                      style={{
+                        padding: '12px 16px',
+                        backgroundColor: '#F0FDF4',
+                        borderTop: '1px solid #BBF7D0',
+                      }}
+                    >
+                      <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 12 }}>
+                        <QrCode size={16} style={{ color: '#16A34A', flexShrink: 0 }} />
+                        <div style={{ flex: 1 }}>
+                          <p style={{ fontSize: 12, fontWeight: 600, color: '#166534', margin: 0 }}>
+                            QR del Producto
+                          </p>
+                          <p style={{ fontSize: 11, color: '#15803D', margin: '1px 0 0', fontFamily: 'monospace' }}>
+                            {item.product?.sku ?? '—'}
+                          </p>
+                        </div>
+                        <button
+                          onClick={() => handlePrintProductQR(item)}
+                          className="rh-btn rh-btn-ghost"
+                          style={{ padding: '4px 10px', display: 'flex', alignItems: 'center', gap: 4, fontSize: 12 }}
+                        >
+                          <Printer size={13} />
+                          Imprimir QR
+                        </button>
+                      </div>
+
+                      <div style={{
+                        display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 6,
+                        padding: '12px 0',
+                      }}>
+                        <div style={{
+                          padding: 14, backgroundColor: '#fff', borderRadius: 10,
+                          border: '1px solid #E2E8F0', display: 'inline-block',
+                        }}>
+                          <QRCodeSVG
+                            id={`qr-product-${item.id}`}
+                            value={item.product?.sku ?? item.product_id}
+                            size={140}
+                            level="M"
+                            includeMargin={false}
+                          />
+                        </div>
+                        <p style={{ fontSize: 13, fontWeight: 700, color: '#1E293B', margin: 0, fontFamily: 'monospace' }}>
+                          {item.product?.sku ?? '—'}
+                        </p>
+                        <p style={{ fontSize: 11, color: '#64748B', margin: 0, textAlign: 'center', maxWidth: 220 }}>
+                          {item.product?.name ?? ''}
+                        </p>
+                      </div>
+                    </div>
                   )}
                 </div>
               );
@@ -319,6 +486,7 @@ export function ReceivingDetailPage() {
         open={showAddProduct}
         receivingOrderId={order.id}
         warehouseOrgId={order.warehouse?.org_id ?? order.org_id}
+        existingItems={allItems}
         onClose={() => setShowAddProduct(false)}
         onAdded={() => {
           setShowAddProduct(false);
@@ -341,11 +509,12 @@ interface AddReceivingProductModalProps {
   open: boolean;
   receivingOrderId: string;
   warehouseOrgId: string;
+  existingItems: ReceivingOrderItem[];
   onClose: () => void;
   onAdded: () => void;
 }
 
-function AddReceivingProductModal({ open, receivingOrderId, warehouseOrgId, onClose, onAdded }: AddReceivingProductModalProps) {
+function AddReceivingProductModal({ open, receivingOrderId, warehouseOrgId, existingItems, onClose, onAdded }: AddReceivingProductModalProps) {
   const [searchTerm, setSearchTerm] = useState('');
   const [searchResults, setSearchResults] = useState<Product[]>([]);
   const [searching, setSearching] = useState(false);
@@ -358,6 +527,21 @@ function AddReceivingProductModal({ open, receivingOrderId, warehouseOrgId, onCl
 
   const debounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const searchRef = useRef('');
+
+  // Dedup: track products already added to this receiving order
+  const addedProductIds = useMemo(
+    () => new Set(existingItems.map((i) => i.product_id)),
+    [existingItems]
+  );
+
+  // Stock already committed in this order, by product
+  const committedByProduct = useMemo(() => {
+    const map = new Map<string, number>();
+    for (const item of existingItems) {
+      map.set(item.product_id, (map.get(item.product_id) ?? 0) + item.expected_quantity);
+    }
+    return map;
+  }, [existingItems]);
 
   useEffect(() => {
     return () => { if (debounceRef.current) clearTimeout(debounceRef.current); };
@@ -427,8 +611,10 @@ function AddReceivingProductModal({ open, receivingOrderId, warehouseOrgId, onCl
   const handleSubmit = async () => {
     if (!selectedProduct) return;
     if (expectedQty <= 0) { setError('La cantidad debe ser mayor a 0'); return; }
-    if (expectedQty > selectedProduct.stock) {
-      setError(`Stock insuficiente. Disponible: ${selectedProduct.stock}`);
+    const alreadyCommitted = committedByProduct.get(selectedProduct.id) ?? 0;
+    const availableStock = selectedProduct.stock - alreadyCommitted;
+    if (expectedQty > availableStock) {
+      setError(`Stock insuficiente. Disponible: ${availableStock}${alreadyCommitted > 0 ? ` (${alreadyCommitted} ya comprometidas en esta orden)` : ''}`);
       return;
     }
 
@@ -451,8 +637,9 @@ function AddReceivingProductModal({ open, receivingOrderId, warehouseOrgId, onCl
     onAdded();
   };
 
-  // Products to display: search results or initial catalog
-  const displayProducts = searchTerm.length >= 2 ? searchResults : initialProducts;
+  // Products to display: search results or initial catalog, excluding already-added
+  const displayProducts = (searchTerm.length >= 2 ? searchResults : initialProducts)
+    .filter((p) => !addedProductIds.has(p.id));
 
   return (
     <Modal
@@ -486,7 +673,7 @@ function AddReceivingProductModal({ open, receivingOrderId, warehouseOrgId, onCl
             <div style={{ flex: 1, minWidth: 0 }}>
               <p style={{ fontSize: 14, fontWeight: 600, color: '#1E293B', margin: 0 }}>{selectedProduct.name}</p>
               <p style={{ fontSize: 12, color: '#64748B', margin: '2px 0 0' }}>
-                SKU: {selectedProduct.sku}{selectedProduct.brand ? ` | ${selectedProduct.brand}` : ''} | Stock: {selectedProduct.stock}
+                SKU: {selectedProduct.sku}{selectedProduct.brand ? ` | ${selectedProduct.brand}` : ''} | Stock disponible: {selectedProduct.stock - (committedByProduct.get(selectedProduct.id) ?? 0)}
               </p>
             </div>
             <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexShrink: 0 }}>
@@ -494,7 +681,7 @@ function AddReceivingProductModal({ open, receivingOrderId, warehouseOrgId, onCl
               <input
                 type="number"
                 min={1}
-                max={selectedProduct.stock}
+                max={selectedProduct.stock - (committedByProduct.get(selectedProduct.id) ?? 0)}
                 value={expectedQty}
                 onChange={(e) => setExpectedQty(Math.max(1, parseInt(e.target.value) || 1))}
                 className="rh-input"
@@ -546,7 +733,8 @@ function AddReceivingProductModal({ open, receivingOrderId, warehouseOrgId, onCl
             }}>
               {displayProducts.map((p) => {
                 const isSelected = selectedProduct?.id === p.id;
-                const stockColor = p.stock > 10 ? '#10B981' : p.stock > 0 ? '#F59E0B' : '#D3010A';
+                const adjustedStock = p.stock - (committedByProduct.get(p.id) ?? 0);
+                const stockColor = adjustedStock > 10 ? '#10B981' : adjustedStock > 0 ? '#F59E0B' : '#D3010A';
                 return (
                   <div
                     key={p.id}
@@ -630,7 +818,7 @@ function AddReceivingProductModal({ open, receivingOrderId, warehouseOrgId, onCl
                         backgroundColor: stockColor + '15', padding: '2px 8px',
                         borderRadius: 10,
                       }}>
-                        {p.stock} en stock
+                        {adjustedStock} en stock
                       </span>
                       {p.price > 0 && (
                         <span style={{ fontSize: 12, fontWeight: 600, color: '#1E293B' }}>
@@ -646,12 +834,21 @@ function AddReceivingProductModal({ open, receivingOrderId, warehouseOrgId, onCl
             <div style={{ textAlign: 'center', padding: '40px 20px' }}>
               <Package size={36} style={{ color: '#CBD5E1', margin: '0 auto 8px' }} />
               <p style={{ fontSize: 14, color: '#94A3B8', margin: 0 }}>
-                No se encontraron productos para &quot;{searchTerm}&quot;
+                {addedProductIds.size > 0
+                  ? 'Todos los productos disponibles ya fueron agregados a esta orden.'
+                  : <>No se encontraron productos para &quot;{searchTerm}&quot;</>}
               </p>
             </div>
           ) : initialLoading ? (
             <div style={{ textAlign: 'center', padding: '40px 20px' }}>
               <p style={{ fontSize: 14, color: '#94A3B8', margin: 0 }}>Cargando catalogo...</p>
+            </div>
+          ) : !initialLoading && initialProducts.length > 0 && displayProducts.length === 0 ? (
+            <div style={{ textAlign: 'center', padding: '40px 20px' }}>
+              <CheckCircle2 size={36} style={{ color: '#10B981', margin: '0 auto 8px' }} />
+              <p style={{ fontSize: 14, color: '#64748B', margin: 0 }}>
+                Todos los productos disponibles ya fueron agregados a esta orden.
+              </p>
             </div>
           ) : (
             <div style={{ textAlign: 'center', padding: '40px 20px' }}>
@@ -689,6 +886,10 @@ function ReceiveItemModal({ item, warehouseId, orgId, onClose, onReceived }: Rec
     const qty = parseInt(receivedQty, 10);
     if (isNaN(qty) || qty <= 0) {
       setError('Ingresa una cantidad valida mayor a 0');
+      return;
+    }
+    if (qty > item.expected_quantity) {
+      setError(`La cantidad no puede exceder la esperada (${item.expected_quantity})`);
       return;
     }
 
@@ -755,7 +956,11 @@ function ReceiveItemModal({ item, warehouseId, orgId, onClose, onReceived }: Rec
             className="rh-input"
             placeholder={String(item.expected_quantity)}
             min={1}
+            max={item.expected_quantity}
           />
+          <p style={{ fontSize: 11, color: '#94A3B8', margin: '4px 0 0' }}>
+            Maximo: {item.expected_quantity} unidades
+          </p>
         </div>
 
         <div>

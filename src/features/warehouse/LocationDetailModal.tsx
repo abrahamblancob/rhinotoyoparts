@@ -1,5 +1,6 @@
 import { useState, useCallback, useRef } from 'react';
-import { MapPin, Package, QrCode, Printer, Search, Trash2, X } from 'lucide-react';
+import { MapPin, Package, QrCode, Printer, Eye, Search, Trash2, X } from 'lucide-react';
+import { QRCodeSVG } from 'qrcode.react';
 import { Modal } from '@/components/hub/shared/Modal.tsx';
 import { useAsyncData } from '@/hooks/useAsyncData.ts';
 import * as warehouseService from '@/services/warehouseService.ts';
@@ -30,6 +31,8 @@ export function LocationDetailModal({ open, location, warehouseId, orgId, onClos
   const [selectedProduct, setSelectedProduct] = useState<InventoryStock | null>(null);
   const [removing, setRemoving] = useState(false);
   const [confirmRemove, setConfirmRemove] = useState(false);
+  const [showQR, setShowQR] = useState(false);
+  const [showProductQR, setShowProductQR] = useState(false);
   const [error, setError] = useState('');
 
   // Cleanup ref for cancel handler
@@ -160,8 +163,78 @@ export function LocationDetailModal({ open, location, warehouseId, orgId, onClos
   };
 
   const handlePrintQR = () => {
-    // Placeholder - will implement QR printing
-    alert(`Imprimir QR para ubicacion: ${location.code}\nQR: ${location.qr_code ?? location.code}`);
+    const qrValue = location.qr_code ?? location.code;
+    const printWindow = window.open('', '_blank', 'width=400,height=500');
+    if (!printWindow) return;
+    printWindow.document.write(`
+      <!DOCTYPE html>
+      <html>
+      <head>
+        <title>QR - ${location.code}</title>
+        <style>
+          body { margin: 0; display: flex; flex-direction: column; align-items: center; justify-content: center; min-height: 100vh; font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; }
+          .label { font-size: 28px; font-weight: 800; color: #1E293B; margin-bottom: 12px; letter-spacing: 1px; }
+          .sublabel { font-size: 13px; color: #64748B; margin-top: 10px; }
+          .qr-container { padding: 20px; border: 2px solid #E2E8F0; border-radius: 12px; }
+          @media print { body { margin: 0; } .qr-container { border: none; } }
+        </style>
+      </head>
+      <body>
+        <div class="label">${location.code}</div>
+        <div class="qr-container" id="qr-target"></div>
+        <div class="sublabel">${qrValue}</div>
+      </body>
+      </html>
+    `);
+    printWindow.document.close();
+    // Render QR into the print window using inline SVG
+    const size = 200;
+    const svgEl = document.getElementById('qr-preview-svg')?.cloneNode(true) as SVGElement | null;
+    if (svgEl) {
+      svgEl.setAttribute('width', String(size));
+      svgEl.setAttribute('height', String(size));
+      printWindow.document.getElementById('qr-target')?.appendChild(svgEl);
+    }
+    setTimeout(() => { printWindow.print(); }, 300);
+  };
+
+  const handlePrintProductQR = () => {
+    if (!locationStock) return;
+    const sku = locationStock.product?.sku ?? '—';
+    const name = locationStock.product?.name ?? 'Producto';
+    const printWindow = window.open('', '_blank', 'width=400,height=550');
+    if (!printWindow) return;
+    printWindow.document.write(`
+      <!DOCTYPE html>
+      <html>
+      <head>
+        <title>QR - ${sku}</title>
+        <style>
+          body { margin: 0; display: flex; flex-direction: column; align-items: center; justify-content: center; min-height: 100vh; font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; }
+          .sku { font-size: 24px; font-weight: 800; color: #1E293B; margin-bottom: 4px; letter-spacing: 1px; font-family: monospace; }
+          .name { font-size: 13px; color: #64748B; margin-bottom: 14px; text-align: center; max-width: 280px; }
+          .qr-container { padding: 20px; border: 2px solid #E2E8F0; border-radius: 12px; }
+          .location { font-size: 12px; color: #94A3B8; margin-top: 10px; }
+          @media print { body { margin: 0; } .qr-container { border: none; } }
+        </style>
+      </head>
+      <body>
+        <div class="sku">${sku}</div>
+        <div class="name">${name}</div>
+        <div class="qr-container" id="qr-target"></div>
+        <div class="location">Ubicacion: ${location.code}</div>
+      </body>
+      </html>
+    `);
+    printWindow.document.close();
+    const size = 200;
+    const svgEl = document.getElementById('qr-product-svg')?.cloneNode(true) as SVGElement | null;
+    if (svgEl) {
+      svgEl.setAttribute('width', String(size));
+      svgEl.setAttribute('height', String(size));
+      printWindow.document.getElementById('qr-target')?.appendChild(svgEl);
+    }
+    setTimeout(() => { printWindow.print(); }, 300);
   };
 
   return (
@@ -233,9 +306,6 @@ export function LocationDetailModal({ open, location, warehouseId, orgId, onClos
       {/* QR Section */}
       <div
         style={{
-          display: 'flex',
-          alignItems: 'center',
-          gap: 12,
           padding: 12,
           backgroundColor: '#FFFBEB',
           borderRadius: 8,
@@ -243,23 +313,57 @@ export function LocationDetailModal({ open, location, warehouseId, orgId, onClos
           border: '1px solid #FEF3C7',
         }}
       >
-        <QrCode size={20} style={{ color: '#D97706', flexShrink: 0 }} />
-        <div style={{ flex: 1 }}>
-          <p style={{ fontSize: 13, fontWeight: 600, color: '#92400E', margin: 0 }}>
-            Codigo QR
-          </p>
-          <p style={{ fontSize: 12, color: '#B45309', margin: '2px 0 0', fontFamily: 'monospace' }}>
-            {location.qr_code ?? location.code}
-          </p>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
+          <QrCode size={20} style={{ color: '#D97706', flexShrink: 0 }} />
+          <div style={{ flex: 1 }}>
+            <p style={{ fontSize: 13, fontWeight: 600, color: '#92400E', margin: 0 }}>
+              Codigo QR
+            </p>
+            <p style={{ fontSize: 12, color: '#B45309', margin: '2px 0 0', fontFamily: 'monospace' }}>
+              {location.qr_code ?? location.code}
+            </p>
+          </div>
+          <button
+            onClick={() => setShowQR(!showQR)}
+            className="rh-btn rh-btn-ghost"
+            style={{ padding: '6px 10px', display: 'flex', alignItems: 'center', gap: 4, fontSize: 12 }}
+          >
+            <Eye size={14} />
+            {showQR ? 'Ocultar' : 'Ver QR'}
+          </button>
+          <button
+            onClick={handlePrintQR}
+            className="rh-btn rh-btn-ghost"
+            style={{ padding: '6px 10px', display: 'flex', alignItems: 'center', gap: 4, fontSize: 12 }}
+          >
+            <Printer size={14} />
+            Imprimir
+          </button>
         </div>
-        <button
-          onClick={handlePrintQR}
-          className="rh-btn rh-btn-ghost"
-          style={{ padding: '6px 10px', display: 'flex', alignItems: 'center', gap: 4, fontSize: 12 }}
-        >
-          <Printer size={14} />
-          Imprimir QR
-        </button>
+
+        {/* QR Code Preview */}
+        {showQR && (
+          <div style={{
+            display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 8,
+            marginTop: 12, paddingTop: 12, borderTop: '1px solid #FEF3C7',
+          }}>
+            <div style={{
+              padding: 16, backgroundColor: '#fff', borderRadius: 10,
+              border: '1px solid #E2E8F0', display: 'inline-block',
+            }}>
+              <QRCodeSVG
+                id="qr-preview-svg"
+                value={location.qr_code ?? location.code}
+                size={160}
+                level="M"
+                includeMargin={false}
+              />
+            </div>
+            <p style={{ fontSize: 14, fontWeight: 700, color: '#1E293B', margin: 0, letterSpacing: 1 }}>
+              {location.code}
+            </p>
+          </div>
+        )}
       </div>
 
       {/* Stock Info */}
@@ -305,6 +409,69 @@ export function LocationDetailModal({ open, location, warehouseId, orgId, onClos
                 <p style={{ fontSize: 11, color: '#94A3B8', margin: 0 }}>Lote</p>
                 <p style={{ fontSize: 13, fontWeight: 500, color: '#475569', margin: '2px 0 0' }}>
                   {locationStock.lot_number}
+                </p>
+              </div>
+            )}
+          </div>
+
+          {/* Product QR Section */}
+          <div
+            style={{
+              marginTop: 14, padding: 10,
+              backgroundColor: '#F0FDF4', borderRadius: 8,
+              border: '1px solid #BBF7D0',
+            }}
+          >
+            <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+              <QrCode size={16} style={{ color: '#16A34A', flexShrink: 0 }} />
+              <div style={{ flex: 1 }}>
+                <p style={{ fontSize: 12, fontWeight: 600, color: '#166534', margin: 0 }}>
+                  QR del Producto
+                </p>
+                <p style={{ fontSize: 11, color: '#15803D', margin: '1px 0 0', fontFamily: 'monospace' }}>
+                  {locationStock.product?.sku ?? '—'}
+                </p>
+              </div>
+              <button
+                onClick={() => setShowProductQR(!showProductQR)}
+                className="rh-btn rh-btn-ghost"
+                style={{ padding: '4px 8px', display: 'flex', alignItems: 'center', gap: 4, fontSize: 11 }}
+              >
+                <Eye size={12} />
+                {showProductQR ? 'Ocultar' : 'Ver QR'}
+              </button>
+              <button
+                onClick={handlePrintProductQR}
+                className="rh-btn rh-btn-ghost"
+                style={{ padding: '4px 8px', display: 'flex', alignItems: 'center', gap: 4, fontSize: 11 }}
+              >
+                <Printer size={12} />
+                Imprimir
+              </button>
+            </div>
+
+            {showProductQR && (
+              <div style={{
+                display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 6,
+                marginTop: 10, paddingTop: 10, borderTop: '1px solid #BBF7D0',
+              }}>
+                <div style={{
+                  padding: 14, backgroundColor: '#fff', borderRadius: 10,
+                  border: '1px solid #E2E8F0', display: 'inline-block',
+                }}>
+                  <QRCodeSVG
+                    id="qr-product-svg"
+                    value={locationStock.product?.sku ?? locationStock.product_id}
+                    size={140}
+                    level="M"
+                    includeMargin={false}
+                  />
+                </div>
+                <p style={{ fontSize: 13, fontWeight: 700, color: '#1E293B', margin: 0, fontFamily: 'monospace' }}>
+                  {locationStock.product?.sku ?? '—'}
+                </p>
+                <p style={{ fontSize: 11, color: '#64748B', margin: 0, textAlign: 'center', maxWidth: 220 }}>
+                  {locationStock.product?.name ?? ''}
                 </p>
               </div>
             )}
