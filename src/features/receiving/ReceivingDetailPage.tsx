@@ -353,6 +353,8 @@ function AddReceivingProductModal({ open, receivingOrderId, warehouseOrgId, onCl
   const [expectedQty, setExpectedQty] = useState(1);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [initialProducts, setInitialProducts] = useState<Product[]>([]);
+  const [initialLoading, setInitialLoading] = useState(false);
 
   const debounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const searchRef = useRef('');
@@ -360,6 +362,24 @@ function AddReceivingProductModal({ open, receivingOrderId, warehouseOrgId, onCl
   useEffect(() => {
     return () => { if (debounceRef.current) clearTimeout(debounceRef.current); };
   }, []);
+
+  // Load initial products when modal opens
+  useEffect(() => {
+    if (!open || !warehouseOrgId) return;
+    setInitialLoading(true);
+    supabase
+      .from('products')
+      .select('*')
+      .eq('org_id', warehouseOrgId)
+      .eq('status', 'active')
+      .gt('stock', 0)
+      .order('name')
+      .limit(50)
+      .then(({ data }) => {
+        setInitialProducts((data as Product[]) ?? []);
+        setInitialLoading(false);
+      });
+  }, [open, warehouseOrgId]);
 
   // Reset on close
   useEffect(() => {
@@ -370,6 +390,7 @@ function AddReceivingProductModal({ open, receivingOrderId, warehouseOrgId, onCl
       setSelectedProduct(null);
       setExpectedQty(1);
       setError(null);
+      setInitialProducts([]);
     }
   }, [open]);
 
@@ -389,7 +410,7 @@ function AddReceivingProductModal({ open, receivingOrderId, warehouseOrgId, onCl
         .eq('status', 'active')
         .gt('stock', 0)
         .or(`name.ilike.%${s}%,sku.ilike.%${s}%,oem_number.ilike.%${s}%,brand.ilike.%${s}%`)
-        .limit(10);
+        .limit(30);
       if (err) console.error('Product search error:', err);
       if (searchRef.current === query) {
         setSearchResults((data as Product[]) ?? []);
@@ -400,8 +421,6 @@ function AddReceivingProductModal({ open, receivingOrderId, warehouseOrgId, onCl
 
   const handleSelectProduct = (product: Product) => {
     setSelectedProduct(product);
-    setSearchTerm('');
-    setSearchResults([]);
     setExpectedQty(1);
   };
 
@@ -432,12 +451,15 @@ function AddReceivingProductModal({ open, receivingOrderId, warehouseOrgId, onCl
     onAdded();
   };
 
+  // Products to display: search results or initial catalog
+  const displayProducts = searchTerm.length >= 2 ? searchResults : initialProducts;
+
   return (
     <Modal
       open={open}
       onClose={onClose}
       title="Agregar Producto a Recepcion"
-      width="520px"
+      width="900px"
       footer={
         <div style={{ display: 'flex', gap: 8, justifyContent: 'flex-end' }}>
           <button className="rh-btn" onClick={onClose} disabled={saving}>Cancelar</button>
@@ -452,124 +474,194 @@ function AddReceivingProductModal({ open, receivingOrderId, warehouseOrgId, onCl
       }
     >
       <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
-        {error && <p style={{ color: '#D3010A', fontSize: 13 }}>{error}</p>}
+        {error && <p style={{ color: '#D3010A', fontSize: 13, margin: 0 }}>{error}</p>}
 
-        {/* Product Search */}
-        {!selectedProduct ? (
-          <div>
-            <label className="rh-label" style={{ marginBottom: 6, display: 'block' }}>Buscar producto del catalogo</label>
-            <div style={{ position: 'relative' }}>
-              <div style={{ position: 'relative' }}>
-                <Search
-                  size={16}
-                  style={{ position: 'absolute', left: 10, top: '50%', transform: 'translateY(-50%)', color: '#94A3B8', zIndex: 1 }}
-                />
-                <input
-                  type="text"
-                  value={searchTerm}
-                  onChange={(e) => handleSearch(e.target.value)}
-                  placeholder="Buscar por nombre, SKU, OEM o marca..."
-                  className="rh-input"
-                  style={{ paddingLeft: 34, paddingRight: 36 }}
-                  autoFocus
-                />
-                {searching && (
-                  <div style={{
-                    position: 'absolute', right: 10, top: '50%', transform: 'translateY(-50%)',
-                    width: 16, height: 16, border: '2px solid #E2E8F0', borderTopColor: '#D3010A',
-                    borderRadius: '50%', animation: 'spin 0.6s linear infinite',
-                  }} />
-                )}
-              </div>
+        {/* Selected product confirmation bar */}
+        {selectedProduct && (
+          <div style={{
+            display: 'flex', alignItems: 'center', gap: 12,
+            padding: '12px 16px', backgroundColor: '#F0FDF4', borderRadius: 10, border: '1px solid #BBF7D0',
+          }}>
+            <CheckCircle2 size={20} style={{ color: '#10B981', flexShrink: 0 }} />
+            <div style={{ flex: 1, minWidth: 0 }}>
+              <p style={{ fontSize: 14, fontWeight: 600, color: '#1E293B', margin: 0 }}>{selectedProduct.name}</p>
+              <p style={{ fontSize: 12, color: '#64748B', margin: '2px 0 0' }}>
+                SKU: {selectedProduct.sku}{selectedProduct.brand ? ` | ${selectedProduct.brand}` : ''} | Stock: {selectedProduct.stock}
+              </p>
+            </div>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexShrink: 0 }}>
+              <label style={{ fontSize: 12, color: '#64748B', fontWeight: 500 }}>Cantidad:</label>
+              <input
+                type="number"
+                min={1}
+                max={selectedProduct.stock}
+                value={expectedQty}
+                onChange={(e) => setExpectedQty(Math.max(1, parseInt(e.target.value) || 1))}
+                className="rh-input"
+                style={{ width: 80, textAlign: 'center', padding: '6px 8px' }}
+              />
+            </div>
+            <button onClick={() => setSelectedProduct(null)}
+              style={{ background: 'none', border: 'none', cursor: 'pointer', color: '#94A3B8', padding: 4 }}
+              title="Cambiar producto">
+              <X size={16} />
+            </button>
+          </div>
+        )}
 
-              {/* Dropdown Results */}
-              {searchResults.length > 0 && (
-                <div style={{
-                  position: 'absolute', top: '100%', left: 0, right: 0,
-                  background: '#fff', border: '1px solid #E2E0DE', borderRadius: 8,
-                  maxHeight: 240, overflowY: 'auto', zIndex: 10,
-                  boxShadow: '0 4px 16px rgba(0,0,0,0.12)',
-                }}>
-                  {searchResults.map((p) => (
-                    <div
-                      key={p.id}
-                      onClick={() => handleSelectProduct(p)}
-                      style={{
-                        display: 'flex', justifyContent: 'space-between', alignItems: 'center',
-                        padding: '10px 14px', cursor: 'pointer', fontSize: 14,
-                        borderBottom: '1px solid #F1F5F9', transition: 'background 0.15s',
-                      }}
-                      onMouseEnter={(e) => { e.currentTarget.style.background = '#F8FAFC'; }}
-                      onMouseLeave={(e) => { e.currentTarget.style.background = '#fff'; }}
-                    >
-                      <div style={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
-                        <span style={{ fontWeight: 600, fontSize: 13 }}>{p.name}</span>
-                        <span style={{ color: '#8A8886', fontSize: 11 }}>
-                          SKU: {p.sku}{p.brand ? ` | ${p.brand}` : ''}
-                        </span>
+        {/* Search Bar */}
+        <div style={{ position: 'relative' }}>
+          <Search
+            size={16}
+            style={{ position: 'absolute', left: 12, top: '50%', transform: 'translateY(-50%)', color: '#94A3B8', zIndex: 1 }}
+          />
+          <input
+            type="text"
+            value={searchTerm}
+            onChange={(e) => handleSearch(e.target.value)}
+            placeholder="Buscar por nombre, SKU, OEM o marca..."
+            className="rh-input"
+            style={{ paddingLeft: 36, paddingRight: 36, fontSize: 14 }}
+            autoFocus
+          />
+          {(searching || initialLoading) && (
+            <div style={{
+              position: 'absolute', right: 12, top: '50%', transform: 'translateY(-50%)',
+              width: 16, height: 16, border: '2px solid #E2E8F0', borderTopColor: '#D3010A',
+              borderRadius: '50%', animation: 'spin 0.6s linear infinite',
+            }} />
+          )}
+        </div>
+
+        {/* Product Cards Grid */}
+        <div style={{
+          maxHeight: 420, overflowY: 'auto', borderRadius: 10,
+          border: '1px solid #E2E8F0', backgroundColor: '#F8FAFC', padding: 12,
+        }}>
+          {displayProducts.length > 0 ? (
+            <div style={{
+              display: 'grid',
+              gridTemplateColumns: 'repeat(auto-fill, minmax(240px, 1fr))',
+              gap: 10,
+            }}>
+              {displayProducts.map((p) => {
+                const isSelected = selectedProduct?.id === p.id;
+                const stockColor = p.stock > 10 ? '#10B981' : p.stock > 0 ? '#F59E0B' : '#D3010A';
+                return (
+                  <div
+                    key={p.id}
+                    onClick={() => handleSelectProduct(p)}
+                    style={{
+                      backgroundColor: isSelected ? '#F0FDF4' : '#FFFFFF',
+                      border: isSelected ? '2px solid #10B981' : '1px solid #E2E8F0',
+                      borderRadius: 10,
+                      padding: 14,
+                      cursor: 'pointer',
+                      transition: 'all 0.15s ease',
+                      position: 'relative',
+                      overflow: 'hidden',
+                    }}
+                    onMouseEnter={(e) => {
+                      if (!isSelected) {
+                        e.currentTarget.style.borderColor = '#6366F1';
+                        e.currentTarget.style.boxShadow = '0 2px 8px rgba(99,102,241,0.12)';
+                        e.currentTarget.style.transform = 'translateY(-1px)';
+                      }
+                    }}
+                    onMouseLeave={(e) => {
+                      if (!isSelected) {
+                        e.currentTarget.style.borderColor = '#E2E8F0';
+                        e.currentTarget.style.boxShadow = 'none';
+                        e.currentTarget.style.transform = 'translateY(0)';
+                      }
+                    }}
+                  >
+                    {/* Selected checkmark */}
+                    {isSelected && (
+                      <div style={{
+                        position: 'absolute', top: 8, right: 8,
+                        width: 22, height: 22, borderRadius: '50%',
+                        backgroundColor: '#10B981', display: 'flex',
+                        alignItems: 'center', justifyContent: 'center',
+                      }}>
+                        <CheckCircle2 size={14} style={{ color: '#fff' }} />
                       </div>
-                      <div style={{ textAlign: 'right', flexShrink: 0, marginLeft: 12 }}>
-                        <span style={{ fontSize: 12, fontWeight: 600, color: p.stock > 10 ? '#10B981' : '#D97706' }}>
-                          {p.stock > 10 ? `${p.stock} en stock` : `⚠ ${p.stock} en stock`}
-                        </span>
+                    )}
+
+                    {/* Product icon + name */}
+                    <div style={{ display: 'flex', alignItems: 'flex-start', gap: 10, marginBottom: 10 }}>
+                      <div style={{
+                        width: 36, height: 36, borderRadius: 8,
+                        backgroundColor: '#EEF2FF', display: 'flex',
+                        alignItems: 'center', justifyContent: 'center', flexShrink: 0,
+                      }}>
+                        <Package size={18} style={{ color: '#6366F1' }} />
+                      </div>
+                      <div style={{ flex: 1, minWidth: 0 }}>
+                        <p style={{
+                          fontSize: 13, fontWeight: 600, color: '#1E293B', margin: 0,
+                          lineHeight: 1.3, display: '-webkit-box', WebkitLineClamp: 2,
+                          WebkitBoxOrient: 'vertical', overflow: 'hidden',
+                        }}>
+                          {p.name}
+                        </p>
                       </div>
                     </div>
-                  ))}
-                </div>
-              )}
 
-              {/* No results */}
-              {searchTerm.length >= 2 && !searching && searchResults.length === 0 && (
-                <div style={{
-                  position: 'absolute', top: '100%', left: 0, right: 0,
-                  background: '#fff', border: '1px solid #E2E0DE', borderRadius: 8,
-                  padding: '14px 16px', zIndex: 10, boxShadow: '0 4px 12px rgba(0,0,0,0.08)',
-                  color: '#94A3B8', fontSize: 13, textAlign: 'center',
-                }}>
-                  No se encontraron productos para &quot;{searchTerm}&quot;
-                </div>
-              )}
-            </div>
-          </div>
-        ) : (
-          /* Selected Product Card */
-          <div>
-            <label className="rh-label" style={{ marginBottom: 6, display: 'block' }}>Producto seleccionado</label>
-            <div style={{
-              display: 'flex', alignItems: 'center', gap: 8,
-              padding: 12, backgroundColor: '#F0FDF4', borderRadius: 8, border: '1px solid #BBF7D0',
-            }}>
-              <Package size={18} style={{ color: '#10B981', flexShrink: 0 }} />
-              <div style={{ flex: 1 }}>
-                <p style={{ fontSize: 14, fontWeight: 600, color: '#1E293B', margin: 0 }}>{selectedProduct.name}</p>
-                <p style={{ fontSize: 12, color: '#64748B', margin: '2px 0 0' }}>
-                  SKU: {selectedProduct.sku}{selectedProduct.brand ? ` | ${selectedProduct.brand}` : ''} | Stock: {selectedProduct.stock}
-                </p>
-              </div>
-              <button onClick={() => setSelectedProduct(null)} style={{ background: 'none', border: 'none', cursor: 'pointer', color: '#8A8886', fontSize: 18 }}>
-                <X size={16} />
-              </button>
-            </div>
-          </div>
-        )}
+                    {/* SKU + Brand */}
+                    <div style={{ marginBottom: 8 }}>
+                      <p style={{ fontSize: 11, color: '#94A3B8', margin: 0, fontFamily: 'monospace' }}>
+                        {p.sku}
+                      </p>
+                      {p.brand && (
+                        <p style={{ fontSize: 11, color: '#64748B', margin: '2px 0 0' }}>
+                          {p.brand}
+                        </p>
+                      )}
+                    </div>
 
-        {/* Expected Quantity */}
-        {selectedProduct && (
-          <div>
-            <label className="rh-label">Cantidad esperada *</label>
-            <input
-              type="number"
-              min={1}
-              max={selectedProduct.stock}
-              value={expectedQty}
-              onChange={(e) => setExpectedQty(Math.max(1, parseInt(e.target.value) || 1))}
-              className="rh-input"
-            />
-            <p style={{ fontSize: 11, color: '#94A3B8', marginTop: 4 }}>
-              Maximo disponible en catalogo: {selectedProduct.stock}
-            </p>
-          </div>
-        )}
+                    {/* Bottom: stock + price */}
+                    <div style={{
+                      display: 'flex', justifyContent: 'space-between', alignItems: 'center',
+                      paddingTop: 8, borderTop: '1px solid #F1F5F9',
+                    }}>
+                      <span style={{
+                        fontSize: 11, fontWeight: 600, color: stockColor,
+                        backgroundColor: stockColor + '15', padding: '2px 8px',
+                        borderRadius: 10,
+                      }}>
+                        {p.stock} en stock
+                      </span>
+                      {p.price > 0 && (
+                        <span style={{ fontSize: 12, fontWeight: 600, color: '#1E293B' }}>
+                          ${p.price.toFixed(2)}
+                        </span>
+                      )}
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+          ) : searchTerm.length >= 2 && !searching ? (
+            <div style={{ textAlign: 'center', padding: '40px 20px' }}>
+              <Package size={36} style={{ color: '#CBD5E1', margin: '0 auto 8px' }} />
+              <p style={{ fontSize: 14, color: '#94A3B8', margin: 0 }}>
+                No se encontraron productos para &quot;{searchTerm}&quot;
+              </p>
+            </div>
+          ) : initialLoading ? (
+            <div style={{ textAlign: 'center', padding: '40px 20px' }}>
+              <p style={{ fontSize: 14, color: '#94A3B8', margin: 0 }}>Cargando catalogo...</p>
+            </div>
+          ) : (
+            <div style={{ textAlign: 'center', padding: '40px 20px' }}>
+              <Search size={36} style={{ color: '#CBD5E1', margin: '0 auto 8px' }} />
+              <p style={{ fontSize: 14, color: '#94A3B8', margin: 0 }}>
+                Escribe para buscar productos en el catalogo
+              </p>
+            </div>
+          )}
+        </div>
       </div>
     </Modal>
   );
