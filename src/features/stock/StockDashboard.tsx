@@ -1,4 +1,5 @@
 import { useState, useCallback, useEffect } from 'react';
+import { useNavigate } from 'react-router-dom';
 import {
   Search,
   AlertTriangle,
@@ -98,6 +99,7 @@ export function StockDashboard() {
   const [showLowStockOnly, setShowLowStockOnly] = useState(false);
   const [showTable, setShowTable] = useState(false);
   const [showUnlocated, setShowUnlocated] = useState(false);
+  const navigate = useNavigate();
   usePermissions();
   const organization = useAuthStore((s) => s.organization);
   const { data: warehouses } = useWarehouses();
@@ -219,7 +221,12 @@ export function StockDashboard() {
                     🚫 Productos sin ubicación asignada
                   </h3>
                   <p style={{ fontSize: 12, color: '#C2410C', margin: '4px 0 0' }}>
-                    Estos productos están en el almacén pero no tienen estante asignado. Asígnalos desde el Layout del Almacén.
+                    Estos productos están en el almacén pero no tienen estante asignado. Asígnalos desde el{' '}
+                    <button onClick={() => navigate('/hub/warehouse')}
+                      style={{ background: 'none', border: 'none', cursor: 'pointer', color: '#9A3412',
+                        fontWeight: 700, textDecoration: 'underline', padding: 0, fontSize: 'inherit' }}>
+                      Layout del Almacén →
+                    </button>
                   </p>
                 </div>
                 <button onClick={() => setShowUnlocated(false)}
