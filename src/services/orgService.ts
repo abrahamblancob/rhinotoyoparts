@@ -35,6 +35,13 @@ export async function getChildOrganizations(parentId: string) {
   );
 }
 
+export async function getParentOrgId(childId: string): Promise<string | null> {
+  const result = await query<{ parent_id: string }[]>((sb) =>
+    sb.from('org_hierarchy').select('parent_id').eq('child_id', childId).limit(1)
+  );
+  return result.data?.[0]?.parent_id ?? null;
+}
+
 export async function getVisibleOrgIds(orgType: string, orgId: string): Promise<string[]> {
   if (orgType === 'platform') return []; // Empty = no filter (sees all via RLS)
   const ids = [orgId];

@@ -26,6 +26,11 @@ const MODULE_LABELS: Record<string, string> = {
   settings: 'Configuración',
   upload: 'Carga Inv.',
   dispatches: 'Despachos',
+  warehouse: '🏭 Almacén',
+  picking: '📋 Picking',
+  packing: '📦 Packing',
+  receiving: '📥 Recepción',
+  stock: '📊 Stock',
 };
 
 const ACTION_LABELS: Record<string, string> = {

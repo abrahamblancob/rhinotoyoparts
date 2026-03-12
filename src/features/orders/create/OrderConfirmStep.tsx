@@ -1,4 +1,5 @@
 import type { Customer, Organization } from '@/lib/database.types.ts';
+import type { Warehouse } from '@/types/warehouse.ts';
 import type { OrderItem } from './types.ts';
 import type { Order } from '@/lib/database.types.ts';
 
@@ -7,6 +8,7 @@ interface OrderConfirmStepProps {
   editOrder?: Order | null;
   inventoryOrg: Organization | null;
   selectedOrg: Organization | null;
+  selectedWarehouse?: Warehouse | null;
   selectedCustomer: Customer | null;
   showNewCustomer: boolean;
   newCustomerName: string;
@@ -20,7 +22,7 @@ interface OrderConfirmStepProps {
 }
 
 export function OrderConfirmStep({
-  isEditMode, editOrder, inventoryOrg, selectedOrg,
+  isEditMode, editOrder, inventoryOrg, selectedOrg, selectedWarehouse,
   selectedCustomer, showNewCustomer, newCustomerName,
   customerPhone, shippingAddress,
   items, notes, shippingCost, subtotal, total,
@@ -34,14 +36,16 @@ export function OrderConfirmStep({
       }}>
         {isEditMode
           ? <>Revisa los cambios antes de guardar la orden <strong>{editOrder?.order_number}</strong>.</>
-          : <>Revisa los datos antes de confirmar. Los productos se descontarán del inventario de <strong>{inventoryOrg?.name}</strong>.</>
+          : selectedWarehouse
+            ? <>Revisa los datos antes de confirmar. Los productos se tomarán del almacén <strong>{selectedWarehouse.name}</strong>.</>
+            : <>Revisa los datos antes de confirmar. Los productos se descontarán del inventario de <strong>{inventoryOrg?.name}</strong>.</>
         }
       </div>
 
       {/* Organization */}
       <div style={{ marginBottom: 16 }}>
         <div style={{ fontSize: 11, fontWeight: 600, color: '#8A8886', textTransform: 'uppercase', letterSpacing: 0.5, marginBottom: 4 }}>
-          Organización / Tienda
+          {selectedWarehouse ? 'Asociado / Almacén' : 'Organización / Tienda'}
         </div>
         <div style={{ fontSize: 15, fontWeight: 700, color: '#D3010A' }}>
           {inventoryOrg?.name}
@@ -51,6 +55,11 @@ export function OrderConfirmStep({
           {selectedOrg && inventoryOrg?.id !== selectedOrg.id && ` · Agregador: ${selectedOrg.name}`}
           {inventoryOrg?.rif && ` · RIF: ${inventoryOrg.rif}`}
         </div>
+        {selectedWarehouse && (
+          <div style={{ fontSize: 13, color: '#475569', marginTop: 4 }}>
+            🏭 Almacén: <strong>{selectedWarehouse.name}</strong> ({selectedWarehouse.code})
+          </div>
+        )}
       </div>
 
       {/* Customer */}

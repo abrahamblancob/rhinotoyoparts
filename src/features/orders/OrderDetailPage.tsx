@@ -1,4 +1,4 @@
-import { useEffect, useState, useCallback, useRef } from 'react';
+import { useState } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { supabase } from '@/lib/supabase.ts';
 import { useAuthStore } from '@/stores/authStore.ts';
@@ -7,7 +7,9 @@ import { StatusBadge } from '@/components/hub/shared/StatusBadge.tsx';
 import { TrackingMap } from '@/components/tracking/TrackingMap.tsx';
 import { DeliveryPinMap } from '@/components/tracking/DeliveryPinMap.tsx';
 import { OrderCreateModal } from './OrderCreateModal.tsx';
-import type { Order, Customer, Profile, Carrier } from '@/lib/database.types.ts';
+import { reserveOrderStock } from '@/services/orderService.ts';
+import { createPickListForOrder } from '@/services/pickingService.ts';
+import type { Profile, Carrier } from '@/lib/database.types.ts';
 
 import { OrderProgressBar } from './detail/OrderProgressBar.tsx';
 import { OrderStatusActions } from './detail/OrderStatusActions.tsx';
@@ -17,10 +19,12 @@ import { OrderQRSection } from './detail/OrderQRSection.tsx';
 import { OrderDeliveryPhoto } from './detail/OrderDeliveryPhoto.tsx';
 import { OrderTrackingInfo } from './detail/OrderTrackingInfo.tsx';
 import { OrderTimeline } from './detail/OrderTimeline.tsx';
+import { OrderPickingSection } from './detail/OrderPickingSection.tsx';
+import { OrderPackingSection } from './detail/OrderPackingSection.tsx';
 import { AssignDispatcherModal } from './detail/AssignDispatcherModal.tsx';
 import { ShipOrderModal } from './detail/ShipOrderModal.tsx';
 import { CancelOrderModal } from './detail/CancelOrderModal.tsx';
-import type { OrderItemWithProduct, StatusHistoryWithUser, OrderQr, RealtimeStatus } from './detail/types.ts';
+import { useOrderDetail } from './detail/useOrderDetail.ts';
 import type { DispatcherWithCount } from './detail/AssignDispatcherModal.tsx';
 
 /* eslint-disable @typescript-eslint/no-explicit-any */
@@ -32,13 +36,15 @@ export function OrderDetailPage() {
   const organization = useAuthStore((s) => s.organization);
   const { canWrite, isDispatcher, isAggregator, isPlatformOwner } = usePermissions();
 
-  const [order, setOrder] = useState<Order | null>(null);
-  const [items, setItems] = useState<OrderItemWithProduct[]>([]);
-  const [history, setHistory] = useState<StatusHistoryWithUser[]>([]);
-  const [customer, setCustomer] = useState<Customer | null>(null);
-  const [loading, setLoading] = useState(true);
+  const {
+    order, items, history, customer, loading,
+    pickList, pickListItems, packSession,
+    dispatcherName, orderQr, realtimeStatus,
+    resolvedDeliveryLat, resolvedDeliveryLng,
+    loadOrder,
+  } = useOrderDetail(orderId);
 
-  // Modals
+  // Modal state
   const [showAssign, setShowAssign] = useState(false);
   const [dispatchers, setDispatchers] = useState<DispatcherWithCount[]>([]);
   const [selectedDispatcher, setSelectedDispatcher] = useState<string | null>(null);
@@ -46,162 +52,41 @@ export function OrderDetailPage() {
   const [carriers, setCarriers] = useState<Carrier[]>([]);
   const [showCancelModal, setShowCancelModal] = useState(false);
   const [showEditModal, setShowEditModal] = useState(false);
-
   const [updating, setUpdating] = useState(false);
-  const [realtimeStatus, setRealtimeStatus] = useState<RealtimeStatus>('connecting');
-  const [dispatcherName, setDispatcherName] = useState<string>('Despachador');
-  const [orderQr, setOrderQr] = useState<OrderQr | null>(null);
-  const channelRef = useRef<ReturnType<typeof supabase.channel> | null>(null);
-
-  // Resolved delivery coordinates (from order or geocoded from address)
-  const [resolvedDeliveryLat, setResolvedDeliveryLat] = useState<number | null>(null);
-  const [resolvedDeliveryLng, setResolvedDeliveryLng] = useState<number | null>(null);
-  const geocodeAttemptedRef = useRef(false);
-
-  // ── Load order data ──
-  const loadOrder = useCallback(async () => {
-    if (!orderId) return;
-    setLoading(true);
-
-    const [orderRes, itemsRes, historyRes] = await Promise.all([
-      supabase.from('orders').select('*').eq('id', orderId).single(),
-      supabase.from('order_items').select('*, products(name, sku, image_url)').eq('order_id', orderId),
-      supabase.from('order_status_history').select('*, profiles(full_name)').eq('order_id', orderId).order('created_at', { ascending: true }),
-    ]);
-
-    const orderData = orderRes.data as Order | null;
-    setOrder(orderData);
-    setItems((itemsRes.data as OrderItemWithProduct[]) ?? []);
-    setHistory((historyRes.data as StatusHistoryWithUser[]) ?? []);
-
-    if (orderData?.customer_id) {
-      const { data: c } = await supabase.from('customers').select('*').eq('id', orderData.customer_id).single();
-      setCustomer(c as Customer | null);
-    }
-
-    if (orderData?.assigned_to) {
-      const { data: dp } = await supabase.from('profiles').select('full_name').eq('id', orderData.assigned_to).single();
-      if (dp) setDispatcherName((dp as { full_name: string }).full_name);
-    }
-
-    // Load or auto-generate order QR code
-    if (orderData?.tracking_code && orderData?.org_id) {
-      const { data: qr } = await supabase
-        .from('order_qr_codes')
-        .select('qr_code, scanned_at, scanned_by, is_valid')
-        .eq('order_id', orderId)
-        .order('created_at', { ascending: false })
-        .limit(1)
-        .single();
-
-      if (qr) {
-        setOrderQr(qr as OrderQr);
-      } else {
-        const qrCode = orderData.tracking_code.replace(/^TRACK-/, 'RHINO-QR-');
-        const { data: newQr } = await supabase
-          .from('order_qr_codes')
-          .insert({
-            order_id: orderId,
-            org_id: orderData.org_id,
-            qr_code: qrCode,
-            generated_at: new Date().toISOString(),
-            is_valid: true,
-            expires_at: new Date(Date.now() + 7 * 24 * 60 * 60 * 1000).toISOString(),
-          })
-          .select('qr_code, scanned_at, scanned_by, is_valid')
-          .single();
-        if (newQr) setOrderQr(newQr as OrderQr);
-      }
-    }
-
-    setLoading(false);
-  }, [orderId]);
-
-  useEffect(() => { loadOrder(); }, [loadOrder]);
-
-  // ── Geocode delivery address ──
-  useEffect(() => {
-    if (!order) return;
-
-    if (order.delivery_latitude && order.delivery_longitude) {
-      setResolvedDeliveryLat(order.delivery_latitude);
-      setResolvedDeliveryLng(order.delivery_longitude);
-      return;
-    }
-
-    const addr = (order.shipping_address as Record<string, string> | null)?.address;
-    if (!addr || geocodeAttemptedRef.current) return;
-    geocodeAttemptedRef.current = true;
-
-    const tryGeocode = () => {
-      if (!window.google?.maps) { setTimeout(tryGeocode, 500); return; }
-      const geocoder = new window.google.maps.Geocoder();
-      geocoder.geocode({ address: addr }, (results: any[], status: string) => {
-        let lat: number | null = null;
-        let lng: number | null = null;
-
-        if (status === 'OK' && results?.[0]?.geometry?.location) {
-          lat = results[0].geometry.location.lat();
-          lng = results[0].geometry.location.lng();
-        }
-
-        if (!lat && window.google?.maps?.places) {
-          const dummyDiv = document.createElement('div');
-          const service = new window.google.maps.places.PlacesService(dummyDiv);
-          service.textSearch({ query: addr }, (placeResults: any[], placeStatus: string) => {
-            if (placeStatus === 'OK' && placeResults?.[0]?.geometry?.location) {
-              const loc = placeResults[0].geometry.location;
-              setResolvedDeliveryLat(loc.lat());
-              setResolvedDeliveryLng(loc.lng());
-              supabase.from('orders').update({ delivery_latitude: loc.lat(), delivery_longitude: loc.lng() }).eq('id', order.id).then(() => {});
-            }
-          });
-          return;
-        }
-
-        if (lat && lng) {
-          setResolvedDeliveryLat(lat);
-          setResolvedDeliveryLng(lng);
-          supabase.from('orders').update({ delivery_latitude: lat, delivery_longitude: lng }).eq('id', order.id).then(() => {});
-        }
-      });
-    };
-    tryGeocode();
-  }, [order?.id, order?.delivery_latitude, order?.delivery_longitude, order?.shipping_address]);
-
-  // ── Realtime subscription ──
-  useEffect(() => {
-    if (!orderId) return;
-    setRealtimeStatus('connecting');
-
-    const channel = supabase
-      .channel(`order-detail-${orderId}`)
-      .on('postgres_changes', { event: 'UPDATE', schema: 'public', table: 'orders', filter: `id=eq.${orderId}` },
-        (payload) => { setOrder((prev) => prev ? { ...prev, ...(payload.new as Order) } : prev); })
-      .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'order_status_history', filter: `order_id=eq.${orderId}` },
-        () => {
-          supabase.from('order_status_history').select('*, profiles(full_name)')
-            .eq('order_id', orderId).order('created_at', { ascending: true })
-            .then(({ data }) => { if (data) setHistory(data as StatusHistoryWithUser[]); });
-        })
-      .subscribe((status) => {
-        if (status === 'SUBSCRIBED') setRealtimeStatus('connected');
-        else if (status === 'CHANNEL_ERROR' || status === 'TIMED_OUT') setRealtimeStatus('error');
-      });
-
-    channelRef.current = channel;
-    return () => { if (channelRef.current) supabase.removeChannel(channelRef.current); };
-  }, [orderId]);
 
   // ── Status change handler ──
   const changeStatus = async (newStatus: string, notes?: string, metadata?: Record<string, unknown>) => {
-    if (!orderId || !profile) return;
+    if (!orderId || !profile || !order) return;
     setUpdating(true);
+
+    // Reserve stock when confirming a draft/pending order with a warehouse
+    if (newStatus === 'confirmed' && order.warehouse_id && !order.stock_reserved) {
+      try {
+        const reserveResult = await reserveOrderStock(orderId, order.warehouse_id);
+        if (!reserveResult?.success) {
+          alert(`Error al reservar stock: ${reserveResult?.error ?? 'Stock insuficiente'}`);
+          setUpdating(false);
+          return;
+        }
+      } catch (reserveErr: unknown) {
+        const msg = reserveErr instanceof Error ? reserveErr.message : 'Error desconocido';
+        alert(`Error al reservar stock: ${msg}`);
+        setUpdating(false);
+        return;
+      }
+    }
+
     const { data } = await supabase.rpc('change_order_status', {
       p_order_id: orderId, p_new_status: newStatus, p_notes: notes ?? null, p_metadata: metadata ?? {},
     });
     const result = data as { success: boolean; error?: string } | null;
-    if (result?.success) await loadOrder();
+    if (result?.success) {
+      if (newStatus === 'confirmed' && order.warehouse_id) {
+        try { await createPickListForOrder(orderId, order.warehouse_id); }
+        catch (pickErr) { console.error('Pick list auto-creation failed:', pickErr); }
+      }
+      await loadOrder();
+    }
     else alert(result?.error ?? 'Error al cambiar estado');
     setUpdating(false);
   };
@@ -228,8 +113,7 @@ export function OrderDetailPage() {
 
   const handleShip = async (trackingNumber: string, carrierId: string, shipNotes: string) => {
     await changeStatus('shipped', shipNotes || 'Orden despachada', {
-      tracking_number: trackingNumber,
-      carrier_id: carrierId || undefined,
+      tracking_number: trackingNumber, carrier_id: carrierId || undefined,
     });
     setShowShipModal(false);
   };
@@ -320,6 +204,12 @@ export function OrderDetailPage() {
       </div>
 
       <OrderProgressBar status={order.status} />
+
+      {/* Picking Module */}
+      {pickList && <OrderPickingSection pickList={pickList} pickListItems={pickListItems} />}
+
+      {/* Packing Module */}
+      {packSession && <OrderPackingSection packSession={packSession} />}
 
       {/* Delivery pin map */}
       {isPlatformOwner && !order.dispatcher_current_lat

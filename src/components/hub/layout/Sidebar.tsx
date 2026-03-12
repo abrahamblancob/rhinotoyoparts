@@ -30,6 +30,16 @@ const NAV_CONFIG: Record<OrgType, NavSection[]> = {
       ],
     },
     {
+      title: 'ALMACÉN (WMS)',
+      items: [
+        { label: 'Layout Almacén', path: '/hub/warehouse', icon: '🏭', module: 'warehouse' },
+        { label: 'Picking', path: '/hub/picking', icon: '📋', module: 'picking' },
+        { label: 'Packing', path: '/hub/packing', icon: '📦', module: 'packing' },
+        { label: 'Recepción', path: '/hub/receiving', icon: '📥', module: 'receiving' },
+        { label: 'Stock por Ubicación', path: '/hub/stock', icon: '📊', module: 'stock' },
+      ],
+    },
+    {
       title: 'ADMINISTRACIÓN',
       items: [
         { label: 'Agregadores', path: '/hub/organizations', icon: '🏢', module: 'organizations' },
@@ -64,6 +74,16 @@ const NAV_CONFIG: Record<OrgType, NavSection[]> = {
       ],
     },
     {
+      title: 'ALMACÉN (WMS)',
+      items: [
+        { label: 'Layout Almacén', path: '/hub/warehouse', icon: '🏭', module: 'warehouse' },
+        { label: 'Picking', path: '/hub/picking', icon: '📋', module: 'picking' },
+        { label: 'Packing', path: '/hub/packing', icon: '📦', module: 'packing' },
+        { label: 'Recepción', path: '/hub/receiving', icon: '📥', module: 'receiving' },
+        { label: 'Stock por Ubicación', path: '/hub/stock', icon: '📊', module: 'stock' },
+      ],
+    },
+    {
       title: 'ADMINISTRACIÓN',
       items: [
         { label: 'Mis Asociados', path: '/hub/organizations', icon: '🏢', module: 'organizations' },
@@ -90,12 +110,21 @@ const NAV_CONFIG: Record<OrgType, NavSection[]> = {
     {
       title: 'PRINCIPAL',
       items: [
-        { label: 'Dashboard', path: '/hub', icon: '📊', module: 'dashboard', hideForRoles: ['associate_editor', 'associate_dispatcher'] },
+        { label: 'Dashboard', path: '/hub', icon: '📊', module: 'dashboard', hideForRoles: ['associate_editor', 'associate_dispatcher', 'warehouse_picker', 'warehouse_packer', 'warehouse_receiver'] },
         { label: 'Inventario', path: '/hub/inventory', icon: '📦', module: 'inventory' },
         { label: 'Órdenes de Compra', path: '/hub/orders', icon: '🛒', module: 'orders' },
         { label: 'Clientes', path: '/hub/customers', icon: '👤', module: 'customers' },
         { label: 'Mis Despachos', path: '/hub/dispatches', icon: '🚚', module: 'dispatches' },
         { label: 'Carga de Inventario', path: '/hub/inventory/upload', icon: '📤', module: 'upload' },
+      ],
+    },
+    {
+      title: 'ALMACÉN (WMS)',
+      items: [
+        { label: 'Picking', path: '/hub/picking', icon: '📋', module: 'picking' },
+        { label: 'Packing', path: '/hub/packing', icon: '📦', module: 'packing' },
+        { label: 'Recepción', path: '/hub/receiving', icon: '📥', module: 'receiving' },
+        { label: 'Stock por Ubicación', path: '/hub/stock', icon: '📊', module: 'stock' },
       ],
     },
     {

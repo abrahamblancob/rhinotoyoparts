@@ -25,7 +25,7 @@ export function OrderStatusActions({
   return (
     <div style={{ display: 'flex', gap: 8 }}>
       {(isPlatformOwner || (canWrite('orders') && !isDispatcher))
-        && ['draft', 'confirmed', 'assigned'].includes(order.status) && (
+        && ['draft', 'confirmed', 'picking', 'packing', 'packed', 'assigned'].includes(order.status) && (
         <button className="rh-btn rh-btn-secondary" onClick={onOpenEdit}>
           ✏️ Editar Orden
         </button>
@@ -40,22 +40,18 @@ export function OrderStatusActions({
           Confirmar Orden
         </button>
       )}
-      {order.status === 'confirmed' && canWrite('orders') && !isDispatcher && (
+      {/* Assign dispatcher from confirmed (no WMS) or packed (after WMS) */}
+      {['confirmed', 'packed'].includes(order.status) && canWrite('orders') && !isDispatcher && (
         <button className="rh-btn rh-btn-primary" onClick={onOpenAssign} disabled={updating}>
           Asignar Despachador
         </button>
       )}
-      {order.status === 'assigned' && isDispatcher && (
-        <button className="rh-btn rh-btn-primary" onClick={() => onChangeStatus('preparing', 'Preparando pedido')} disabled={updating}>
-          Empezar a Preparar
+      {order.status === 'assigned' && (isDispatcher || canWrite('orders')) && (
+        <button className="rh-btn rh-btn-primary" onClick={() => onChangeStatus('picked', 'Pedido recogido')} disabled={updating}>
+          Marcar como Recogida
         </button>
       )}
-      {order.status === 'preparing' && isDispatcher && (
-        <button className="rh-btn rh-btn-primary" onClick={() => onChangeStatus('ready_to_ship', 'Paquete listo')} disabled={updating}>
-          Marcar como Listo
-        </button>
-      )}
-      {order.status === 'ready_to_ship' && (isDispatcher || canWrite('orders')) && (
+      {order.status === 'picked' && (isDispatcher || canWrite('orders')) && (
         <button className="rh-btn rh-btn-primary" onClick={onOpenShip} disabled={updating}>
           Despachar
         </button>

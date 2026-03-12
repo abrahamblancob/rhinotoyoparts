@@ -4,6 +4,9 @@ import { useAuthStore } from '@/stores/authStore.ts';
 import { usePermissions } from '@/hooks/usePermissions.ts';
 import { Modal } from '@/components/hub/shared/Modal.tsx';
 import type { Customer, Product, Organization, Order } from '@/lib/database.types.ts';
+import type { Warehouse } from '@/types/warehouse.ts';
+import { reserveOrderStock } from '@/services/orderService.ts';
+import { createPickListForOrder } from '@/services/pickingService.ts';
 
 import { OrgSelectionStep } from './create/OrgSelectionStep.tsx';
 import { OrderFormStep } from './create/OrderFormStep.tsx';
@@ -21,18 +24,23 @@ interface OrderCreateModalProps {
 export function OrderCreateModal({ open, onClose, onCreated, editOrder, editItems }: OrderCreateModalProps) {
   const profile = useAuthStore((s) => s.profile);
   const organization = useAuthStore((s) => s.organization);
-  const { isPlatformOwner } = usePermissions();
+  const { isPlatformOwner, isAggregator } = usePermissions();
   const isEditMode = Boolean(editOrder);
+  const needsOrgStep = isPlatformOwner || isAggregator;
 
   // Step flow
-  const [step, setStep] = useState<1 | 2 | 3>(isPlatformOwner ? 1 : 2);
-  const [orgSubStep, setOrgSubStep] = useState<'aggregator' | 'store'>('aggregator');
+  const [step, setStep] = useState<1 | 2 | 3>(needsOrgStep ? 1 : 2);
+  const [orgSubStep, setOrgSubStep] = useState<'aggregator' | 'store' | 'associate' | 'warehouse'>('aggregator');
   const [organizations, setOrganizations] = useState<Organization[]>([]);
   const [selectedOrg, setSelectedOrg] = useState<Organization | null>(null);
   const [orgsLoading, setOrgsLoading] = useState(false);
   const [childOrgs, setChildOrgs] = useState<Organization[]>([]);
   const [childOrgMap, setChildOrgMap] = useState<Record<string, Organization[]>>({});
   const [inventoryOrg, setInventoryOrg] = useState<Organization | null>(null);
+
+  // Aggregator-specific: warehouse selection
+  const [warehouses, setWarehouses] = useState<Warehouse[]>([]);
+  const [selectedWarehouse, setSelectedWarehouse] = useState<Warehouse | null>(null);
 
   const [customers, setCustomers] = useState<Customer[]>([]);
   const [customerSearch, setCustomerSearch] = useState('');
@@ -51,6 +59,7 @@ export function OrderCreateModal({ open, onClose, onCreated, editOrder, editItem
   const [notes, setNotes] = useState('');
   const [shippingCost, setShippingCost] = useState(0);
   const [saving, setSaving] = useState(false);
+  const [locationWarning, setLocationWarning] = useState<string[] | null>(null);
 
   const productDebounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const productSearchRef = useRef('');
@@ -83,6 +92,56 @@ export function OrderCreateModal({ open, onClose, onCreated, editOrder, editItem
     }
   }, [open, isPlatformOwner]);
 
+  // ── Load associates + warehouses for Aggregator ──
+  useEffect(() => {
+    if (open && isAggregator && organization) {
+      setOrgsLoading(true);
+      (async () => {
+        // Load child orgs (associates/stores)
+        const { data: hierarchy } = await supabase
+          .from('org_hierarchy').select('child_id').eq('parent_id', organization.id);
+        if (hierarchy && hierarchy.length > 0) {
+          const childIds = hierarchy.map((h: { child_id: string }) => h.child_id);
+          const { data: children } = await supabase
+            .from('organizations').select('*').in('id', childIds).eq('status', 'active').order('name');
+          setChildOrgs((children as Organization[]) ?? []);
+        }
+        // Load warehouses for this aggregator
+        const { data: wh } = await supabase
+          .from('warehouses').select('*').eq('org_id', organization.id).eq('is_active', true).order('name');
+        setWarehouses((wh as Warehouse[]) ?? []);
+        setOrgsLoading(false);
+      })();
+    }
+  }, [open, isAggregator, organization]);
+
+  // ── Load warehouses for associates (non-aggregator, non-platform) ──
+  useEffect(() => {
+    if (open && !isPlatformOwner && !isAggregator && organization) {
+      supabase
+        .from('warehouses').select('*').eq('org_id', organization.id).eq('is_active', true).order('name')
+        .then(({ data }) => {
+          const whs = (data as Warehouse[]) ?? [];
+          setWarehouses(whs);
+          // Auto-select if only one warehouse
+          if (whs.length === 1) setSelectedWarehouse(whs[0]);
+        });
+    }
+  }, [open, isPlatformOwner, isAggregator, organization]);
+
+  // ── Load warehouses for platform owners after org selection ──
+  useEffect(() => {
+    if (open && isPlatformOwner && inventoryOrg) {
+      supabase
+        .from('warehouses').select('*').eq('org_id', inventoryOrg.id).eq('is_active', true).order('name')
+        .then(({ data }) => {
+          const whs = (data as Warehouse[]) ?? [];
+          setWarehouses(whs);
+          if (whs.length === 1) setSelectedWarehouse(whs[0]);
+        });
+    }
+  }, [open, isPlatformOwner, inventoryOrg]);
+
   // ── Org selection handlers ──
   const handleSelectAggregator = useCallback((org: Organization) => {
     setSelectedOrg(org);
@@ -98,6 +157,18 @@ export function OrderCreateModal({ open, onClose, onCreated, editOrder, editItem
     if (selectedOrg) { setInventoryOrg(selectedOrg); setStep(2); }
   }, [selectedOrg]);
 
+  // ── Aggregator flow handlers ──
+  const handleSelectAssociate = useCallback((associate: Organization) => {
+    setSelectedOrg(associate);
+    setInventoryOrg(associate);
+    setOrgSubStep('warehouse');
+  }, []);
+
+  const handleSelectWarehouse = useCallback((wh: Warehouse) => {
+    setSelectedWarehouse(wh);
+    setStep(2);
+  }, []);
+
   // ── Load customers ──
   useEffect(() => {
     if (!open) return;
@@ -106,26 +177,32 @@ export function OrderCreateModal({ open, onClose, onCreated, editOrder, editItem
       supabase.from('customers').select('*').eq('org_id', inventoryOrg.id).order('name').then(({ data }) => {
         setCustomers((data as Customer[]) ?? []);
       });
+    } else if (isAggregator && organization) {
+      // For aggregator: load customers from the aggregator's own org
+      supabase.from('customers').select('*').eq('org_id', organization.id).order('name').then(({ data }) => {
+        setCustomers((data as Customer[]) ?? []);
+      });
     } else if (organization) {
       supabase.from('customers').select('*').eq('org_id', organization.id).order('name').then(({ data }) => {
         setCustomers((data as Customer[]) ?? []);
       });
     }
-  }, [open, organization, isPlatformOwner, inventoryOrg]);
+  }, [open, organization, isPlatformOwner, isAggregator, inventoryOrg]);
 
   // ── Reset form on close ──
   useEffect(() => {
     if (!open) {
-      setStep(isPlatformOwner ? 1 : 2);
-      setOrgSubStep('aggregator');
+      setStep(needsOrgStep ? 1 : 2);
+      setOrgSubStep(isAggregator ? 'associate' : 'aggregator');
       setSelectedOrg(null); setChildOrgs([]); setChildOrgMap({}); setInventoryOrg(null);
+      setSelectedWarehouse(null);
       setSelectedCustomer(null); setShowNewCustomer(false); setNewCustomerName('');
       setShippingAddress(''); setDeliveryLat(null); setDeliveryLng(null);
       setCustomerPhone(''); setCustomerSearch('');
       setProductSearch(''); setProductResults([]); setProductLoading(false);
       setItems([]); setNotes(''); setShippingCost(0);
     }
-  }, [open, isPlatformOwner]);
+  }, [open, needsOrgStep, isAggregator]);
 
   // ── Init edit mode ──
   useEffect(() => {
@@ -172,15 +249,51 @@ export function OrderCreateModal({ open, onClose, onCreated, editOrder, editItem
     setProductLoading(true);
     productDebounceRef.current = setTimeout(async () => {
       if (productSearchRef.current !== query) return;
-      let q = supabase.from('products').select('*').eq('status', 'active').gt('stock', 0)
-        .or(`name.ilike.%${query}%,sku.ilike.%${query}%`).limit(10);
-      if (isPlatformOwner && inventoryOrg) q = q.eq('org_id', inventoryOrg.id);
-      else if (!isPlatformOwner && organization) q = q.eq('org_id', organization.id);
-      const { data, error } = await q;
-      if (error) console.error('Product search error:', error);
-      if (productSearchRef.current === query) { setProductResults((data as Product[]) ?? []); setProductLoading(false); }
+
+      if (selectedWarehouse) {
+        // Warehouse flow: search products from inventory_stock (respects reserved_quantity)
+        const { data: stockRows, error } = await supabase
+          .from('inventory_stock')
+          .select('product_id, quantity, reserved_quantity, product:products!inner(*)')
+          .eq('warehouse_id', selectedWarehouse.id)
+          .gt('quantity', 0)
+          .limit(30);
+        if (error) { console.error('Product search error:', error); }
+        if (productSearchRef.current === query) {
+          // Client-side filter by query + deduplicate by product_id (sum quantities)
+          const productMap = new Map<string, Product & { warehouseQty: number }>();
+          for (const row of (stockRows ?? []) as unknown as { product_id: string; quantity: number; reserved_quantity: number; product: Product }[]) {
+            const p = row.product;
+            if (!p) continue;
+            const q2 = query.toLowerCase();
+            const nameMatch = p.name?.toLowerCase().includes(q2);
+            const skuMatch = p.sku?.toLowerCase().includes(q2);
+            if (!nameMatch && !skuMatch) continue;
+            const existing = productMap.get(p.id);
+            const available = row.quantity - row.reserved_quantity;
+            if (existing) {
+              existing.warehouseQty += available;
+              existing.stock = existing.warehouseQty;
+            } else {
+              productMap.set(p.id, { ...p, stock: available, warehouseQty: available });
+            }
+          }
+          const results = Array.from(productMap.values()).filter((p) => p.warehouseQty > 0).slice(0, 10);
+          setProductResults(results);
+          setProductLoading(false);
+        }
+      } else {
+        // No-warehouse flow: search products table directly (legacy non-WMS)
+        let q = supabase.from('products').select('*').eq('status', 'active').gt('stock', 0)
+          .or(`name.ilike.%${query}%,sku.ilike.%${query}%`).limit(10);
+        if (isPlatformOwner && inventoryOrg) q = q.eq('org_id', inventoryOrg.id);
+        else if (!isPlatformOwner && organization) q = q.eq('org_id', organization.id);
+        const { data, error } = await q;
+        if (error) console.error('Product search error:', error);
+        if (productSearchRef.current === query) { setProductResults((data as Product[]) ?? []); setProductLoading(false); }
+      }
     }, 200);
-  }, [organization, isPlatformOwner, inventoryOrg]);
+  }, [organization, isPlatformOwner, isAggregator, inventoryOrg, selectedWarehouse]);
 
   useEffect(() => { return () => { if (productDebounceRef.current) clearTimeout(productDebounceRef.current); }; }, []);
 
@@ -204,8 +317,9 @@ export function OrderCreateModal({ open, onClose, onCreated, editOrder, editItem
 
   // ── Go back to org selection ──
   const goBackToOrgSelection = () => {
-    setStep(1); setOrgSubStep('aggregator');
-    setSelectedOrg(null); setChildOrgs([]); setInventoryOrg(null);
+    setStep(1); setOrgSubStep(isAggregator ? 'associate' : 'aggregator');
+    setSelectedOrg(null); setChildOrgs(isAggregator ? childOrgs : []); setInventoryOrg(null);
+    setSelectedWarehouse(null);
     setItems([]); setSelectedCustomer(null); setCustomerSearch('');
     setCustomerPhone(''); setShippingAddress(''); setDeliveryLat(null); setDeliveryLng(null);
     setShowNewCustomer(false); setNewCustomerName('');
@@ -219,12 +333,14 @@ export function OrderCreateModal({ open, onClose, onCreated, editOrder, editItem
 
     try {
       const orderOrgId = isEditMode && editOrder ? editOrder.org_id
-        : isPlatformOwner && inventoryOrg ? inventoryOrg.id : organization!.id;
+        : (isPlatformOwner || isAggregator) && inventoryOrg ? inventoryOrg.id : organization!.id;
 
       let customerId = selectedCustomer?.id ?? null;
       if (showNewCustomer && newCustomerName) {
+        // New customers belong to the aggregator's own org, not the associate's
+        const customerOrgId = isAggregator && organization ? organization.id : orderOrgId;
         const { data: newC } = await supabase.from('customers').insert({
-          org_id: orderOrgId, name: newCustomerName, phone: customerPhone || null,
+          org_id: customerOrgId, name: newCustomerName, phone: customerPhone || null,
         }).select().single();
         if (newC) customerId = newC.id;
       }
@@ -254,6 +370,35 @@ export function OrderCreateModal({ open, onClose, onCreated, editOrder, editItem
         onCreated(); onClose(); return;
       }
 
+      // ── Validate located stock before confirming ──
+      if (!asDraft && selectedWarehouse) {
+        const { data: locatedStock } = await supabase
+          .from('inventory_stock')
+          .select('product_id, quantity, reserved_quantity')
+          .eq('warehouse_id', selectedWarehouse.id)
+          .not('location_id', 'is', null);
+
+        const locatedMap = new Map<string, number>();
+        for (const row of locatedStock ?? []) {
+          locatedMap.set(row.product_id, (locatedMap.get(row.product_id) ?? 0) + Math.max(0, row.quantity - row.reserved_quantity));
+        }
+
+        const unlocated = items.filter((i) => {
+          const available = locatedMap.get(i.product.id) ?? 0;
+          return available < i.quantity;
+        });
+
+        if (unlocated.length > 0) {
+          setLocationWarning(unlocated.map((i) => {
+            const available = locatedMap.get(i.product.id) ?? 0;
+            return `${i.product.name} — necesita ${i.quantity}, solo ${available} ubicado(s)`;
+          }));
+          setSaving(false);
+          return;
+        }
+        setLocationWarning(null);
+      }
+
       // CREATE MODE
       const { count: orderCount } = await supabase.from('orders').select('*', { count: 'exact', head: true });
       const orderNumber = `RH-${String((orderCount ?? 0) + 1).padStart(5, '0')}`;
@@ -266,6 +411,7 @@ export function OrderCreateModal({ open, onClose, onCreated, editOrder, editItem
         delivery_latitude: deliveryLat, delivery_longitude: deliveryLng,
         customer_phone: customerPhone || selectedCustomer?.phone || null,
         confirmed_at: asDraft ? null : new Date().toISOString(),
+        warehouse_id: selectedWarehouse?.id ?? null,
       }).select().single();
 
       if (error || !order) { console.error('Error creating order:', error); setSaving(false); return; }
@@ -285,37 +431,90 @@ export function OrderCreateModal({ open, onClose, onCreated, editOrder, editItem
         metadata: { source: 'manual' },
       });
 
+      // Reserve stock for confirmed orders with a warehouse
+      if (!asDraft && selectedWarehouse) {
+        try {
+          const reserveResult = await reserveOrderStock(order.id, selectedWarehouse.id);
+          if (!reserveResult?.success) {
+            // Rollback: delete the order if reservation fails
+            await supabase.from('order_status_history').delete().eq('order_id', order.id);
+            await supabase.from('order_items').delete().eq('order_id', order.id);
+            await supabase.from('orders').delete().eq('id', order.id);
+            alert(`Error al reservar stock: ${reserveResult?.error ?? 'Stock insuficiente'}`);
+            setSaving(false);
+            return;
+          }
+
+          // Auto-create pick list (non-fatal if it fails)
+          try {
+            await createPickListForOrder(order.id, selectedWarehouse.id);
+          } catch (pickErr) {
+            console.error('Pick list auto-creation failed:', pickErr);
+          }
+        } catch (reserveErr: unknown) {
+          // Rollback on exception
+          await supabase.from('order_status_history').delete().eq('order_id', order.id);
+          await supabase.from('order_items').delete().eq('order_id', order.id);
+          await supabase.from('orders').delete().eq('id', order.id);
+          const msg = reserveErr instanceof Error ? reserveErr.message : 'Error desconocido';
+          alert(`Error al reservar stock: ${msg}`);
+          setSaving(false);
+          return;
+        }
+      }
+
       onCreated(); onClose();
     } catch (err) { console.error('Error creating order:', err); }
     finally { setSaving(false); }
   };
 
   // ── Modal title ──
-  const modalTitle = isEditMode
-    ? step === 3 ? `Editar Orden ${editOrder?.order_number} — Confirmar` : `Editar Orden ${editOrder?.order_number}`
-    : isPlatformOwner
-      ? step === 1
-        ? orgSubStep === 'aggregator' ? 'Nueva Orden — Seleccionar Agregador' : 'Nueva Orden — Seleccionar Tienda'
-        : step === 3 ? 'Nueva Orden — Confirmar Datos' : 'Nueva Orden'
-      : 'Nueva Orden';
+  const modalTitle = (() => {
+    if (isEditMode) {
+      return step === 3 ? `Editar Orden ${editOrder?.order_number} — Confirmar` : `Editar Orden ${editOrder?.order_number}`;
+    }
+    if (step === 1) {
+      if (isPlatformOwner) {
+        return orgSubStep === 'aggregator' ? 'Nueva Orden — Seleccionar Agregador' : 'Nueva Orden — Seleccionar Tienda';
+      }
+      if (isAggregator) {
+        return orgSubStep === 'associate' ? 'Nueva Orden — Seleccionar Asociado' : 'Nueva Orden — Seleccionar Almacén';
+      }
+    }
+    if (step === 3) return 'Nueva Orden — Confirmar Datos';
+    return 'Nueva Orden';
+  })();
 
   // ── Modal footer ──
   const modalFooter = (() => {
-    if (isPlatformOwner && step === 1) {
-      return (
-        <div style={{ display: 'flex', gap: 8, justifyContent: 'flex-end' }}>
-          {orgSubStep === 'store' && (
-            <button className="rh-btn rh-btn-secondary" onClick={() => { setOrgSubStep('aggregator'); setSelectedOrg(null); setChildOrgs([]); setInventoryOrg(null); }}
-              style={{ marginRight: 'auto' }}>← Cambiar agregador</button>
-          )}
-          <button className="rh-btn rh-btn-secondary" onClick={onClose}>Cancelar</button>
-        </div>
-      );
+    if (step === 1) {
+      if (isPlatformOwner) {
+        return (
+          <div style={{ display: 'flex', gap: 8, justifyContent: 'flex-end' }}>
+            {orgSubStep === 'store' && (
+              <button className="rh-btn rh-btn-secondary" onClick={() => { setOrgSubStep('aggregator'); setSelectedOrg(null); setChildOrgs([]); setInventoryOrg(null); }}
+                style={{ marginRight: 'auto' }}>← Cambiar agregador</button>
+            )}
+            <button className="rh-btn rh-btn-secondary" onClick={onClose}>Cancelar</button>
+          </div>
+        );
+      }
+      if (isAggregator) {
+        return (
+          <div style={{ display: 'flex', gap: 8, justifyContent: 'flex-end' }}>
+            {orgSubStep === 'warehouse' && (
+              <button className="rh-btn rh-btn-secondary" onClick={() => { setOrgSubStep('associate'); setSelectedOrg(null); setInventoryOrg(null); setSelectedWarehouse(null); }}
+                style={{ marginRight: 'auto' }}>← Cambiar asociado</button>
+            )}
+            <button className="rh-btn rh-btn-secondary" onClick={onClose}>Cancelar</button>
+          </div>
+        );
+      }
     }
     if (step === 3) {
       return (
         <div style={{ display: 'flex', gap: 8, justifyContent: 'flex-end' }}>
-          <button className="rh-btn rh-btn-secondary" onClick={() => setStep(2)}>Volver a editar</button>
+          <button className="rh-btn rh-btn-secondary" onClick={() => { setStep(2); setLocationWarning(null); }}>Volver a editar</button>
           <button className="rh-btn rh-btn-primary" onClick={() => handleSave(false)} disabled={saving}>
             {saving ? 'Guardando...' : isEditMode ? 'Guardar cambios' : 'Confirmar y crear orden'}
           </button>
@@ -324,8 +523,8 @@ export function OrderCreateModal({ open, onClose, onCreated, editOrder, editItem
     }
     return (
       <div style={{ display: 'flex', gap: 8, justifyContent: 'flex-end' }}>
-        {!isEditMode && isPlatformOwner && (
-          <button className="rh-btn rh-btn-secondary" onClick={goBackToOrgSelection} style={{ marginRight: 'auto' }}>← Cambiar inventario</button>
+        {!isEditMode && needsOrgStep && (
+          <button className="rh-btn rh-btn-secondary" onClick={goBackToOrgSelection} style={{ marginRight: 'auto' }}>← Cambiar selección</button>
         )}
         {!isEditMode && (
           <button className="rh-btn rh-btn-secondary" onClick={() => handleSave(true)} disabled={saving || items.length === 0}>
@@ -333,14 +532,14 @@ export function OrderCreateModal({ open, onClose, onCreated, editOrder, editItem
           </button>
         )}
         {isEditMode ? (
-          isPlatformOwner ? (
+          needsOrgStep ? (
             <button className="rh-btn rh-btn-primary" onClick={() => setStep(3)} disabled={items.length === 0}>Revisar cambios →</button>
           ) : (
             <button className="rh-btn rh-btn-primary" onClick={() => handleSave(false)} disabled={saving || items.length === 0}>
               {saving ? 'Guardando...' : 'Guardar cambios'}
             </button>
           )
-        ) : isPlatformOwner ? (
+        ) : needsOrgStep ? (
           <button className="rh-btn rh-btn-primary" onClick={() => setStep(3)} disabled={items.length === 0}>Revisar orden →</button>
         ) : (
           <button className="rh-btn rh-btn-primary" onClick={() => handleSave(false)} disabled={saving || items.length === 0}>
@@ -354,8 +553,9 @@ export function OrderCreateModal({ open, onClose, onCreated, editOrder, editItem
   return (
     <Modal open={open} onClose={onClose} title={modalTitle} width="640px" footer={modalFooter}>
       <div style={{ display: 'flex', flexDirection: 'column', gap: 20 }}>
-        {isPlatformOwner && step === 1 && (
+        {step === 1 && isPlatformOwner && (
           <OrgSelectionStep
+            mode="platform"
             orgSubStep={orgSubStep} organizations={organizations} orgsLoading={orgsLoading}
             selectedOrg={selectedOrg} childOrgs={childOrgs}
             onSelectAggregator={handleSelectAggregator} onSelectStore={handleSelectStore}
@@ -363,10 +563,25 @@ export function OrderCreateModal({ open, onClose, onCreated, editOrder, editItem
           />
         )}
 
+        {step === 1 && isAggregator && (
+          <OrgSelectionStep
+            mode="aggregator"
+            orgSubStep={orgSubStep} orgsLoading={orgsLoading}
+            selectedOrg={selectedOrg} childOrgs={childOrgs}
+            warehouses={warehouses}
+            onSelectAssociate={handleSelectAssociate}
+            onSelectWarehouse={handleSelectWarehouse}
+          />
+        )}
+
         {step === 2 && (
           <OrderFormStep
             isPlatformOwner={isPlatformOwner} isEditMode={isEditMode}
+            isAggregator={isAggregator}
             inventoryOrg={inventoryOrg} selectedOrg={selectedOrg}
+            selectedWarehouse={selectedWarehouse}
+            warehouses={warehouses}
+            onWarehouseChange={setSelectedWarehouse}
             customers={customers} customerSearch={customerSearch}
             selectedCustomer={selectedCustomer} showNewCustomer={showNewCustomer}
             newCustomerName={newCustomerName} customerPhone={customerPhone}
@@ -394,12 +609,29 @@ export function OrderCreateModal({ open, onClose, onCreated, editOrder, editItem
           <OrderConfirmStep
             isEditMode={isEditMode} editOrder={editOrder}
             inventoryOrg={inventoryOrg} selectedOrg={selectedOrg}
+            selectedWarehouse={selectedWarehouse}
             selectedCustomer={selectedCustomer} showNewCustomer={showNewCustomer}
             newCustomerName={newCustomerName} customerPhone={customerPhone}
             shippingAddress={shippingAddress}
             items={items} notes={notes} shippingCost={shippingCost}
             subtotal={subtotal} total={total}
           />
+        )}
+
+        {locationWarning && locationWarning.length > 0 && (
+          <div style={{ background: '#FFF3E0', border: '1px solid #FF9800', borderRadius: 8, padding: '12px 16px' }}>
+            <div style={{ fontWeight: 600, color: '#E65100', marginBottom: 8, display: 'flex', alignItems: 'center', gap: 6 }}>
+              ⚠️ Productos sin ubicación asignada en almacén
+            </div>
+            <p style={{ fontSize: 13, color: '#BF360C', margin: '0 0 8px' }}>
+              Los siguientes productos no tienen suficiente stock con ubicación asignada. Asígnalos en el inventario del almacén antes de confirmar la orden.
+            </p>
+            <ul style={{ margin: 0, paddingLeft: 20, fontSize: 13, color: '#4E342E' }}>
+              {locationWarning.map((msg, i) => <li key={i}>{msg}</li>)}
+            </ul>
+            <button className="rh-btn rh-btn-secondary" style={{ marginTop: 10, fontSize: 12 }}
+              onClick={() => setLocationWarning(null)}>Entendido</button>
+          </div>
         )}
       </div>
 

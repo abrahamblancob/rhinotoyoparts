@@ -7,9 +7,11 @@ import { PIPELINE_STAGES } from '@/lib/statusConfig.ts';
 interface PipelineCounts {
   draft: number;
   confirmed: number;
+  picking: number;
+  packing: number;
+  packed: number;
   assigned: number;
-  preparing: number;
-  ready_to_ship: number;
+  picked: number;
   shipped: number;
   in_transit: number;
   delivered: number;
@@ -26,8 +28,8 @@ export function OrderPipelineWidget() {
   const organization = useAuthStore((s) => s.organization);
   const { isPlatform, isAggregator } = usePermissions();
   const [counts, setCounts] = useState<PipelineCounts>({
-    draft: 0, confirmed: 0, assigned: 0, preparing: 0,
-    ready_to_ship: 0, shipped: 0, in_transit: 0, delivered: 0, cancelled: 0,
+    draft: 0, confirmed: 0, picking: 0, packing: 0, packed: 0,
+    assigned: 0, picked: 0, shipped: 0, in_transit: 0, delivered: 0, cancelled: 0,
   });
   const [metrics, setMetrics] = useState<FulfillmentMetrics>({
     avgFulfillmentHours: 0, completedToday: 0, cancelRate: 0,
@@ -57,8 +59,8 @@ export function OrderPipelineWidget() {
     if (!orders) return;
 
     const newCounts: PipelineCounts = {
-      draft: 0, confirmed: 0, assigned: 0, preparing: 0,
-      ready_to_ship: 0, shipped: 0, in_transit: 0, delivered: 0, cancelled: 0,
+      draft: 0, confirmed: 0, picking: 0, packing: 0, packed: 0,
+      assigned: 0, picked: 0, shipped: 0, in_transit: 0, delivered: 0, cancelled: 0,
     };
 
     let totalFulfillmentMs = 0;
