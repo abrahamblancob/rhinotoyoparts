@@ -78,9 +78,19 @@ Deno.serve(async (req) => {
     const isPlatformUser = callerOrgType === 'platform'
 
     if (!isPlatformUser && callerProfile.org_id !== org_id) {
-      return jsonResponse({
-        error: 'Solo puedes crear usuarios dentro de tu propia organización',
-      }, 403)
+      // Allow aggregators to create users in their child orgs
+      const { data: hierarchy } = await supabaseAdmin
+        .from('org_hierarchy')
+        .select('parent_id')
+        .eq('parent_id', callerProfile.org_id)
+        .eq('child_id', org_id as string)
+        .maybeSingle()
+
+      if (!hierarchy) {
+        return jsonResponse({
+          error: 'Solo puedes crear usuarios dentro de tu organización o sus asociados',
+        }, 403)
+      }
     }
 
     const roleIds = (callerRoles ?? []).map((r: { role_id: string }) => r.role_id)
