@@ -111,7 +111,17 @@ Deno.serve(async (req) => {
     }
 
     if (!isPlatformUser && targetProfile.org_id !== callerProfile.org_id) {
-      return jsonResponse({ error: 'Solo puedes eliminar usuarios de tu propia organización' }, 403)
+      // Allow aggregators to delete users in their child orgs
+      const { data: hierarchy } = await supabaseAdmin
+        .from('org_hierarchy')
+        .select('parent_id')
+        .eq('parent_id', callerProfile.org_id)
+        .eq('child_id', targetProfile.org_id)
+        .maybeSingle()
+
+      if (!hierarchy) {
+        return jsonResponse({ error: 'Solo puedes eliminar usuarios de tu organización o sus asociados' }, 403)
+      }
     }
 
     // Delete user roles
