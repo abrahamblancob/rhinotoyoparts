@@ -15,42 +15,12 @@ import {
 import { useAuthStore } from '@/stores/authStore.ts';
 import { useAsyncData } from '@/hooks/useAsyncData.ts';
 import { supabase } from '@/lib/supabase.ts';
+import { getStatusStyle, getStatusLabel } from '@/lib/statusConfig.ts';
+import { PhotoLightbox } from '@/components/hub/shared/PhotoLightbox.tsx';
+import { formatDateTime } from '@/utils/dateUtils.ts';
+import { parsePhotoUrls } from '@/utils/photos.ts';
 import * as packingService from '@/services/packingService.ts';
-import type { PackSession, PackSessionItem, PackSessionStatus } from '@/types/warehouse.ts';
-
-const STATUS_LABELS: Record<PackSessionStatus, string> = {
-  pending: 'Pendiente',
-  in_progress: 'En Progreso',
-  verified: 'Verificado',
-  labelled: 'Etiquetado',
-  completed: 'Completado',
-};
-
-const STATUS_COLORS: Record<PackSessionStatus, { bg: string; text: string }> = {
-  pending: { bg: '#F59E0B15', text: '#F59E0B' },
-  in_progress: { bg: '#F9731615', text: '#F97316' },
-  verified: { bg: '#3B82F615', text: '#3B82F6' },
-  labelled: { bg: '#8B5CF615', text: '#8B5CF6' },
-  completed: { bg: '#10B98115', text: '#10B981' },
-};
-
-function formatDateTime(iso: string | null): string {
-  if (!iso) return '-';
-  return new Date(iso).toLocaleString('es-VE', {
-    dateStyle: 'medium',
-    timeStyle: 'short',
-  });
-}
-
-function parsePhotoUrls(raw: string | null): string[] {
-  if (!raw) return [];
-  try {
-    const parsed = JSON.parse(raw);
-    return Array.isArray(parsed) ? parsed : [raw];
-  } catch {
-    return raw ? [raw] : [];
-  }
-}
+import type { PackSession, PackSessionItem } from '@/types/warehouse.ts';
 
 export function PackSessionDetail() {
   const { sessionId } = useParams<{ sessionId: string }>();
@@ -167,7 +137,7 @@ export function PackSessionDetail() {
     );
   }
 
-  const statusStyle = STATUS_COLORS[session.status];
+  const statusStyle = getStatusStyle(session.status);
   const allVerified = allItems.length > 0 && allItems.every((i) => i.quantity_verified >= i.quantity_expected);
   const savedPhotos = parsePhotoUrls(session.package_photo_url);
 
@@ -222,7 +192,7 @@ export function PackSessionDetail() {
             className="rh-badge"
             style={{ backgroundColor: statusStyle.bg, color: statusStyle.text, fontSize: 14, padding: '6px 14px' }}
           >
-            {STATUS_LABELS[session.status]}
+            {getStatusLabel(session.status)}
           </span>
         </div>
 
@@ -526,41 +496,7 @@ export function PackSessionDetail() {
         </div>
       )}
 
-      {/* Lightbox modal */}
-      {lightboxUrl && (
-        <div
-          onClick={() => setLightboxUrl(null)}
-          style={{
-            position: 'fixed', inset: 0,
-            backgroundColor: 'rgba(0,0,0,0.8)',
-            display: 'flex', alignItems: 'center', justifyContent: 'center',
-            zIndex: 9999, cursor: 'pointer',
-          }}
-        >
-          <button
-            onClick={() => setLightboxUrl(null)}
-            style={{
-              position: 'absolute', top: 16, right: 16,
-              width: 40, height: 40, borderRadius: '50%',
-              backgroundColor: 'rgba(255,255,255,0.15)', color: '#fff',
-              border: 'none', cursor: 'pointer',
-              display: 'flex', alignItems: 'center', justifyContent: 'center',
-            }}
-          >
-            <X size={24} />
-          </button>
-          <img
-            src={lightboxUrl}
-            alt="Foto del paquete"
-            onClick={(e) => e.stopPropagation()}
-            style={{
-              maxWidth: '90vw', maxHeight: '90vh',
-              borderRadius: 12, objectFit: 'contain',
-              cursor: 'default',
-            }}
-          />
-        </div>
-      )}
+      <PhotoLightbox url={lightboxUrl} onClose={() => setLightboxUrl(null)} />
     </div>
   );
 }

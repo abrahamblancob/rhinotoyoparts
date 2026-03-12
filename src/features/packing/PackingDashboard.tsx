@@ -9,27 +9,12 @@ import { useAuthStore } from '@/stores/authStore.ts';
 import { usePermissions } from '@/hooks/usePermissions.ts';
 import { useAsyncData } from '@/hooks/useAsyncData.ts';
 import { StatsCard } from '@/components/hub/shared/StatsCard.tsx';
+import { StatusBadge } from '@/components/hub/shared/StatusBadge.tsx';
 import { EmptyState } from '@/components/hub/shared/EmptyState.tsx';
+import { PACK_SESSION_STATUS_LABELS } from '@/lib/statusConfig.ts';
 import * as packingService from '@/services/packingService.ts';
 import { supabase } from '@/lib/supabase.ts';
-import type { PackSession, PackSessionStatus } from '@/types/warehouse.ts';
-
-const STATUS_LABELS: Record<string, string> = {
-  all: 'Todos',
-  pending: 'Pendiente',
-  in_progress: 'En Progreso',
-  verified: 'Verificado',
-  labelled: 'Etiquetado',
-  completed: 'Completado',
-};
-
-const STATUS_COLORS: Record<PackSessionStatus, { bg: string; text: string }> = {
-  pending: { bg: '#F59E0B15', text: '#F59E0B' },
-  in_progress: { bg: '#F9731615', text: '#F97316' },
-  verified: { bg: '#3B82F615', text: '#3B82F6' },
-  labelled: { bg: '#8B5CF615', text: '#8B5CF6' },
-  completed: { bg: '#10B98115', text: '#10B981' },
-};
+import type { PackSession } from '@/types/warehouse.ts';
 
 export function PackingDashboard() {
   const [statusFilter, setStatusFilter] = useState('all');
@@ -109,7 +94,7 @@ export function PackingDashboard() {
             onClick={() => setStatusFilter(s)}
             className={`rh-filter-pill ${statusFilter === s ? 'active' : ''}`}
           >
-            {STATUS_LABELS[s] ?? s}
+            {PACK_SESSION_STATUS_LABELS[s] ?? s}
           </button>
         ))}
       </div>
@@ -152,13 +137,7 @@ export function PackingDashboard() {
               </tr>
             </thead>
             <tbody>
-              {filtered.map((session) => {
-                const statusStyle = STATUS_COLORS[session.status] ?? {
-                  bg: '#8A888615',
-                  text: '#8A8886',
-                };
-
-                return (
+              {filtered.map((session) => (
                   <tr
                     key={session.id}
                     className="cursor-pointer"
@@ -173,12 +152,7 @@ export function PackingDashboard() {
                       )}
                     </td>
                     <td>
-                      <span
-                        className="rh-badge"
-                        style={{ backgroundColor: statusStyle.bg, color: statusStyle.text }}
-                      >
-                        {STATUS_LABELS[session.status] ?? session.status}
-                      </span>
+                      <StatusBadge status={session.status} />
                     </td>
                     <td>
                       <span style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
@@ -207,8 +181,7 @@ export function PackingDashboard() {
                       </button>
                     </td>
                   </tr>
-                );
-              })}
+              ))}
             </tbody>
           </table>
         </div>

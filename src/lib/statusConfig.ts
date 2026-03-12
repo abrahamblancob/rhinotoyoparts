@@ -104,6 +104,16 @@ export function getRoleBadgeStyle(roleName: string): { bg: string; color: string
   return { bg: 'rgba(99, 102, 241, 0.08)', color: '#6366F1' };
 }
 
+// Pack session filter labels (for dashboard filter pills)
+export const PACK_SESSION_STATUS_LABELS: Record<string, string> = {
+  all: 'Todos',
+  pending: 'Pendiente',
+  in_progress: 'En Progreso',
+  verified: 'Verificado',
+  labelled: 'Etiquetado',
+  completed: 'Completado',
+};
+
 // Org type labels
 export const ORG_TYPE_LABELS: Record<string, string> = {
   platform: 'Plataforma',
