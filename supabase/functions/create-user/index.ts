@@ -64,17 +64,30 @@ Deno.serve(async (req) => {
       .select('role_id')
       .eq('user_id', callingUser.id)
 
+    const { data: callerProfile } = await supabaseAdmin
+      .from('profiles')
+      .select('org_id, organizations(type)')
+      .eq('id', callingUser.id)
+      .single()
+
+    if (!callerProfile?.org_id) {
+      return jsonResponse({ error: 'No se pudo validar la organización del solicitante' }, 403)
+    }
+
+    const callerOrgType = (callerProfile.organizations as { type: string } | null)?.type
+    const isPlatformUser = callerOrgType === 'platform'
+
+    if (!isPlatformUser && callerProfile.org_id !== org_id) {
+      return jsonResponse({
+        error: 'Solo puedes crear usuarios dentro de tu propia organización',
+      }, 403)
+    }
+
     const roleIds = (callerRoles ?? []).map((r: { role_id: string }) => r.role_id)
 
     if (roleIds.length === 0) {
       // Fallback: allow platform org users (owner without explicit roles)
-      const { data: profile } = await supabaseAdmin
-        .from('profiles')
-        .select('org_id, organizations(type)')
-        .eq('id', callingUser.id)
-        .single()
-      const orgType = (profile?.organizations as { type: string } | null)?.type
-      if (orgType !== 'platform') {
+      if (!isPlatformUser) {
         return jsonResponse({ error: 'No tienes roles asignados' }, 403)
       }
     } else {

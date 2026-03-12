@@ -66,16 +66,23 @@ Deno.serve(async (req) => {
       .select('role_id')
       .eq('user_id', callingUser.id)
 
+    const { data: callerProfile } = await supabaseAdmin
+      .from('profiles')
+      .select('org_id, organizations(type)')
+      .eq('id', callingUser.id)
+      .single()
+
+    if (!callerProfile?.org_id) {
+      return jsonResponse({ error: 'No se pudo validar la organización del solicitante' }, 403)
+    }
+
+    const callerOrgType = (callerProfile.organizations as { type: string } | null)?.type
+    const isPlatformUser = callerOrgType === 'platform'
+
     const roleIds = (callerRoles ?? []).map((r: { role_id: string }) => r.role_id)
 
     if (roleIds.length === 0) {
-      const { data: profile } = await supabaseAdmin
-        .from('profiles')
-        .select('org_id, organizations(type)')
-        .eq('id', callingUser.id)
-        .single()
-      const orgType = (profile?.organizations as { type: string } | null)?.type
-      if (orgType !== 'platform') {
+      if (!isPlatformUser) {
         return jsonResponse({ error: 'Sin permisos' }, 403)
       }
     } else {
@@ -95,12 +102,16 @@ Deno.serve(async (req) => {
     // Get target user info before deleting
     const { data: targetProfile } = await supabaseAdmin
       .from('profiles')
-      .select('full_name, email')
+      .select('org_id, full_name, email')
       .eq('id', user_id as string)
       .single()
 
     if (!targetProfile) {
       return jsonResponse({ error: 'Usuario no encontrado' }, 404)
+    }
+
+    if (!isPlatformUser && targetProfile.org_id !== callerProfile.org_id) {
+      return jsonResponse({ error: 'Solo puedes eliminar usuarios de tu propia organización' }, 403)
     }
 
     // Delete user roles
