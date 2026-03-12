@@ -2,7 +2,6 @@ import { useState, useCallback, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import {
   Search,
-  UserPlus,
   Weight,
   CheckSquare,
 } from 'lucide-react';
@@ -36,7 +35,7 @@ export function PackingDashboard() {
   const [statusFilter, setStatusFilter] = useState('all');
   const [search, setSearch] = useState('');
   const navigate = useNavigate();
-  const { isPlatform, canWrite } = usePermissions();
+  const { isPlatform, isAggregator } = usePermissions();
   const organization = useAuthStore((s) => s.organization);
 
   const fetcher = useCallback(
@@ -44,9 +43,10 @@ export function PackingDashboard() {
       packingService.getPackSessions({
         orgId: organization?.id,
         isPlatform,
+        isAggregator,
         status: statusFilter === 'all' ? undefined : statusFilter,
       }),
-    [organization?.id, isPlatform, statusFilter],
+    [organization?.id, isPlatform, isAggregator, statusFilter],
   );
 
   const { data: sessions, loading, reload } = useAsyncData<PackSession[]>(fetcher, [
@@ -195,19 +195,16 @@ export function PackingDashboard() {
                       </span>
                     </td>
                     <td>
-                      {session.status === 'pending' && canWrite('warehouse') && (
-                        <button
-                          className="rh-btn rh-btn-primary"
-                          style={{ fontSize: 12, padding: '4px 10px' }}
-                          onClick={(e) => {
-                            e.stopPropagation();
-                            navigate(`/hub/packing/${session.id}`);
-                          }}
-                        >
-                          <UserPlus size={14} style={{ marginRight: 4 }} />
-                          Asignar empacador
-                        </button>
-                      )}
+                      <button
+                        className="rh-btn"
+                        style={{ fontSize: 12, padding: '4px 10px' }}
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          navigate(`/hub/packing/${session.id}`);
+                        }}
+                      >
+                        Ver detalle
+                      </button>
                     </td>
                   </tr>
                 );

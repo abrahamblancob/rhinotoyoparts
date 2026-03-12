@@ -166,13 +166,31 @@ export async function expirePickList(pickListId: string) {
 }
 
 export async function completePickList(pickListId: string) {
-  return query<PickList>((sb) =>
+  const result = await query<PickList>((sb) =>
     sb.from('pick_lists')
       .update({ status: 'completed', completed_at: new Date().toISOString() })
       .eq('id', pickListId)
       .select()
       .single()
   );
+
+  // Auto-transition order to 'packing' and create pack session
+  if (result.data) {
+    const orderId = result.data.order_id;
+    try {
+      await supabase.rpc('change_order_status', {
+        p_order_id: orderId,
+        p_new_status: 'packing',
+        p_notes: 'Picking completado, iniciando packing',
+        p_metadata: {},
+      });
+      await supabase.rpc('create_pack_session_for_order', { p_order_id: orderId });
+    } catch (err) {
+      console.error('Auto-transition to packing failed:', err);
+    }
+  }
+
+  return result;
 }
 
 export function subscribeToPickLists(orgId: string, callback: () => void) {

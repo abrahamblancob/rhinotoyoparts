@@ -1,4 +1,4 @@
-import { useState, useCallback } from 'react';
+import { useState, useCallback, useRef } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import {
   ArrowLeft,
@@ -9,9 +9,12 @@ import {
   Camera,
   CheckSquare,
   Square,
+  X,
+  ImageIcon,
 } from 'lucide-react';
 import { useAuthStore } from '@/stores/authStore.ts';
 import { useAsyncData } from '@/hooks/useAsyncData.ts';
+import { supabase } from '@/lib/supabase.ts';
 import * as packingService from '@/services/packingService.ts';
 import type { PackSession, PackSessionItem, PackSessionStatus } from '@/types/warehouse.ts';
 
@@ -39,13 +42,26 @@ function formatDateTime(iso: string | null): string {
   });
 }
 
+function parsePhotoUrls(raw: string | null): string[] {
+  if (!raw) return [];
+  try {
+    const parsed = JSON.parse(raw);
+    return Array.isArray(parsed) ? parsed : [raw];
+  } catch {
+    return raw ? [raw] : [];
+  }
+}
+
 export function PackSessionDetail() {
   const { sessionId } = useParams<{ sessionId: string }>();
   const navigate = useNavigate();
   const user = useAuthStore((s) => s.user);
   const [actionLoading, setActionLoading] = useState(false);
   const [weight, setWeight] = useState('');
-  const [photoFile, setPhotoFile] = useState<File | null>(null);
+  const [photoFiles, setPhotoFiles] = useState<File[]>([]);
+  const [uploadProgress, setUploadProgress] = useState('');
+  const [lightboxUrl, setLightboxUrl] = useState<string | null>(null);
+  const fileInputRef = useRef<HTMLInputElement>(null);
 
   const sessionFetcher = useCallback(
     () =>
@@ -85,12 +101,44 @@ export function PackSessionDetail() {
     setActionLoading(false);
   };
 
+  const handleAddPhotos = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const files = e.target.files;
+    if (!files) return;
+    setPhotoFiles((prev) => [...prev, ...Array.from(files)]);
+    // Reset input so the same file can be added again if needed
+    if (fileInputRef.current) fileInputRef.current.value = '';
+  };
+
+  const handleRemovePhoto = (index: number) => {
+    setPhotoFiles((prev) => prev.filter((_, i) => i !== index));
+  };
+
   const handleComplete = async () => {
     if (!sessionId) return;
     setActionLoading(true);
+
+    // Upload photos to Supabase Storage
+    const photoUrls: string[] = [];
+    if (photoFiles.length > 0) {
+      setUploadProgress('Subiendo fotos...');
+      for (let i = 0; i < photoFiles.length; i++) {
+        const file = photoFiles[i];
+        setUploadProgress(`Subiendo foto ${i + 1} de ${photoFiles.length}...`);
+        const ext = file.name.split('.').pop() ?? 'jpg';
+        const path = `${sessionId}/${Date.now()}-${i}.${ext}`;
+        const { data } = await supabase.storage.from('pack-photos').upload(path, file);
+        if (data) {
+          const { data: urlData } = supabase.storage.from('pack-photos').getPublicUrl(data.path);
+          photoUrls.push(urlData.publicUrl);
+        }
+      }
+      setUploadProgress('');
+    }
+
     const weightKg = parseFloat(weight) || undefined;
     await packingService.completePackSession(sessionId, {
       package_weight_kg: weightKg,
+      package_photo_url: photoUrls.length > 0 ? JSON.stringify(photoUrls) : undefined,
     });
     await reloadSession();
     setActionLoading(false);
@@ -121,6 +169,7 @@ export function PackSessionDetail() {
 
   const statusStyle = STATUS_COLORS[session.status];
   const allVerified = allItems.length > 0 && allItems.every((i) => i.quantity_verified >= i.quantity_expected);
+  const savedPhotos = parsePhotoUrls(session.package_photo_url);
 
   return (
     <div>
@@ -161,6 +210,12 @@ export function PackSessionDetail() {
                 <CheckSquare size={14} />
                 {session.verified_items} / {session.total_items} verificados
               </span>
+              {session.completed_at && (
+                <span style={{ display: 'flex', alignItems: 'center', gap: 4, color: '#10B981', fontWeight: 600 }}>
+                  <CheckCircle2 size={14} />
+                  Completado: {formatDateTime(session.completed_at)}
+                </span>
+              )}
             </div>
           </div>
           <span
@@ -261,7 +316,7 @@ export function PackSessionDetail() {
         )}
       </div>
 
-      {/* Weight and Photo */}
+      {/* Weight and Photos — active packing */}
       {(session.status === 'in_progress' || session.status === 'verified') && (
         <div
           style={{
@@ -294,25 +349,80 @@ export function PackSessionDetail() {
               />
             </div>
 
-            {/* Photo upload */}
-            <div style={{ flex: 1, minWidth: 200 }}>
+            {/* Photo upload — multiple */}
+            <div style={{ flex: 2, minWidth: 280 }}>
               <label style={{ display: 'block', fontSize: 13, color: '#605E5C', marginBottom: 6 }}>
                 <Camera size={14} style={{ marginRight: 4, verticalAlign: 'middle' }} />
-                Foto del paquete
+                Fotos del paquete
               </label>
-              <input
-                type="file"
-                accept="image/*"
-                onChange={(e) => setPhotoFile(e.target.files?.[0] ?? null)}
-                style={{ fontSize: 13 }}
-              />
-              {photoFile && (
-                <p style={{ fontSize: 12, color: '#8A8886', marginTop: 4 }}>
-                  Archivo seleccionado: {photoFile.name}
-                </p>
+              <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 10 }}>
+                <input
+                  ref={fileInputRef}
+                  type="file"
+                  accept="image/*"
+                  capture="environment"
+                  multiple
+                  onChange={handleAddPhotos}
+                  style={{ display: 'none' }}
+                />
+                <button
+                  className="rh-btn"
+                  onClick={() => fileInputRef.current?.click()}
+                  style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 13 }}
+                >
+                  <Camera size={14} />
+                  {photoFiles.length > 0 ? 'Agregar mas fotos' : 'Tomar / Seleccionar fotos'}
+                </button>
+                {photoFiles.length > 0 && (
+                  <span style={{ fontSize: 12, color: '#64748B' }}>
+                    {photoFiles.length} foto{photoFiles.length > 1 ? 's' : ''} seleccionada{photoFiles.length > 1 ? 's' : ''}
+                  </span>
+                )}
+              </div>
+
+              {/* Photo thumbnails preview */}
+              {photoFiles.length > 0 && (
+                <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
+                  {photoFiles.map((file, idx) => (
+                    <div
+                      key={idx}
+                      style={{
+                        position: 'relative', width: 80, height: 80,
+                        borderRadius: 8, overflow: 'hidden',
+                        border: '1px solid #E2E8F0',
+                      }}
+                    >
+                      <img
+                        src={URL.createObjectURL(file)}
+                        alt={`Foto ${idx + 1}`}
+                        style={{ width: '100%', height: '100%', objectFit: 'cover' }}
+                      />
+                      <button
+                        onClick={() => handleRemovePhoto(idx)}
+                        style={{
+                          position: 'absolute', top: 2, right: 2,
+                          width: 20, height: 20, borderRadius: '50%',
+                          backgroundColor: '#DC2626', color: '#fff',
+                          border: 'none', cursor: 'pointer',
+                          display: 'flex', alignItems: 'center', justifyContent: 'center',
+                          fontSize: 10,
+                        }}
+                      >
+                        <X size={12} />
+                      </button>
+                    </div>
+                  ))}
+                </div>
               )}
             </div>
           </div>
+
+          {/* Upload progress */}
+          {uploadProgress && (
+            <p style={{ fontSize: 12, color: '#3B82F6', marginTop: 12 }}>
+              {uploadProgress}
+            </p>
+          )}
 
           {/* Complete button */}
           <div style={{ marginTop: 20 }}>
@@ -323,7 +433,7 @@ export function PackSessionDetail() {
               style={{ backgroundColor: allVerified ? '#10B981' : undefined }}
             >
               <CheckCircle2 size={16} style={{ marginRight: 4 }} />
-              Completar Packing
+              {actionLoading ? 'Procesando...' : 'Completar Packing'}
             </button>
             {!allVerified && (
               <p style={{ fontSize: 12, color: '#F59E0B', marginTop: 8 }}>
@@ -331,6 +441,124 @@ export function PackSessionDetail() {
               </p>
             )}
           </div>
+        </div>
+      )}
+
+      {/* Completed — show saved photos gallery */}
+      {session.status === 'completed' && (savedPhotos.length > 0 || session.package_weight_kg) && (
+        <div
+          style={{
+            backgroundColor: '#fff',
+            borderRadius: 12,
+            padding: 24,
+            marginBottom: 24,
+            border: '1px solid #E1DFDD',
+          }}
+        >
+          <h2 style={{ fontSize: 16, fontWeight: 600, color: '#323130', marginBottom: 16 }}>
+            Resumen del Empaque
+          </h2>
+
+          <div style={{ display: 'flex', gap: 24, flexWrap: 'wrap', marginBottom: savedPhotos.length > 0 ? 16 : 0 }}>
+            {session.package_weight_kg && (
+              <div>
+                <p style={{ fontSize: 12, color: '#605E5C', margin: 0 }}>Peso</p>
+                <p style={{ fontSize: 18, fontWeight: 700, color: '#1E293B', margin: '4px 0 0' }}>
+                  {session.package_weight_kg} kg
+                </p>
+              </div>
+            )}
+            <div>
+              <p style={{ fontSize: 12, color: '#605E5C', margin: 0 }}>Empacador</p>
+              <p style={{ fontSize: 14, fontWeight: 600, color: '#1E293B', margin: '4px 0 0' }}>
+                {session.packer?.full_name ?? '-'}
+              </p>
+            </div>
+            <div>
+              <p style={{ fontSize: 12, color: '#605E5C', margin: 0 }}>Completado</p>
+              <p style={{ fontSize: 14, fontWeight: 600, color: '#1E293B', margin: '4px 0 0' }}>
+                {formatDateTime(session.completed_at)}
+              </p>
+            </div>
+          </div>
+
+          {/* Photo gallery */}
+          {savedPhotos.length > 0 && (
+            <div>
+              <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginBottom: 10 }}>
+                <ImageIcon size={14} style={{ color: '#64748B' }} />
+                <p style={{ fontSize: 13, fontWeight: 600, color: '#475569', margin: 0 }}>
+                  Fotos del paquete ({savedPhotos.length})
+                </p>
+              </div>
+              <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap' }}>
+                {savedPhotos.map((url, idx) => (
+                  <button
+                    key={idx}
+                    type="button"
+                    onClick={() => setLightboxUrl(url)}
+                    style={{
+                      display: 'block', width: 120, height: 120,
+                      borderRadius: 10, overflow: 'hidden',
+                      border: '1px solid #E2E8F0',
+                      transition: 'transform 0.15s, box-shadow 0.15s',
+                      cursor: 'pointer', padding: 0, background: 'none',
+                    }}
+                    onMouseEnter={(e) => {
+                      e.currentTarget.style.transform = 'scale(1.03)';
+                      e.currentTarget.style.boxShadow = '0 4px 12px rgba(0,0,0,0.12)';
+                    }}
+                    onMouseLeave={(e) => {
+                      e.currentTarget.style.transform = 'scale(1)';
+                      e.currentTarget.style.boxShadow = 'none';
+                    }}
+                  >
+                    <img
+                      src={url}
+                      alt={`Foto paquete ${idx + 1}`}
+                      style={{ width: '100%', height: '100%', objectFit: 'cover' }}
+                    />
+                  </button>
+                ))}
+              </div>
+            </div>
+          )}
+        </div>
+      )}
+
+      {/* Lightbox modal */}
+      {lightboxUrl && (
+        <div
+          onClick={() => setLightboxUrl(null)}
+          style={{
+            position: 'fixed', inset: 0,
+            backgroundColor: 'rgba(0,0,0,0.8)',
+            display: 'flex', alignItems: 'center', justifyContent: 'center',
+            zIndex: 9999, cursor: 'pointer',
+          }}
+        >
+          <button
+            onClick={() => setLightboxUrl(null)}
+            style={{
+              position: 'absolute', top: 16, right: 16,
+              width: 40, height: 40, borderRadius: '50%',
+              backgroundColor: 'rgba(255,255,255,0.15)', color: '#fff',
+              border: 'none', cursor: 'pointer',
+              display: 'flex', alignItems: 'center', justifyContent: 'center',
+            }}
+          >
+            <X size={24} />
+          </button>
+          <img
+            src={lightboxUrl}
+            alt="Foto del paquete"
+            onClick={(e) => e.stopPropagation()}
+            style={{
+              maxWidth: '90vw', maxHeight: '90vh',
+              borderRadius: 12, objectFit: 'contain',
+              cursor: 'default',
+            }}
+          />
         </div>
       )}
     </div>

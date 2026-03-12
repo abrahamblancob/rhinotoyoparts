@@ -9,8 +9,11 @@ import { DeliveryPinMap } from '@/components/tracking/DeliveryPinMap.tsx';
 import { OrderCreateModal } from './OrderCreateModal.tsx';
 import type { Order, Customer, Profile, Carrier } from '@/lib/database.types.ts';
 import { reserveOrderStock } from '@/services/orderService.ts';
-import { createPickListForOrder, getPickListForOrder } from '@/services/pickingService.ts';
-import type { PickList } from '@/types/warehouse.ts';
+import { createPickListForOrder, getPickListForOrder, getPickListItems } from '@/services/pickingService.ts';
+import { getPackSessionForOrder } from '@/services/packingService.ts';
+import { PickingMiniMap } from '@/features/picking/PickingMiniMap.tsx';
+import type { PickList, PickListItem, PackSession } from '@/types/warehouse.ts';
+import { ChevronDown } from 'lucide-react';
 
 import { OrderProgressBar } from './detail/OrderProgressBar.tsx';
 import { OrderStatusActions } from './detail/OrderStatusActions.tsx';
@@ -50,6 +53,11 @@ export function OrderDetailPage() {
   const [showCancelModal, setShowCancelModal] = useState(false);
   const [showEditModal, setShowEditModal] = useState(false);
   const [pickList, setPickList] = useState<PickList | null>(null);
+  const [pickListItems, setPickListItems] = useState<PickListItem[]>([]);
+  const [packSession, setPackSession] = useState<PackSession | null>(null);
+  const [pickingExpanded, setPickingExpanded] = useState(false);
+  const [packingExpanded, setPackingExpanded] = useState(false);
+  const [photoModalUrl, setPhotoModalUrl] = useState<string | null>(null);
 
   const [updating, setUpdating] = useState(false);
   const [realtimeStatus, setRealtimeStatus] = useState<RealtimeStatus>('connecting');
@@ -88,8 +96,9 @@ export function OrderDetailPage() {
       if (dp) setDispatcherName((dp as { full_name: string }).full_name);
     }
 
-    // Load or auto-generate order QR code
-    if (orderData?.tracking_code && orderData?.org_id) {
+    // Load or auto-generate order QR code (only after packing is done)
+    const postPackStatuses = ['packed', 'assigned', 'picked', 'preparing', 'ready_to_ship', 'shipped', 'in_transit', 'delivered'];
+    if (orderData?.tracking_code && orderData?.org_id && postPackStatuses.includes(orderData.status)) {
       const { data: qr } = await supabase
         .from('order_qr_codes')
         .select('qr_code, scanned_at, scanned_by, is_valid')
@@ -121,8 +130,20 @@ export function OrderDetailPage() {
     // Load associated pick list (if any)
     if (orderId) {
       getPickListForOrder(orderId).then(({ data }) => {
-        setPickList((data as PickList) ?? null);
+        const pl = (data as PickList) ?? null;
+        setPickList(pl);
+        // Load items when pick list is completed (for mini-map display)
+        if (pl?.status === 'completed') {
+          getPickListItems(pl.id).then(({ data: plItems }) => {
+            setPickListItems((plItems as PickListItem[]) ?? []);
+          }).catch(() => setPickListItems([]));
+        }
       }).catch(() => setPickList(null));
+
+      // Load associated pack session (if any)
+      getPackSessionForOrder(orderId).then(({ data }) => {
+        setPackSession((data as PackSession) ?? null);
+      }).catch(() => setPackSession(null));
     }
 
     setLoading(false);
@@ -360,49 +381,192 @@ export function OrderDetailPage() {
 
       <OrderProgressBar status={order.status} />
 
-      {/* Pick List card */}
+      {/* ── Picking Module (collapsible) ── */}
       {pickList && (
-        <div
-          style={{
-            display: 'flex', alignItems: 'center', justifyContent: 'space-between',
-            padding: '14px 20px', borderRadius: 10, marginBottom: 20,
-            background: pickList.status === 'completed' ? '#F0FDF4' : '#FFFBEB',
-            border: `1px solid ${pickList.status === 'completed' ? '#BBF7D0' : '#FDE68A'}`,
-          }}
-        >
-          <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
-            <span style={{ fontSize: 20 }}>📦</span>
-            <div>
-              <div style={{ fontWeight: 600, fontSize: 14, color: '#1E293B' }}>
-                Pick List — {pickList.status === 'completed' ? 'Completado' : pickList.status === 'in_progress' ? 'En progreso' : pickList.status === 'assigned' ? 'Asignado' : 'Pendiente'}
-              </div>
-              <div style={{ fontSize: 12, color: '#64748B' }}>
-                {pickList.picked_items} / {pickList.total_items} items recogidos
-                {pickList.assignee?.full_name && ` · ${pickList.assignee.full_name}`}
+        <div style={{ marginBottom: 20, borderRadius: 10, overflow: 'hidden', border: pickList.status === 'completed' ? '1px solid #BBF7D0' : '1px solid #FDE68A' }}>
+          <button
+            type="button"
+            onClick={() => setPickingExpanded((v) => !v)}
+            style={{
+              display: 'flex', alignItems: 'center', justifyContent: 'space-between',
+              width: '100%', padding: '14px 20px', border: 'none', cursor: 'pointer',
+              background: pickList.status === 'completed' ? '#F0FDF4' : '#FFFBEB',
+            }}
+          >
+            <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
+              <span style={{ fontSize: 20 }}>{pickList.status === 'completed' ? '✅' : '📦'}</span>
+              <div style={{ textAlign: 'left' }}>
+                <div style={{ fontWeight: 600, fontSize: 14, color: pickList.status === 'completed' ? '#166534' : '#1E293B' }}>
+                  {pickList.status === 'completed' ? 'Picking Completado' : `Pick List — ${pickList.status === 'in_progress' ? 'En progreso' : pickList.status === 'assigned' ? 'Asignado' : 'Pendiente'}`}
+                </div>
+                <div style={{ fontSize: 12, color: pickList.status === 'completed' ? '#15803D' : '#64748B' }}>
+                  {pickList.picked_items} / {pickList.total_items} items recogidos
+                  {pickList.assignee?.full_name && ` · ${pickList.assignee.full_name}`}
+                  {pickList.status === 'completed' && pickList.completed_at && ` · ${new Date(pickList.completed_at).toLocaleString('es-VE', { dateStyle: 'medium', timeStyle: 'short' })}`}
+                </div>
               </div>
             </div>
-          </div>
-          <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
-            {pickList.total_items > 0 && (
-              <div style={{ width: 80, height: 6, borderRadius: 3, backgroundColor: '#E2E8F0', overflow: 'hidden' }}>
-                <div style={{
-                  width: `${Math.round((pickList.picked_items / pickList.total_items) * 100)}%`,
-                  height: '100%', borderRadius: 3,
-                  backgroundColor: pickList.picked_items === pickList.total_items ? '#10B981' : '#F97316',
-                  transition: 'width 0.3s ease',
-                }} />
-              </div>
-            )}
-            <button
-              className="rh-btn rh-btn-primary"
-              onClick={() => navigate(`/hub/picking/${pickList.id}`)}
-              style={{ fontSize: 12, padding: '6px 14px', backgroundColor: '#F97316' }}
-            >
-              Ver Pick List →
-            </button>
-          </div>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+              {pickList.total_items > 0 && (
+                <div style={{ width: 80, height: 6, borderRadius: 3, backgroundColor: pickList.status === 'completed' ? '#BBF7D0' : '#E2E8F0', overflow: 'hidden' }}>
+                  <div style={{
+                    width: `${Math.round((pickList.picked_items / pickList.total_items) * 100)}%`,
+                    height: '100%', borderRadius: 3,
+                    backgroundColor: pickList.picked_items === pickList.total_items ? '#10B981' : '#F97316',
+                  }} />
+                </div>
+              )}
+              <ChevronDown size={18} style={{ color: '#64748B', transition: 'transform 0.2s', transform: pickingExpanded ? 'rotate(180deg)' : 'rotate(0deg)' }} />
+            </div>
+          </button>
+
+          {pickingExpanded && (
+            <div style={{ borderTop: pickList.status === 'completed' ? '1px solid #BBF7D0' : '1px solid #FDE68A' }}>
+              {pickList.status !== 'completed' && (
+                <div style={{ padding: '14px 20px', background: '#fff' }}>
+                  <button
+                    className="rh-btn rh-btn-primary"
+                    onClick={() => navigate(`/hub/picking/${pickList.id}`)}
+                    style={{ fontSize: 12, padding: '6px 14px', backgroundColor: '#F97316' }}
+                  >
+                    Ver Pick List →
+                  </button>
+                </div>
+              )}
+              {pickList.status === 'completed' && pickList.warehouse_id && (
+                <PickingMiniMap
+                  warehouseId={pickList.warehouse_id}
+                  locationIds={pickListItems.map((i) => i.source_location_id).filter(Boolean)}
+                  pickedLocationIds={pickListItems.filter((i) => i.status === 'picked').map((i) => i.source_location_id).filter(Boolean)}
+                />
+              )}
+            </div>
+          )}
         </div>
       )}
+
+      {/* ── Packing Module (collapsible) ── */}
+      {packSession && (() => {
+        const isCompleted = packSession.status === 'completed';
+        const packPhotos: string[] = (() => {
+          if (!packSession.package_photo_url) return [];
+          try { const p = JSON.parse(packSession.package_photo_url); return Array.isArray(p) ? p : [packSession.package_photo_url]; }
+          catch { return packSession.package_photo_url ? [packSession.package_photo_url] : []; }
+        })();
+        return (
+          <div style={{ marginBottom: 20, borderRadius: 10, overflow: 'hidden', border: isCompleted ? '1px solid #BBF7D0' : '1px solid #FDE68A' }}>
+            <button
+              type="button"
+              onClick={() => setPackingExpanded((v) => !v)}
+              style={{
+                display: 'flex', alignItems: 'center', justifyContent: 'space-between',
+                width: '100%', padding: '14px 20px', border: 'none', cursor: 'pointer',
+                background: isCompleted ? '#F0FDF4' : '#FFFBEB',
+              }}
+            >
+              <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
+                <span style={{ fontSize: 20 }}>{isCompleted ? '✅' : '📦'}</span>
+                <div style={{ textAlign: 'left' }}>
+                  <div style={{ fontWeight: 600, fontSize: 14, color: isCompleted ? '#166534' : '#1E293B' }}>
+                    {isCompleted ? 'Packing Completado' : `Packing — ${packSession.status === 'in_progress' ? 'En progreso' : packSession.status === 'pending' ? 'Pendiente' : packSession.status}`}
+                  </div>
+                  <div style={{ fontSize: 12, color: isCompleted ? '#15803D' : '#64748B' }}>
+                    {packSession.verified_items} / {packSession.total_items} items verificados
+                    {packSession.packer?.full_name && ` · ${packSession.packer.full_name}`}
+                    {isCompleted && packSession.completed_at && ` · ${new Date(packSession.completed_at).toLocaleString('es-VE', { dateStyle: 'medium', timeStyle: 'short' })}`}
+                  </div>
+                </div>
+              </div>
+              <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+                {packSession.total_items > 0 && (
+                  <div style={{ width: 80, height: 6, borderRadius: 3, backgroundColor: isCompleted ? '#BBF7D0' : '#E2E8F0', overflow: 'hidden' }}>
+                    <div style={{
+                      width: `${Math.round((packSession.verified_items / packSession.total_items) * 100)}%`,
+                      height: '100%', borderRadius: 3, backgroundColor: '#10B981',
+                    }} />
+                  </div>
+                )}
+                <ChevronDown size={18} style={{ color: '#64748B', transition: 'transform 0.2s', transform: packingExpanded ? 'rotate(180deg)' : 'rotate(0deg)' }} />
+              </div>
+            </button>
+
+            {packingExpanded && (
+              <div style={{ borderTop: isCompleted ? '1px solid #BBF7D0' : '1px solid #FDE68A', padding: 20, background: '#fff' }}>
+                {/* Pack session details */}
+                <div style={{ display: 'flex', gap: 24, flexWrap: 'wrap', marginBottom: packPhotos.length > 0 ? 16 : 0 }}>
+                  {packSession.package_weight_kg != null && (
+                    <div>
+                      <p style={{ fontSize: 12, color: '#605E5C', margin: 0 }}>Peso</p>
+                      <p style={{ fontSize: 18, fontWeight: 700, color: '#1E293B', margin: '4px 0 0' }}>
+                        {packSession.package_weight_kg} kg
+                      </p>
+                    </div>
+                  )}
+                  <div>
+                    <p style={{ fontSize: 12, color: '#605E5C', margin: 0 }}>Empacador</p>
+                    <p style={{ fontSize: 14, fontWeight: 600, color: '#1E293B', margin: '4px 0 0' }}>
+                      {packSession.packer?.full_name ?? 'Sin asignar'}
+                    </p>
+                  </div>
+                  {packSession.completed_at && (
+                    <div>
+                      <p style={{ fontSize: 12, color: '#605E5C', margin: 0 }}>Completado</p>
+                      <p style={{ fontSize: 14, fontWeight: 600, color: '#1E293B', margin: '4px 0 0' }}>
+                        {new Date(packSession.completed_at).toLocaleString('es-VE', { dateStyle: 'medium', timeStyle: 'short' })}
+                      </p>
+                    </div>
+                  )}
+                  <div>
+                    <p style={{ fontSize: 12, color: '#605E5C', margin: 0 }}>Items verificados</p>
+                    <p style={{ fontSize: 14, fontWeight: 600, color: '#1E293B', margin: '4px 0 0' }}>
+                      {packSession.verified_items} / {packSession.total_items}
+                    </p>
+                  </div>
+                </div>
+
+                {/* Photos gallery */}
+                {packPhotos.length > 0 && (
+                  <div>
+                    <p style={{ fontSize: 13, fontWeight: 600, color: '#475569', margin: '0 0 10px' }}>
+                      📷 Fotos del paquete ({packPhotos.length})
+                    </p>
+                    <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap' }}>
+                      {packPhotos.map((url, idx) => (
+                        <button
+                          key={idx}
+                          type="button"
+                          onClick={() => setPhotoModalUrl(url)}
+                          style={{
+                            display: 'block', width: 100, height: 100,
+                            borderRadius: 8, overflow: 'hidden',
+                            border: '1px solid #E2E8F0', cursor: 'pointer',
+                            padding: 0, background: 'none',
+                            transition: 'transform 0.15s, box-shadow 0.15s',
+                          }}
+                          onMouseEnter={(e) => { e.currentTarget.style.transform = 'scale(1.03)'; e.currentTarget.style.boxShadow = '0 4px 12px rgba(0,0,0,0.12)'; }}
+                          onMouseLeave={(e) => { e.currentTarget.style.transform = 'scale(1)'; e.currentTarget.style.boxShadow = 'none'; }}
+                        >
+                          <img src={url} alt={`Foto ${idx + 1}`} style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+                )}
+
+                {!isCompleted && (
+                  <button
+                    className="rh-btn rh-btn-primary"
+                    onClick={() => navigate(`/hub/packing/${packSession.id}`)}
+                    style={{ fontSize: 12, padding: '6px 14px', marginTop: packPhotos.length > 0 ? 16 : 0 }}
+                  >
+                    Ver Sesión de Packing →
+                  </button>
+                )}
+              </div>
+            )}
+          </div>
+        );
+      })()}
 
       {/* Delivery pin map */}
       {isPlatformOwner && !order.dispatcher_current_lat
@@ -484,6 +648,35 @@ export function OrderDetailPage() {
         open={showCancelModal} updating={updating}
         onCancel={handleCancel} onClose={() => setShowCancelModal(false)}
       />
+
+      {/* Photo lightbox modal */}
+      {photoModalUrl && (
+        <div
+          onClick={() => setPhotoModalUrl(null)}
+          style={{
+            position: 'fixed', inset: 0, backgroundColor: 'rgba(0,0,0,0.8)',
+            display: 'flex', alignItems: 'center', justifyContent: 'center',
+            zIndex: 9999, cursor: 'pointer',
+          }}
+        >
+          <button
+            onClick={() => setPhotoModalUrl(null)}
+            style={{
+              position: 'absolute', top: 16, right: 16,
+              width: 40, height: 40, borderRadius: '50%',
+              backgroundColor: 'rgba(255,255,255,0.15)', color: '#fff',
+              border: 'none', cursor: 'pointer', fontSize: 22,
+              display: 'flex', alignItems: 'center', justifyContent: 'center',
+            }}
+          >✕</button>
+          <img
+            src={photoModalUrl}
+            alt="Foto del paquete"
+            onClick={(e) => e.stopPropagation()}
+            style={{ maxWidth: '90vw', maxHeight: '90vh', borderRadius: 12, objectFit: 'contain', cursor: 'default' }}
+          />
+        </div>
+      )}
 
       <style>{`
         @keyframes realtimePulse {
