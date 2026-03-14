@@ -31,6 +31,8 @@ import { RackDetailView } from './RackDetailView.tsx';
 import { RackMiniGrid } from './components/RackMiniGrid.tsx';
 import { ConfirmDeleteModal } from '@/components/hub/shared/ConfirmDeleteModal.tsx';
 import * as warehouseService from '@/services/warehouseService.ts';
+import { supabase } from '@/lib/supabase.ts';
+import type { Organization } from '@/lib/database.types.ts';
 import type { Warehouse, WarehouseRack, WarehouseLocation, InventoryStock } from '@/types/warehouse.ts';
 
 const ZONE_TYPE_LABELS: Record<string, string> = {
@@ -48,9 +50,37 @@ const RACK_COLORS = [
 
 export function WarehouseLayoutPage() {
   const navigate = useNavigate();
-  const { canWrite, canDelete } = usePermissions();
+  const { canWrite, canDelete, isPlatform } = usePermissions();
 
   const { data: warehouses, loading: warehousesLoading, reload: reloadWarehouses } = useWarehouses();
+
+  // Platform org selector
+  const [availableOrgs, setAvailableOrgs] = useState<Organization[]>([]);
+  const [selectedOrgFilter, setSelectedOrgFilter] = useState<string | null>(null);
+  const [loadingOrgs, setLoadingOrgs] = useState(false);
+
+  useEffect(() => {
+    if (isPlatform) {
+      setLoadingOrgs(true);
+      supabase
+        .from('organizations')
+        .select('*')
+        .in('type', ['aggregator', 'associate'])
+        .eq('status', 'active')
+        .order('name')
+        .then(({ data }) => {
+          setAvailableOrgs((data as Organization[]) ?? []);
+          setLoadingOrgs(false);
+        });
+    }
+  }, [isPlatform]);
+
+  const selectedOrgInfo = availableOrgs.find((o) => o.id === selectedOrgFilter);
+
+  // Filter warehouses by selected org for platform users
+  const filteredWarehouses = isPlatform && selectedOrgFilter
+    ? (warehouses ?? []).filter((w) => w.org_id === selectedOrgFilter)
+    : warehouses;
 
   const [selectedWarehouseId, setSelectedWarehouseId] = useState<string | null>(null);
   const activeWarehouse = warehouses?.find((w) => w.id === selectedWarehouseId) ?? null;
@@ -160,19 +190,117 @@ export function WarehouseLayoutPage() {
   };
 
   // ── Loading state ──
-  if (warehousesLoading) {
+  if (warehousesLoading || loadingOrgs) {
     return <p className="rh-loading">Cargando almacenes...</p>;
   }
 
-  // ── No warehouse exists ──
-  if (!warehouses || warehouses.length === 0) {
+  // ── Platform org selector (before showing warehouses) ──
+  if (isPlatform && !selectedOrgFilter) {
+    // Count warehouses per org
+    const warehouseCountByOrg = new Map<string, number>();
+    for (const wh of warehouses ?? []) {
+      warehouseCountByOrg.set(wh.org_id, (warehouseCountByOrg.get(wh.org_id) ?? 0) + 1);
+    }
+
     return (
       <div>
         <div className="rh-page-header">
-          <h1 className="rh-page-title">
-            <WarehouseIcon size={24} style={{ display: 'inline', marginRight: 8, verticalAlign: 'middle' }} />
-            Almacen
-          </h1>
+          <div>
+            <h1 className="rh-page-title">
+              <WarehouseIcon size={24} style={{ display: 'inline', marginRight: 8, verticalAlign: 'middle' }} />
+              Almacenes
+            </h1>
+            <p className="rh-page-subtitle">Selecciona una organización para ver sus almacenes</p>
+          </div>
+        </div>
+
+        <div style={{
+          display: 'grid',
+          gridTemplateColumns: 'repeat(auto-fill, minmax(320px, 1fr))',
+          gap: 16,
+        }}>
+          {availableOrgs.map((org) => {
+            const whCount = warehouseCountByOrg.get(org.id) ?? 0;
+            return (
+              <div
+                key={org.id}
+                onClick={() => setSelectedOrgFilter(org.id)}
+                className="rh-card"
+                style={{
+                  padding: '20px 24px',
+                  cursor: 'pointer',
+                  transition: 'all 0.15s ease',
+                  border: '1px solid #E2E0DE',
+                }}
+                onMouseEnter={(e) => {
+                  e.currentTarget.style.borderColor = '#D3010A';
+                  e.currentTarget.style.boxShadow = '0 4px 12px rgba(211,1,10,0.1)';
+                  e.currentTarget.style.transform = 'translateY(-2px)';
+                }}
+                onMouseLeave={(e) => {
+                  e.currentTarget.style.borderColor = '#E2E0DE';
+                  e.currentTarget.style.boxShadow = 'none';
+                  e.currentTarget.style.transform = 'none';
+                }}
+              >
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: 16 }}>
+                  <div>
+                    <h3 style={{ fontSize: 16, fontWeight: 700, color: '#1E293B', margin: 0 }}>
+                      {org.name}
+                    </h3>
+                    <span style={{
+                      display: 'inline-block',
+                      marginTop: 4,
+                      padding: '2px 8px',
+                      borderRadius: 4,
+                      fontSize: 11,
+                      fontWeight: 600,
+                      backgroundColor: org.type === 'aggregator' ? 'rgba(99,102,241,0.1)' : 'rgba(16,185,129,0.1)',
+                      color: org.type === 'aggregator' ? '#6366F1' : '#10B981',
+                    }}>
+                      {org.type === 'aggregator' ? 'Agregador' : 'Asociado'}
+                    </span>
+                  </div>
+                  <span style={{ fontSize: 24, opacity: 0.3 }}>→</span>
+                </div>
+
+                <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
+                  <div style={{ textAlign: 'center', padding: '10px 20px', backgroundColor: '#F8FAFC', borderRadius: 8, flex: 1 }}>
+                    <p style={{ fontSize: 24, fontWeight: 800, color: '#6366F1', margin: 0 }}>
+                      {whCount}
+                    </p>
+                    <p style={{ fontSize: 11, color: '#94A3B8', margin: 0 }}>
+                      {whCount === 1 ? 'Almacén' : 'Almacenes'}
+                    </p>
+                  </div>
+                </div>
+              </div>
+            );
+          })}
+        </div>
+      </div>
+    );
+  }
+
+  // ── No warehouse exists for selected org ──
+  if (!filteredWarehouses || filteredWarehouses.length === 0) {
+    return (
+      <div>
+        <div className="rh-page-header">
+          <div>
+            <h1 className="rh-page-title">
+              <WarehouseIcon size={24} style={{ display: 'inline', marginRight: 8, verticalAlign: 'middle' }} />
+              {isPlatform && selectedOrgInfo ? `Almacén — ${selectedOrgInfo.name}` : 'Almacén'}
+            </h1>
+          </div>
+          {isPlatform && selectedOrgFilter && (
+            <button
+              onClick={() => setSelectedOrgFilter(null)}
+              className="rh-btn rh-btn-ghost"
+            >
+              ← Todas las organizaciones
+            </button>
+          )}
         </div>
         <div
           style={{
@@ -213,14 +341,22 @@ export function WarehouseLayoutPage() {
           <div>
             <h1 className="rh-page-title">
               <WarehouseIcon size={24} style={{ display: 'inline', marginRight: 8, verticalAlign: 'middle' }} />
-              Almacenes
+              {isPlatform && selectedOrgInfo ? `Almacenes — ${selectedOrgInfo.name}` : 'Almacenes'}
             </h1>
             <p className="rh-page-subtitle">
               Selecciona un almacen para ver su layout y configuracion
             </p>
           </div>
-          {canWrite('warehouse') && (
-            <div className="rh-page-actions">
+          <div className="rh-page-actions">
+            {isPlatform && selectedOrgFilter && (
+              <button
+                onClick={() => setSelectedOrgFilter(null)}
+                className="rh-btn rh-btn-ghost"
+              >
+                ← Todas las organizaciones
+              </button>
+            )}
+            {canWrite('warehouse') && (
               <button
                 onClick={() => navigate('/hub/warehouse/setup')}
                 className="rh-btn rh-btn-primary"
@@ -229,8 +365,8 @@ export function WarehouseLayoutPage() {
                 <Plus size={16} />
                 Nuevo Almacen
               </button>
-            </div>
-          )}
+            )}
+          </div>
         </div>
 
         <div
@@ -240,7 +376,7 @@ export function WarehouseLayoutPage() {
             gap: 16,
           }}
         >
-          {warehouses.map((wh) => {
+          {(filteredWarehouses ?? []).map((wh) => {
             const areaSqm = wh.total_area_sqm ?? (wh.width_m && wh.length_m ? wh.width_m * wh.length_m : null);
             return (
               <div
