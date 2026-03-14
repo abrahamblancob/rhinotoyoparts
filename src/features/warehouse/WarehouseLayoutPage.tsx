@@ -515,7 +515,7 @@ export function WarehouseLayoutPage() {
     setSelectedRack(null);
   };
 
-  const hasMultipleWarehouses = warehouses.length > 1;
+  const hasMultipleWarehouses = (warehouses ?? []).length > 1;
 
   // ── Rack Detail View ──
   if (selectedRack && activeWarehouse) {
