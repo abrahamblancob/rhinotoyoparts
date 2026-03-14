@@ -22,19 +22,42 @@ export interface PlacedRack {
   rotated: boolean;
 }
 
+export interface WizardAisleForm {
+  id: string;
+  name: string;
+  code: string;
+  widthCells: number;
+  lengthCells: number;
+}
+
+export interface PlacedAisle {
+  aisleId: string;
+  gridX: number;
+  gridY: number;
+  lengthCells: number;
+  widthCells: number;
+  orientation: 'vertical' | 'horizontal';
+}
+
 interface FloorPlanBuilderProps {
   warehouseWidth: number;
   warehouseLength: number;
   racks: WizardRackForm[];
   placedRacks: PlacedRack[];
   onPlacedRacksChange: (p: PlacedRack[]) => void;
+  aisles: WizardAisleForm[];
+  placedAisles: PlacedAisle[];
+  onPlacedAislesChange: (a: PlacedAisle[]) => void;
 }
 
 // ── Constants ──
 
+/** Grid resolution in meters per cell. 0.5 = each cell represents 50cm. */
+export const CELL_SIZE_M = 0.5;
 const MIN_CELL = 20;
 const GRID_COLOR = '#E2E8F020';
 const GRID_LINE = '#CBD5E1';
+const AISLE_COLOR = '#94A3B8';
 
 // ── Helpers ──
 
@@ -42,15 +65,29 @@ function buildOccupancy(
   width: number,
   height: number,
   placements: PlacedRack[],
+  aisles: PlacedAisle[],
   excludeId?: string,
+  excludeType?: 'rack' | 'aisle',
 ): boolean[][] {
   const grid: boolean[][] = Array.from({ length: height }, () =>
     Array(width).fill(false),
   );
   for (const p of placements) {
-    if (p.rackId === excludeId) continue;
+    if (excludeType === 'rack' && p.rackId === excludeId) continue;
     for (let r = p.gridY; r < p.gridY + p.depthCells; r++) {
       for (let c = p.gridX; c < p.gridX + p.widthCells; c++) {
+        if (r >= 0 && r < height && c >= 0 && c < width) {
+          grid[r][c] = true;
+        }
+      }
+    }
+  }
+  for (const a of aisles) {
+    if (excludeType === 'aisle' && a.aisleId === excludeId) continue;
+    const aw = a.orientation === 'horizontal' ? a.lengthCells : a.widthCells;
+    const ah = a.orientation === 'horizontal' ? a.widthCells : a.lengthCells;
+    for (let r = a.gridY; r < a.gridY + ah; r++) {
+      for (let c = a.gridX; c < a.gridX + aw; c++) {
         if (r >= 0 && r < height && c >= 0 && c < width) {
           grid[r][c] = true;
         }
@@ -91,13 +128,16 @@ export function FloorPlanBuilder({
   racks,
   placedRacks,
   onPlacedRacksChange,
+  aisles,
+  placedAisles,
+  onPlacedAislesChange,
 }: FloorPlanBuilderProps) {
   const wrapperRef = useRef<HTMLDivElement>(null);
   const canvasRef = useRef<HTMLDivElement>(null);
   const [containerSize, setContainerSize] = useState({ w: 0, h: 0 });
   const [dragState, setDragState] = useState<{
-    type: 'sidebar' | 'grid';
-    rackId: string;
+    type: 'sidebar-rack' | 'grid-rack' | 'sidebar-aisle' | 'grid-aisle';
+    itemId: string;
     widthCells: number;
     depthCells: number;
     gridX: number;
@@ -106,8 +146,8 @@ export function FloorPlanBuilder({
     active: boolean;
   } | null>(null);
 
-  const gridW = Math.ceil(warehouseWidth);
-  const gridH = Math.ceil(warehouseLength);
+  const gridW = Math.ceil(warehouseWidth / CELL_SIZE_M);
+  const gridH = Math.ceil(warehouseLength / CELL_SIZE_M);
 
   // ── Measure container ──
   useEffect(() => {
@@ -122,36 +162,43 @@ export function FloorPlanBuilder({
     return () => ro.disconnect();
   }, []);
 
-  // Independent scales: fill both width and height
   const availableW = Math.max(containerSize.w - 220 - 16, 200);
   const availableH = Math.max(containerSize.h - 120, 300);
   const CELL_W = Math.max(availableW / gridW, MIN_CELL);
   const CELL_H = Math.max(availableH / gridH, MIN_CELL);
 
-  const placedIds = useMemo(
+  const placedRackIds = useMemo(
     () => new Set(placedRacks.map((p) => p.rackId)),
     [placedRacks],
   );
 
-  const unplacedRacks = useMemo(
-    () => racks.filter((r) => !placedIds.has(r.id)),
-    [racks, placedIds],
+  const placedAisleIds = useMemo(
+    () => new Set(placedAisles.map((a) => a.aisleId)),
+    [placedAisles],
   );
 
-  // ── Drag from sidebar ──
+  const unplacedRacks = useMemo(
+    () => racks.filter((r) => !placedRackIds.has(r.id)),
+    [racks, placedRackIds],
+  );
 
-  const handleSidebarMouseDown = useCallback(
+  const unplacedAisles = useMemo(
+    () => aisles.filter((a) => !placedAisleIds.has(a.id)),
+    [aisles, placedAisleIds],
+  );
+
+  // ── Drag from sidebar (rack) ──
+
+  const handleSidebarRackMouseDown = useCallback(
     (rackId: string, e: React.MouseEvent) => {
       e.preventDefault();
       const rack = racks.find((r) => r.id === rackId);
       if (!rack) return;
-      const w = Math.ceil(rack.rack_width_m);
-      const d = Math.ceil(rack.rack_depth_m);
       setDragState({
-        type: 'sidebar',
-        rackId,
-        widthCells: w,
-        depthCells: d,
+        type: 'sidebar-rack',
+        itemId: rackId,
+        widthCells: Math.ceil(rack.rack_width_m / CELL_SIZE_M),
+        depthCells: Math.ceil(rack.rack_depth_m / CELL_SIZE_M),
         gridX: -1,
         gridY: -1,
         valid: false,
@@ -161,7 +208,31 @@ export function FloorPlanBuilder({
     [racks],
   );
 
-  // ── Drag from grid ──
+  // ── Drag from sidebar (aisle) ──
+
+  const handleSidebarAisleMouseDown = useCallback(
+    (aisleId: string, e: React.MouseEvent) => {
+      e.preventDefault();
+      const aisle = aisles.find((a) => a.id === aisleId);
+      if (!aisle) return;
+      // Convert meter dimensions to grid cells (round up so sub-meter widths occupy at least 1 cell)
+      const wCells = Math.max(1, Math.ceil(aisle.widthCells / CELL_SIZE_M));
+      const lCells = Math.max(1, Math.ceil(aisle.lengthCells / CELL_SIZE_M));
+      setDragState({
+        type: 'sidebar-aisle',
+        itemId: aisleId,
+        widthCells: wCells,
+        depthCells: lCells,
+        gridX: -1,
+        gridY: -1,
+        valid: false,
+        active: true,
+      });
+    },
+    [aisles],
+  );
+
+  // ── Drag from grid (rack) ──
 
   const handleGridRackMouseDown = useCallback(
     (rackId: string, e: React.MouseEvent) => {
@@ -170,8 +241,8 @@ export function FloorPlanBuilder({
       const placed = placedRacks.find((p) => p.rackId === rackId);
       if (!placed) return;
       setDragState({
-        type: 'grid',
-        rackId,
+        type: 'grid-rack',
+        itemId: rackId,
         widthCells: placed.widthCells,
         depthCells: placed.depthCells,
         gridX: placed.gridX,
@@ -183,10 +254,37 @@ export function FloorPlanBuilder({
     [placedRacks],
   );
 
+  // ── Drag from grid (aisle) ──
+
+  const handleGridAisleMouseDown = useCallback(
+    (aisleId: string, e: React.MouseEvent) => {
+      e.preventDefault();
+      e.stopPropagation();
+      const placed = placedAisles.find((a) => a.aisleId === aisleId);
+      if (!placed) return;
+      const aw = placed.orientation === 'horizontal' ? placed.lengthCells : placed.widthCells;
+      const ah = placed.orientation === 'horizontal' ? placed.widthCells : placed.lengthCells;
+      setDragState({
+        type: 'grid-aisle',
+        itemId: aisleId,
+        widthCells: aw,
+        depthCells: ah,
+        gridX: placed.gridX,
+        gridY: placed.gridY,
+        valid: true,
+        active: true,
+      });
+    },
+    [placedAisles],
+  );
+
   // ── Mouse move & up ──
 
   useEffect(() => {
     if (!dragState?.active) return;
+
+    const isRack = dragState.type === 'sidebar-rack' || dragState.type === 'grid-rack';
+    const isFromGrid = dragState.type === 'grid-rack' || dragState.type === 'grid-aisle';
 
     const handleMouseMove = (e: MouseEvent) => {
       if (!canvasRef.current) return;
@@ -194,23 +292,25 @@ export function FloorPlanBuilder({
       const mouseX = e.clientX - rect.left;
       const mouseY = e.clientY - rect.top;
 
-      const gx = Math.round(mouseX / CELL_W - dragState.widthCells / 2);
-      const gy = Math.round(mouseY / CELL_H - dragState.depthCells / 2);
+      let gx = Math.round(mouseX / CELL_W - dragState.widthCells / 2);
+      let gy = Math.round(mouseY / CELL_H - dragState.depthCells / 2);
+
+      // Clamp to valid grid bounds so large items can always be placed
+      gx = Math.max(0, Math.min(gx, gridW - dragState.widthCells));
+      gy = Math.max(0, Math.min(gy, gridH - dragState.depthCells));
 
       const occ = buildOccupancy(
         gridW,
         gridH,
         placedRacks,
-        dragState.type === 'grid' ? dragState.rackId : undefined,
+        placedAisles,
+        isFromGrid ? dragState.itemId : undefined,
+        isRack ? 'rack' : 'aisle',
       );
       const collision = checkCollision(
-        occ,
-        gx,
-        gy,
-        dragState.widthCells,
-        dragState.depthCells,
-        gridW,
-        gridH,
+        occ, gx, gy,
+        dragState.widthCells, dragState.depthCells,
+        gridW, gridH,
       );
 
       setDragState((prev) =>
@@ -222,28 +322,59 @@ export function FloorPlanBuilder({
       setDragState((prev) => {
         if (!prev) return null;
         if (prev.valid && prev.gridX >= 0 && prev.gridY >= 0) {
-          const existing = placedRacks.find((p) => p.rackId === prev.rackId);
-          let newPlacements: PlacedRack[];
-          if (existing) {
-            newPlacements = placedRacks.map((p) =>
-              p.rackId === prev.rackId
-                ? { ...p, gridX: prev.gridX, gridY: prev.gridY }
-                : p,
-            );
+          if (prev.type === 'sidebar-rack' || prev.type === 'grid-rack') {
+            const existing = placedRacks.find((p) => p.rackId === prev.itemId);
+            let newPlacements: PlacedRack[];
+            if (existing) {
+              newPlacements = placedRacks.map((p) =>
+                p.rackId === prev.itemId
+                  ? { ...p, gridX: prev.gridX, gridY: prev.gridY }
+                  : p,
+              );
+            } else {
+              newPlacements = [
+                ...placedRacks,
+                {
+                  rackId: prev.itemId,
+                  gridX: prev.gridX,
+                  gridY: prev.gridY,
+                  widthCells: prev.widthCells,
+                  depthCells: prev.depthCells,
+                  rotated: false,
+                },
+              ];
+            }
+            onPlacedRacksChange(newPlacements);
           } else {
-            newPlacements = [
-              ...placedRacks,
-              {
-                rackId: prev.rackId,
-                gridX: prev.gridX,
-                gridY: prev.gridY,
-                widthCells: prev.widthCells,
-                depthCells: prev.depthCells,
-                rotated: false,
-              },
-            ];
+            // Aisle
+            const existing = placedAisles.find((a) => a.aisleId === prev.itemId);
+            const aisle = aisles.find((a) => a.id === prev.itemId);
+            if (existing) {
+              onPlacedAislesChange(
+                placedAisles.map((a) =>
+                  a.aisleId === prev.itemId
+                    ? { ...a, gridX: prev.gridX, gridY: prev.gridY }
+                    : a,
+                ),
+              );
+            } else {
+              onPlacedAislesChange([
+                ...placedAisles,
+                {
+                  aisleId: prev.itemId,
+                  gridX: prev.gridX,
+                  gridY: prev.gridY,
+                  lengthCells: aisle
+                    ? Math.max(1, Math.ceil(aisle.lengthCells / CELL_SIZE_M))
+                    : prev.depthCells,
+                  widthCells: aisle
+                    ? Math.max(1, Math.ceil(aisle.widthCells / CELL_SIZE_M))
+                    : 1,
+                  orientation: 'vertical',
+                },
+              ]);
+            }
           }
-          onPlacedRacksChange(newPlacements);
         }
         return null;
       });
@@ -255,26 +386,18 @@ export function FloorPlanBuilder({
       window.removeEventListener('mousemove', handleMouseMove);
       window.removeEventListener('mouseup', handleMouseUp);
     };
-  }, [dragState?.active, dragState?.rackId, dragState?.type, dragState?.widthCells, dragState?.depthCells, placedRacks, gridW, gridH, onPlacedRacksChange, CELL_W, CELL_H]);
+  }, [dragState?.active, dragState?.itemId, dragState?.type, dragState?.widthCells, dragState?.depthCells, placedRacks, placedAisles, gridW, gridH, onPlacedRacksChange, onPlacedAislesChange, CELL_W, CELL_H, aisles]);
 
   // ── Rotate rack ──
 
-  const handleRotate = useCallback(
+  const handleRotateRack = useCallback(
     (rackId: string) => {
       const placed = placedRacks.find((p) => p.rackId === rackId);
       if (!placed) return;
       const newW = placed.depthCells;
       const newD = placed.widthCells;
-      const occ = buildOccupancy(gridW, gridH, placedRacks, rackId);
-      const collision = checkCollision(
-        occ,
-        placed.gridX,
-        placed.gridY,
-        newW,
-        newD,
-        gridW,
-        gridH,
-      );
+      const occ = buildOccupancy(gridW, gridH, placedRacks, placedAisles, rackId, 'rack');
+      const collision = checkCollision(occ, placed.gridX, placed.gridY, newW, newD, gridW, gridH);
       if (!collision) {
         onPlacedRacksChange(
           placedRacks.map((p) =>
@@ -285,16 +408,49 @@ export function FloorPlanBuilder({
         );
       }
     },
-    [placedRacks, gridW, gridH, onPlacedRacksChange],
+    [placedRacks, placedAisles, gridW, gridH, onPlacedRacksChange],
   );
 
-  // ── Remove rack from grid ──
+  // ── Rotate aisle ──
 
-  const handleRemove = useCallback(
+  const handleRotateAisle = useCallback(
+    (aisleId: string) => {
+      const placed = placedAisles.find((a) => a.aisleId === aisleId);
+      if (!placed) return;
+      const newOrientation = placed.orientation === 'vertical' ? 'horizontal' : 'vertical';
+      // Swap: the old width becomes the new depth and vice versa
+      const newAW = newOrientation === 'horizontal' ? placed.lengthCells : placed.widthCells;
+      const newAH = newOrientation === 'horizontal' ? placed.widthCells : placed.lengthCells;
+
+      const occ = buildOccupancy(gridW, gridH, placedRacks, placedAisles, aisleId, 'aisle');
+      const collision = checkCollision(occ, placed.gridX, placed.gridY, newAW, newAH, gridW, gridH);
+      if (!collision) {
+        onPlacedAislesChange(
+          placedAisles.map((a) =>
+            a.aisleId === aisleId
+              ? { ...a, orientation: newOrientation }
+              : a,
+          ),
+        );
+      }
+    },
+    [placedAisles, placedRacks, gridW, gridH, onPlacedAislesChange],
+  );
+
+  // ── Remove ──
+
+  const handleRemoveRack = useCallback(
     (rackId: string) => {
       onPlacedRacksChange(placedRacks.filter((p) => p.rackId !== rackId));
     },
     [placedRacks, onPlacedRacksChange],
+  );
+
+  const handleRemoveAisle = useCallback(
+    (aisleId: string) => {
+      onPlacedAislesChange(placedAisles.filter((a) => a.aisleId !== aisleId));
+    },
+    [placedAisles, onPlacedAislesChange],
   );
 
   // ── Render ──
@@ -327,13 +483,12 @@ export function FloorPlanBuilder({
           Distribucion del Almacen
         </h3>
         <span style={{ fontSize: 13, color: '#94A3B8' }}>
-          {placedRacks.length} / {racks.length} estantes colocados
+          {placedAisles.length} pasillos | {placedRacks.length} / {racks.length} estantes
         </span>
       </div>
 
       <p style={{ fontSize: 13, color: '#64748B', marginBottom: 16 }}>
-        Arrastra los estantes desde el panel izquierdo al plano del almacen.
-        Usa el boton de rotar para cambiar la orientacion.
+        Arrastra primero los pasillos y luego los estantes al plano del almacen.
       </p>
 
       <div style={{ display: 'flex', gap: 16, flex: 1, minHeight: 0 }}>
@@ -349,6 +504,96 @@ export function FloorPlanBuilder({
             overflowY: 'auto',
           }}
         >
+          {/* Aisles section */}
+          <p
+            style={{
+              fontSize: 12,
+              fontWeight: 700,
+              color: AISLE_COLOR,
+              marginBottom: 10,
+              textTransform: 'uppercase',
+              letterSpacing: 0.5,
+            }}
+          >
+            Pasillos
+          </p>
+
+          {aisles.length === 0 ? (
+            <div style={{ textAlign: 'center', padding: '8px', color: '#94A3B8', fontSize: 12 }}>
+              Sin pasillos configurados
+            </div>
+          ) : unplacedAisles.length === 0 ? (
+            <div style={{ textAlign: 'center', padding: '8px', color: '#94A3B8', fontSize: 12 }}>
+              Todos colocados
+            </div>
+          ) : (
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
+              {unplacedAisles.map((aisle) => (
+                <div
+                  key={aisle.id}
+                  onMouseDown={(e) => handleSidebarAisleMouseDown(aisle.id, e)}
+                  style={{
+                    padding: '10px 12px',
+                    backgroundColor: '#FFFFFF',
+                    border: `2px solid ${AISLE_COLOR}40`,
+                    borderLeft: `4px solid ${AISLE_COLOR}`,
+                    borderRadius: 8,
+                    cursor: 'grab',
+                    userSelect: 'none',
+                    transition: 'transform 0.1s, box-shadow 0.1s',
+                  }}
+                  onMouseEnter={(e) => {
+                    e.currentTarget.style.transform = 'translateX(2px)';
+                    e.currentTarget.style.boxShadow = `0 2px 8px ${AISLE_COLOR}30`;
+                  }}
+                  onMouseLeave={(e) => {
+                    e.currentTarget.style.transform = 'translateX(0)';
+                    e.currentTarget.style.boxShadow = 'none';
+                  }}
+                >
+                  <div style={{ fontSize: 14, fontWeight: 700, color: '#1E293B', marginBottom: 2 }}>
+                    {aisle.code} — {aisle.name}
+                  </div>
+                  <div style={{ fontSize: 11, color: '#94A3B8' }}>
+                    {aisle.widthCells}m x {aisle.lengthCells}m
+                  </div>
+                </div>
+              ))}
+            </div>
+          )}
+
+          {/* Placed aisles */}
+          {placedAisles.length > 0 && (
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 4, marginTop: 8 }}>
+              {placedAisles.map((pa) => {
+                const aisle = aisles.find((a) => a.id === pa.aisleId);
+                if (!aisle) return null;
+                return (
+                  <div
+                    key={pa.aisleId}
+                    style={{
+                      padding: '6px 10px',
+                      backgroundColor: '#F1F5F9',
+                      borderRadius: 6,
+                      fontSize: 12,
+                      color: '#475569',
+                      display: 'flex',
+                      alignItems: 'center',
+                      justifyContent: 'space-between',
+                    }}
+                  >
+                    <span style={{ fontWeight: 600 }}>
+                      {aisle.code} — ({pa.gridX},{pa.gridY}) {pa.orientation === 'horizontal' ? '↔' : '↕'}
+                    </span>
+                  </div>
+                );
+              })}
+            </div>
+          )}
+
+          <div style={{ borderTop: '1px solid #E2E8F0', margin: '12px 0' }} />
+
+          {/* Racks section */}
           <p
             style={{
               fontSize: 12,
@@ -384,7 +629,7 @@ export function FloorPlanBuilder({
                 return (
                   <div
                     key={rack.id}
-                    onMouseDown={(e) => handleSidebarMouseDown(rack.id, e)}
+                    onMouseDown={(e) => handleSidebarRackMouseDown(rack.id, e)}
                     style={{
                       padding: '10px 12px',
                       backgroundColor: '#FFFFFF',
@@ -415,7 +660,7 @@ export function FloorPlanBuilder({
                       {rack.code} — {rack.name}
                     </div>
                     <div style={{ fontSize: 11, color: '#94A3B8' }}>
-                      {rack.rack_width_m}m × {rack.rack_depth_m}m |{' '}
+                      {rack.rack_width_m}m x {rack.rack_depth_m}m |{' '}
                       {rack.levels} niveles | {rack.positions_per_level} pos
                     </div>
                   </div>
@@ -424,7 +669,7 @@ export function FloorPlanBuilder({
             </div>
           )}
 
-          {/* Already placed */}
+          {/* Already placed racks */}
           {placedRacks.length > 0 && (
             <>
               <p
@@ -438,7 +683,7 @@ export function FloorPlanBuilder({
                   letterSpacing: 0.5,
                 }}
               >
-                ✓ Colocados
+                Colocados
               </p>
               <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
                 {placedRacks.map((p) => {
@@ -502,18 +747,18 @@ export function FloorPlanBuilder({
                 linear-gradient(to right, ${GRID_LINE}30 1px, transparent 1px),
                 linear-gradient(to bottom, ${GRID_LINE}30 1px, transparent 1px)
               `,
-              backgroundSize: `${CELL_W}px ${CELL_H}px`,
+              backgroundSize: `${CELL_W / CELL_SIZE_M}px ${CELL_H / CELL_SIZE_M}px`,
               backgroundColor: GRID_COLOR,
             }}
           >
-            {/* Meter markers on top */}
-            {Array.from({ length: gridW }, (_, i) => (
+            {/* Meter markers on top — every 1m */}
+            {Array.from({ length: Math.floor(warehouseWidth) + 1 }, (_, i) => (
               <span
                 key={`mx-${i}`}
                 style={{
                   position: 'absolute',
                   top: 2,
-                  left: i * CELL_W + 4,
+                  left: (i / CELL_SIZE_M) * CELL_W + 4,
                   fontSize: 10,
                   color: '#94A3B8',
                   fontFamily: 'monospace',
@@ -523,13 +768,13 @@ export function FloorPlanBuilder({
                 {i}m
               </span>
             ))}
-            {/* Meter markers on left */}
-            {Array.from({ length: gridH }, (_, i) => (
+            {/* Meter markers on left — every 1m */}
+            {Array.from({ length: Math.floor(warehouseLength) + 1 }, (_, i) => (
               <span
                 key={`my-${i}`}
                 style={{
                   position: 'absolute',
-                  top: i * CELL_H + 4,
+                  top: (i / CELL_SIZE_M) * CELL_H + 4,
                   left: 4,
                   fontSize: 10,
                   color: '#94A3B8',
@@ -541,13 +786,98 @@ export function FloorPlanBuilder({
               </span>
             ))}
 
+            {/* Placed aisles */}
+            {placedAisles.map((pa) => {
+              const aisle = aisles.find((a) => a.id === pa.aisleId);
+              if (!aisle) return null;
+              const isDragging = dragState?.itemId === pa.aisleId && dragState.type === 'grid-aisle';
+              const aw = pa.orientation === 'horizontal' ? pa.lengthCells : pa.widthCells;
+              const ah = pa.orientation === 'horizontal' ? pa.widthCells : pa.lengthCells;
+
+              return (
+                <div
+                  key={pa.aisleId}
+                  onMouseDown={(e) => handleGridAisleMouseDown(pa.aisleId, e)}
+                  style={{
+                    position: 'absolute',
+                    left: pa.gridX * CELL_W,
+                    top: pa.gridY * CELL_H,
+                    width: aw * CELL_W - 2,
+                    height: ah * CELL_H - 2,
+                    backgroundColor: isDragging ? 'transparent' : `${AISLE_COLOR}25`,
+                    border: `2px dashed ${isDragging ? '#CBD5E1' : AISLE_COLOR}`,
+                    borderRadius: 4,
+                    cursor: 'grab',
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'center',
+                    userSelect: 'none',
+                    opacity: isDragging ? 0.3 : 1,
+                    zIndex: 1,
+                    backgroundImage: pa.orientation === 'vertical'
+                      ? `repeating-linear-gradient(0deg, transparent, transparent 8px, ${AISLE_COLOR}15 8px, ${AISLE_COLOR}15 16px)`
+                      : `repeating-linear-gradient(90deg, transparent, transparent 8px, ${AISLE_COLOR}15 8px, ${AISLE_COLOR}15 16px)`,
+                  }}
+                >
+                  <span
+                    style={{
+                      fontSize: 12,
+                      fontWeight: 800,
+                      color: AISLE_COLOR,
+                      fontFamily: 'monospace',
+                      writingMode: pa.orientation === 'vertical' ? 'vertical-rl' : 'horizontal-tb',
+                      textOrientation: 'mixed',
+                    }}
+                  >
+                    {aisle.code}
+                  </span>
+
+                  {/* Aisle controls */}
+                  <div
+                    style={{
+                      position: 'absolute',
+                      top: -12,
+                      right: -4,
+                      display: 'flex',
+                      gap: 2,
+                      zIndex: 10,
+                    }}
+                  >
+                    <button
+                      onClick={(e) => { e.stopPropagation(); handleRotateAisle(pa.aisleId); }}
+                      onMouseDown={(e) => e.stopPropagation()}
+                      style={{
+                        width: 22, height: 22, borderRadius: '50%',
+                        border: '1px solid #CBD5E1', backgroundColor: '#fff',
+                        cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 0,
+                      }}
+                      title="Rotar pasillo"
+                    >
+                      <RotateCw size={12} style={{ color: '#6366F1' }} />
+                    </button>
+                    <button
+                      onClick={(e) => { e.stopPropagation(); handleRemoveAisle(pa.aisleId); }}
+                      onMouseDown={(e) => e.stopPropagation()}
+                      style={{
+                        width: 22, height: 22, borderRadius: '50%',
+                        border: '1px solid #CBD5E1', backgroundColor: '#fff',
+                        cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 0,
+                      }}
+                      title="Quitar pasillo"
+                    >
+                      <Trash2 size={12} style={{ color: '#EF4444' }} />
+                    </button>
+                  </div>
+                </div>
+              );
+            })}
+
             {/* Placed racks */}
             {placedRacks.map((p) => {
               const rack = racks.find((r) => r.id === p.rackId);
               if (!rack) return null;
-              const isDragging = dragState?.rackId === p.rackId && dragState.type === 'grid';
-              const color =
-                RACK_COLORS[racks.indexOf(rack) % RACK_COLORS.length];
+              const isDragging = dragState?.itemId === p.rackId && dragState.type === 'grid-rack';
+              const color = RACK_COLORS[racks.indexOf(rack) % RACK_COLORS.length];
 
               return (
                 <div
@@ -584,14 +914,8 @@ export function FloorPlanBuilder({
                   >
                     {rack.code}
                   </span>
-                  <span
-                    style={{
-                      fontSize: 9,
-                      color: '#64748B',
-                      marginTop: 1,
-                    }}
-                  >
-                    {rack.levels}×{rack.positions_per_level}
+                  <span style={{ fontSize: 9, color: '#64748B', marginTop: 1 }}>
+                    {rack.levels}x{rack.positions_per_level}
                   </span>
 
                   {/* Rack controls */}
@@ -606,44 +930,24 @@ export function FloorPlanBuilder({
                     }}
                   >
                     <button
-                      onClick={(e) => {
-                        e.stopPropagation();
-                        handleRotate(p.rackId);
-                      }}
+                      onClick={(e) => { e.stopPropagation(); handleRotateRack(p.rackId); }}
                       onMouseDown={(e) => e.stopPropagation()}
                       style={{
-                        width: 22,
-                        height: 22,
-                        borderRadius: '50%',
-                        border: '1px solid #CBD5E1',
-                        backgroundColor: '#fff',
-                        cursor: 'pointer',
-                        display: 'flex',
-                        alignItems: 'center',
-                        justifyContent: 'center',
-                        padding: 0,
+                        width: 22, height: 22, borderRadius: '50%',
+                        border: '1px solid #CBD5E1', backgroundColor: '#fff',
+                        cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 0,
                       }}
                       title="Rotar estante"
                     >
                       <RotateCw size={12} style={{ color: '#6366F1' }} />
                     </button>
                     <button
-                      onClick={(e) => {
-                        e.stopPropagation();
-                        handleRemove(p.rackId);
-                      }}
+                      onClick={(e) => { e.stopPropagation(); handleRemoveRack(p.rackId); }}
                       onMouseDown={(e) => e.stopPropagation()}
                       style={{
-                        width: 22,
-                        height: 22,
-                        borderRadius: '50%',
-                        border: '1px solid #CBD5E1',
-                        backgroundColor: '#fff',
-                        cursor: 'pointer',
-                        display: 'flex',
-                        alignItems: 'center',
-                        justifyContent: 'center',
-                        padding: 0,
+                        width: 22, height: 22, borderRadius: '50%',
+                        border: '1px solid #CBD5E1', backgroundColor: '#fff',
+                        cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 0,
                       }}
                       title="Quitar del plano"
                     >
@@ -707,33 +1011,29 @@ export function FloorPlanBuilder({
         }}
       >
         <span>
-          {warehouseWidth}m × {warehouseLength}m
+          {warehouseWidth}m x {warehouseLength}m
         </span>
         <span style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
           <span
             style={{
-              width: 14,
-              height: 14,
-              borderRadius: 3,
-              backgroundColor: '#10B98120',
-              border: '2px dashed #10B981',
+              width: 14, height: 14, borderRadius: 3,
+              backgroundColor: `${AISLE_COLOR}25`,
+              border: `2px dashed ${AISLE_COLOR}`,
               display: 'inline-block',
             }}
           />
-          Posicion valida
+          Pasillo
         </span>
         <span style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
           <span
             style={{
-              width: 14,
-              height: 14,
-              borderRadius: 3,
-              backgroundColor: '#EF444420',
-              border: '2px dashed #EF4444',
+              width: 14, height: 14, borderRadius: 3,
+              backgroundColor: '#3B82F620',
+              border: '2px solid #3B82F6',
               display: 'inline-block',
             }}
           />
-          Colision
+          Estante
         </span>
         <span>
           <RotateCw size={12} style={{ verticalAlign: 'middle', marginRight: 2 }} />

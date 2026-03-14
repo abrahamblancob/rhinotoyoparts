@@ -45,10 +45,26 @@ export interface WarehouseZone {
   created_at: string;
 }
 
+export interface WarehouseAisle {
+  id: string;
+  warehouse_id: string;
+  zone_id: string | null;
+  name: string;
+  code: string;
+  width_m: number;
+  position_x: number | null;
+  position_y: number | null;
+  length_cells: number | null;
+  orientation: 'vertical' | 'horizontal';
+  is_active: boolean;
+  created_at: string;
+}
+
 export interface WarehouseRack {
   id: string;
   zone_id: string;
   warehouse_id: string;
+  aisle_id: string | null;
   name: string;
   code: string;
   levels: number;
@@ -297,10 +313,21 @@ export interface ZoneFormData {
   height: number;
 }
 
+export interface AisleFormData {
+  name: string;
+  code: string;
+  width_m: number;
+  position_x: number | null;
+  position_y: number | null;
+  length_cells: number | null;
+  orientation: 'vertical' | 'horizontal';
+}
+
 export interface RackFormData {
   name: string;
   code: string;
   zone_id: string;
+  aisle_id: string | null;
   levels: number;
   positions_per_level: number;
   max_weight_kg: number | null;

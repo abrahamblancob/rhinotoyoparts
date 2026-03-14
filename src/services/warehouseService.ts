@@ -2,11 +2,13 @@ import { query, supabase } from './base.ts';
 import type {
   Warehouse,
   WarehouseZone,
+  WarehouseAisle,
   WarehouseRack,
   WarehouseLocation,
   InventoryStock,
   WarehouseFormData,
   ZoneFormData,
+  AisleFormData,
   RackFormData,
 } from '@/types/warehouse.ts';
 
@@ -40,11 +42,12 @@ export async function saveWarehouse(data: WarehouseFormData & { org_id: string }
 }
 
 export async function deleteWarehouse(id: string) {
-  // Delete in dependency order: stock → locations → racks → zones → warehouse
+  // Delete in dependency order: stock → locations → racks → aisles → zones → warehouse
   const steps: { table: string; filter: { col: string; val: string } }[] = [
     { table: 'inventory_stock', filter: { col: 'warehouse_id', val: id } },
     { table: 'warehouse_locations', filter: { col: 'warehouse_id', val: id } },
     { table: 'warehouse_racks', filter: { col: 'warehouse_id', val: id } },
+    { table: 'warehouse_aisles', filter: { col: 'warehouse_id', val: id } },
     { table: 'warehouse_zones', filter: { col: 'warehouse_id', val: id } },
   ];
 
@@ -89,7 +92,6 @@ export async function deleteZone(id: string) {
   const { data: racks } = await supabase.from('warehouse_racks').select('id').eq('zone_id', id);
   if (racks && racks.length > 0) {
     const rackIds = racks.map((r: { id: string }) => r.id);
-    // Get all locations in those racks
     const { data: locs } = await supabase.from('warehouse_locations').select('id').in('rack_id', rackIds);
     if (locs && locs.length > 0) {
       const locIds = locs.map((l: { id: string }) => l.id);
@@ -98,7 +100,34 @@ export async function deleteZone(id: string) {
     await supabase.from('warehouse_locations').delete().in('rack_id', rackIds);
     await supabase.from('warehouse_racks').delete().eq('zone_id', id);
   }
+  // Delete aisles in this zone
+  await supabase.from('warehouse_aisles').delete().eq('zone_id', id);
   return query<null>((sb) => sb.from('warehouse_zones').delete().eq('id', id));
+}
+
+// ── Aisles ──
+
+export async function getAisles(warehouseId: string) {
+  return query<WarehouseAisle[]>((sb) =>
+    sb.from('warehouse_aisles').select('*').eq('warehouse_id', warehouseId).order('code')
+  );
+}
+
+export async function saveAisle(data: AisleFormData & { warehouse_id: string; zone_id?: string | null }, editId?: string) {
+  if (editId) {
+    return query<WarehouseAisle>((sb) =>
+      sb.from('warehouse_aisles').update(data).eq('id', editId).select().single()
+    );
+  }
+  return query<WarehouseAisle>((sb) =>
+    sb.from('warehouse_aisles').insert(data).select().single()
+  );
+}
+
+export async function deleteAisle(id: string) {
+  // Nullify aisle_id on racks that reference this aisle (don't delete the racks)
+  await supabase.from('warehouse_racks').update({ aisle_id: null }).eq('aisle_id', id);
+  return query<null>((sb) => sb.from('warehouse_aisles').delete().eq('id', id));
 }
 
 // ── Racks ──
@@ -126,7 +155,6 @@ export async function saveRack(
 }
 
 export async function deleteRack(id: string) {
-  // Delete stock in locations of this rack, then locations, then rack
   const { data: locs } = await supabase.from('warehouse_locations').select('id').eq('rack_id', id);
   if (locs && locs.length > 0) {
     const locIds = locs.map((l: { id: string }) => l.id);
@@ -142,6 +170,12 @@ export async function updateRackPosition(
 ) {
   return query<WarehouseRack>((sb) =>
     sb.from('warehouse_racks').update(data).eq('id', id).select().single()
+  );
+}
+
+export async function updateRackAisle(id: string, aisle_id: string | null) {
+  return query<WarehouseRack>((sb) =>
+    sb.from('warehouse_racks').update({ aisle_id }).eq('id', id).select().single()
   );
 }
 
@@ -228,7 +262,6 @@ export async function removeProductFromLocation(
   productId: string,
   quantity: number,
 ) {
-  // Atomic RPC: devuelve stock al catálogo del agregador + limpia ubicación
   const { error } = await supabase.rpc('return_stock_to_catalog', {
     p_stock_id: stockId,
     p_product_id: productId,
@@ -243,13 +276,11 @@ export async function removeProductFromLocation(
 }
 
 export async function deleteStockRecord(stockId: string, locationId: string) {
-  // Delete inventory_stock record (for internal transfers, not catalog return)
   const result = await query<null>((sb) =>
     sb.from('inventory_stock').delete().eq('id', stockId)
   );
   if (result.error) return result;
 
-  // Mark location as unoccupied if no more stock there
   const remaining = await query<InventoryStock[]>((sb) =>
     sb.from('inventory_stock').select('id').eq('location_id', locationId).limit(1)
   );
@@ -269,8 +300,9 @@ export async function deleteStockRecord(stockId: string, locationId: string) {
 // ── Warehouse Stats ──
 
 export async function getWarehouseStats(warehouseId: string) {
-  const [zones, racks, locations, stock] = await Promise.all([
+  const [zones, aisles, racks, locations, stock] = await Promise.all([
     query<WarehouseZone[]>((sb) => sb.from('warehouse_zones').select('id').eq('warehouse_id', warehouseId)),
+    query<WarehouseAisle[]>((sb) => sb.from('warehouse_aisles').select('id').eq('warehouse_id', warehouseId)),
     query<WarehouseRack[]>((sb) => sb.from('warehouse_racks').select('id').eq('warehouse_id', warehouseId)),
     query<WarehouseLocation[]>((sb) => sb.from('warehouse_locations').select('id, is_occupied').eq('warehouse_id', warehouseId)),
     query<InventoryStock[]>((sb) => sb.from('inventory_stock').select('id, quantity').eq('warehouse_id', warehouseId)),
@@ -281,6 +313,7 @@ export async function getWarehouseStats(warehouseId: string) {
 
   return {
     zones: zones.data?.length ?? 0,
+    aisles: aisles.data?.length ?? 0,
     racks: racks.data?.length ?? 0,
     totalLocations,
     occupiedLocations,

@@ -20,11 +20,11 @@ import { toast } from '@/stores/toastStore.ts';
 import { usePermissions } from '@/hooks/usePermissions.ts';
 import * as warehouseService from '@/services/warehouseService.ts';
 import * as orgService from '@/services/orgService.ts';
-import { FloorPlanBuilder } from './FloorPlanBuilder.tsx';
+import { FloorPlanBuilder, CELL_SIZE_M } from './FloorPlanBuilder.tsx';
 import { ZonePainter } from './ZonePainter.tsx';
 import type { Organization } from '@/lib/database.types.ts';
 import type { ZoneType, RackOrientation } from '@/types/warehouse.ts';
-import type { WizardRackForm, PlacedRack } from './FloorPlanBuilder.tsx';
+import type { WizardRackForm, PlacedRack, WizardAisleForm, PlacedAisle } from './FloorPlanBuilder.tsx';
 import type { WizardZoneForm } from './ZonePainter.tsx';
 
 // ── Step definitions ──
@@ -96,11 +96,13 @@ export function WarehouseSetupWizard() {
     pick_expiry_minutes: 30,
   });
 
-  // Step 2: Racks
+  // Step 2: Racks & Aisles
   const [racks, setRacks] = useState<WizardRackForm[]>([]);
+  const [wizardAisles, setWizardAisles] = useState<WizardAisleForm[]>([]);
 
   // Step 3: Layout (placements)
   const [placedRacks, setPlacedRacks] = useState<PlacedRack[]>([]);
+  const [placedAisles, setPlacedAisles] = useState<PlacedAisle[]>([]);
 
   // Step 4: Zones
   const [zones, setZones] = useState<WizardZoneForm[]>([]);
@@ -206,20 +208,50 @@ export function WarehouseSetupWizard() {
               const isRotated = r.orientation === 'horizontal';
               loadedPlacements.push({
                 rackId: r.id,
-                gridX: r.position_x,
-                gridY: r.position_y,
+                gridX: Math.round(r.position_x / CELL_SIZE_M),
+                gridY: Math.round(r.position_y / CELL_SIZE_M),
                 widthCells: isRotated
-                  ? Math.ceil(r.rack_depth_m ?? 1)
-                  : Math.ceil(r.rack_width_m ?? 1),
+                  ? Math.ceil((r.rack_depth_m ?? 1) / CELL_SIZE_M)
+                  : Math.ceil((r.rack_width_m ?? 1) / CELL_SIZE_M),
                 depthCells: isRotated
-                  ? Math.ceil(r.rack_width_m ?? 1)
-                  : Math.ceil(r.rack_depth_m ?? 1),
+                  ? Math.ceil((r.rack_width_m ?? 1) / CELL_SIZE_M)
+                  : Math.ceil((r.rack_depth_m ?? 1) / CELL_SIZE_M),
                 rotated: isRotated,
               });
             }
           }
           setRacks(loadedRacks);
           setPlacedRacks(loadedPlacements);
+        }
+
+        // Load aisles
+        const aislesRes = await warehouseService.getAisles(editId);
+        if (aislesRes.data && aislesRes.data.length > 0) {
+          const loadedAisles: WizardAisleForm[] = [];
+          const loadedAislePlacements: PlacedAisle[] = [];
+
+          for (const a of aislesRes.data) {
+            loadedAisles.push({
+              id: a.id,
+              name: a.name,
+              code: a.code,
+              widthCells: a.width_m ?? 0.5,
+              lengthCells: a.length_cells ?? 10,
+            });
+
+            if (a.position_x != null && a.position_y != null) {
+              loadedAislePlacements.push({
+                aisleId: a.id,
+                gridX: Math.round(a.position_x / CELL_SIZE_M),
+                gridY: Math.round(a.position_y / CELL_SIZE_M),
+                lengthCells: Math.max(1, Math.ceil((a.length_cells ?? 10) / CELL_SIZE_M)),
+                widthCells: Math.max(1, Math.ceil((a.width_m ?? 0.5) / CELL_SIZE_M)),
+                orientation: (a.orientation as 'vertical' | 'horizontal') ?? 'vertical',
+              });
+            }
+          }
+          setWizardAisles(loadedAisles);
+          setPlacedAisles(loadedAislePlacements);
         }
       } catch (err) {
         setError((err as Error).message);
@@ -307,6 +339,38 @@ export function WarehouseSetupWizard() {
   const removeRack = (id: string) => {
     setRacks((prev) => prev.filter((r) => r.id !== id));
     setPlacedRacks((prev) => prev.filter((p) => p.rackId !== id));
+  };
+
+  // ── Aisle helpers ──
+
+  const addAisle = () => {
+    const index = wizardAisles.length + 1;
+    const code = `P${index}`;
+    setWizardAisles((prev) => [
+      ...prev,
+      {
+        id: tempId(),
+        name: `Pasillo ${index}`,
+        code,
+        widthCells: 0.5,
+        lengthCells: warehouse.length_m ?? 10,
+      },
+    ]);
+  };
+
+  const updateAisle = (id: string, field: keyof WizardAisleForm, value: string | number) => {
+    setWizardAisles((prev) =>
+      prev.map((a) => (a.id === id ? { ...a, [field]: value } : a)),
+    );
+    // If dimensions change, remove placement (user must re-place)
+    if (field === 'widthCells' || field === 'lengthCells') {
+      setPlacedAisles((prev) => prev.filter((p) => p.aisleId !== id));
+    }
+  };
+
+  const removeAisle = (id: string) => {
+    setWizardAisles((prev) => prev.filter((a) => a.id !== id));
+    setPlacedAisles((prev) => prev.filter((a) => a.aisleId !== id));
   };
 
   // ── Computed values ──
@@ -425,9 +489,65 @@ export function WarehouseSetupWizard() {
         zoneIdMap.set(zone.id, zoneResult.data.id);
       }
 
-      // 4. Create/update racks with zone assignment (containment test)
+      // 4. Create/update aisles
+      const aisleIdMap = new Map<string, string>();
+
       if (editId) {
-        // Delete racks that were removed
+        // Delete aisles that were removed
+        const existingAisles = await warehouseService.getAisles(warehouseId);
+        const currentAisleIds = new Set(wizardAisles.map((a) => a.id));
+        for (const ea of existingAisles.data ?? []) {
+          if (!currentAisleIds.has(ea.id)) {
+            await warehouseService.deleteAisle(ea.id);
+          }
+        }
+      }
+
+      for (const aisle of wizardAisles) {
+        const pa = placedAisles.find((p) => p.aisleId === aisle.id);
+        const isExistingAisle = editId && !aisle.id.startsWith('temp_');
+
+        // Find zone containing aisle center
+        let aisleZoneId: string | null = null;
+        if (pa) {
+          const aw = pa.orientation === 'horizontal' ? pa.lengthCells : pa.widthCells;
+          const ah = pa.orientation === 'horizontal' ? pa.widthCells : pa.lengthCells;
+          const cx = (pa.gridX + aw / 2) * CELL_SIZE_M;
+          const cy = (pa.gridY + ah / 2) * CELL_SIZE_M;
+          for (const zone of effectiveZones) {
+            if (cx >= zone.x && cx <= zone.x + zone.width && cy >= zone.y && cy <= zone.y + zone.height) {
+              aisleZoneId = zoneIdMap.get(zone.id) ?? null;
+              break;
+            }
+          }
+        }
+
+        const aisleResult = await warehouseService.saveAisle(
+          {
+            name: aisle.name,
+            code: aisle.code,
+            width_m: aisle.widthCells,
+            position_x: pa ? pa.gridX * CELL_SIZE_M : null,
+            position_y: pa ? pa.gridY * CELL_SIZE_M : null,
+            length_cells: aisle.lengthCells,
+            orientation: pa?.orientation ?? 'vertical',
+            warehouse_id: warehouseId,
+            zone_id: aisleZoneId,
+          },
+          isExistingAisle ? aisle.id : undefined,
+        );
+
+        if (aisleResult.error || !aisleResult.data) {
+          const msg = `Error al guardar pasillo "${aisle.name}": ${aisleResult.error}`;
+          setError(msg);
+          toast('error', msg);
+          return;
+        }
+        aisleIdMap.set(aisle.id, aisleResult.data.id);
+      }
+
+      // 5. Create/update racks with zone + aisle assignment
+      if (editId) {
         const existingRacks = await warehouseService.getRacks(warehouseId);
         const currentRackIds = new Set(racks.map((r) => r.id));
         for (const er of existingRacks.data ?? []) {
@@ -443,9 +563,8 @@ export function WarehouseSetupWizard() {
         // Determine zone assignment
         let assignedZoneId: string | null = null;
         if (placement) {
-          // Find zone containing rack center
-          const rackCenterX = placement.gridX + placement.widthCells / 2;
-          const rackCenterY = placement.gridY + placement.depthCells / 2;
+          const rackCenterX = (placement.gridX + placement.widthCells / 2) * CELL_SIZE_M;
+          const rackCenterY = (placement.gridY + placement.depthCells / 2) * CELL_SIZE_M;
           for (const zone of effectiveZones) {
             if (
               rackCenterX >= zone.x &&
@@ -458,9 +577,43 @@ export function WarehouseSetupWizard() {
             }
           }
         }
-        // Fallback: first zone
         if (!assignedZoneId) {
           assignedZoneId = Array.from(zoneIdMap.values())[0];
+        }
+
+        // Determine aisle assignment: find nearest aisle to the rack
+        let assignedAisleId: string | null = null;
+        if (placement && placedAisles.length > 0) {
+          let minDist = Infinity;
+          const rackCX = placement.gridX + placement.widthCells / 2;
+          const rackCY = placement.gridY + placement.depthCells / 2;
+
+          for (const pa of placedAisles) {
+            const aw = pa.orientation === 'horizontal' ? pa.lengthCells : pa.widthCells;
+            const ah = pa.orientation === 'horizontal' ? pa.widthCells : pa.lengthCells;
+            const aisleCX = pa.gridX + aw / 2;
+            const aisleCY = pa.gridY + ah / 2;
+
+            // Check adjacency: rack must be next to (touching) the aisle
+            const rackLeft = placement.gridX;
+            const rackRight = placement.gridX + placement.widthCells;
+            const rackTop = placement.gridY;
+            const rackBottom = placement.gridY + placement.depthCells;
+            const aisleLeft = pa.gridX;
+            const aisleRight = pa.gridX + aw;
+            const aisleTop = pa.gridY;
+            const aisleBottom = pa.gridY + ah;
+
+            const isAdjacent =
+              (rackRight === aisleLeft || rackLeft === aisleRight || rackBottom === aisleTop || rackTop === aisleBottom) &&
+              !(rackRight <= aisleLeft - 1 || rackLeft >= aisleRight + 1 || rackBottom <= aisleTop - 1 || rackTop >= aisleBottom + 1);
+
+            const dist = Math.sqrt((rackCX - aisleCX) ** 2 + (rackCY - aisleCY) ** 2);
+            if ((isAdjacent || dist < minDist) && dist < minDist) {
+              minDist = dist;
+              assignedAisleId = aisleIdMap.get(pa.aisleId) ?? null;
+            }
+          }
         }
 
         const orientation: RackOrientation = placement?.rotated
@@ -473,6 +626,7 @@ export function WarehouseSetupWizard() {
             name: rack.name,
             code: rack.code,
             zone_id: assignedZoneId,
+            aisle_id: assignedAisleId,
             levels: rack.levels,
             positions_per_level: rack.positions_per_level,
             max_weight_kg: null,
@@ -493,8 +647,8 @@ export function WarehouseSetupWizard() {
         // Update position if placement exists
         if (rackResult.data && placement) {
           await warehouseService.updateRackPosition(rackResult.data.id, {
-            position_x: placement.gridX,
-            position_y: placement.gridY,
+            position_x: placement.gridX * CELL_SIZE_M,
+            position_y: placement.gridY * CELL_SIZE_M,
             orientation,
           });
         }
@@ -820,6 +974,114 @@ export function WarehouseSetupWizard() {
         {/* ════════ Step 2: Racks ════════ */}
         {currentStep === 'racks' && (
           <div>
+            {/* ── Aisles section ── */}
+            <div
+              style={{
+                display: 'flex',
+                justifyContent: 'space-between',
+                alignItems: 'center',
+                marginBottom: 4,
+              }}
+            >
+              <h3 style={{ fontSize: 18, fontWeight: 700, color: '#1E293B', margin: 0 }}>
+                Pasillos
+              </h3>
+              <button
+                onClick={addAisle}
+                className="rh-btn rh-btn-ghost"
+                style={{ display: 'flex', alignItems: 'center', gap: 6, border: '1px solid #CBD5E1' }}
+              >
+                <Plus size={16} />
+                Agregar Pasillo
+              </button>
+            </div>
+            <p style={{ fontSize: 13, color: '#94A3B8', marginBottom: 12 }}>
+              Los pasillos definen las rutas de circulacion. Se reflejan en el codigo de ubicacion (ej: P1-01-A-1).
+            </p>
+
+            {wizardAisles.length > 0 && (
+              <div style={{ display: 'flex', flexDirection: 'column', gap: 8, marginBottom: 20 }}>
+                {wizardAisles.map((aisle) => (
+                  <div
+                    key={aisle.id}
+                    style={{
+                      display: 'flex',
+                      alignItems: 'end',
+                      gap: 10,
+                      padding: '10px 14px',
+                      backgroundColor: '#F1F5F9',
+                      borderRadius: 8,
+                      border: '1px solid #CBD5E1',
+                    }}
+                  >
+                    <div className="rh-field" style={{ minWidth: 60 }}>
+                      <label className="rh-label" style={{ fontSize: 11 }}>Codigo</label>
+                      <input
+                        type="text"
+                        value={aisle.code}
+                        readOnly
+                        className="rh-input"
+                        style={{ fontSize: 13, backgroundColor: '#E2E8F0', fontWeight: 700, fontFamily: 'monospace' }}
+                      />
+                    </div>
+                    <div className="rh-field" style={{ flex: 1 }}>
+                      <label className="rh-label" style={{ fontSize: 11 }}>Nombre</label>
+                      <input
+                        type="text"
+                        value={aisle.name}
+                        onChange={(e) => updateAisle(aisle.id, 'name', e.target.value)}
+                        className="rh-input"
+                        style={{ fontSize: 13 }}
+                      />
+                    </div>
+                    <div className="rh-field" style={{ width: 90 }}>
+                      <label className="rh-label" style={{ fontSize: 11 }}>Ancho (m)</label>
+                      <input
+                        type="number"
+                        min={0.1}
+                        max={5}
+                        step={0.1}
+                        value={aisle.widthCells}
+                        onChange={(e) => updateAisle(aisle.id, 'widthCells', parseFloat(e.target.value) || 0.5)}
+                        className="rh-input"
+                        style={{ fontSize: 13 }}
+                      />
+                    </div>
+                    <div className="rh-field" style={{ width: 90 }}>
+                      <label className="rh-label" style={{ fontSize: 11 }}>Largo (m)</label>
+                      <input
+                        type="number"
+                        min={0.1}
+                        max={200}
+                        step={0.1}
+                        value={aisle.lengthCells}
+                        onChange={(e) => updateAisle(aisle.id, 'lengthCells', parseFloat(e.target.value) || 1)}
+                        className="rh-input"
+                        style={{ fontSize: 13 }}
+                      />
+                    </div>
+                    <button
+                      onClick={() => removeAisle(aisle.id)}
+                      className="rh-btn rh-btn-ghost"
+                      style={{ color: '#EF4444', padding: '8px' }}
+                      title="Eliminar pasillo"
+                    >
+                      <Trash2 size={14} />
+                    </button>
+                  </div>
+                ))}
+              </div>
+            )}
+
+            {wizardAisles.length === 0 && (
+              <p style={{ fontSize: 12, color: '#CBD5E1', marginBottom: 20, fontStyle: 'italic' }}>
+                Sin pasillos. Los estantes no tendran prefijo de pasillo en sus codigos.
+              </p>
+            )}
+
+            <div style={{ borderTop: '1px solid #E2E8F0', marginBottom: 20 }} />
+
+            {/* ── Racks section ── */}
             <div
               style={{
                 display: 'flex',
@@ -1158,6 +1420,9 @@ export function WarehouseSetupWizard() {
               racks={racks}
               placedRacks={placedRacks}
               onPlacedRacksChange={setPlacedRacks}
+              aisles={wizardAisles}
+              placedAisles={placedAisles}
+              onPlacedAislesChange={setPlacedAisles}
             />
           </div>
         )}
@@ -1183,8 +1448,8 @@ export function WarehouseSetupWizard() {
           const maxViewW = 460;
           const maxViewH = 320;
           // Cell-based scaling — matches FloorPlanBuilder / ZonePainter exactly
-          const gridW = Math.ceil(whW);
-          const gridH = Math.ceil(whL);
+          const gridW = Math.ceil(whW / CELL_SIZE_M);
+          const gridH = Math.ceil(whL / CELL_SIZE_M);
           const cellW = maxViewW / gridW;
           const cellH = maxViewH / gridH;
           const viewW = maxViewW;
@@ -1218,13 +1483,14 @@ export function WarehouseSetupWizard() {
             <div
               style={{
                 display: 'grid',
-                gridTemplateColumns: 'repeat(5, 1fr)',
+                gridTemplateColumns: 'repeat(6, 1fr)',
                 gap: 12,
                 marginBottom: 24,
               }}
             >
               {[
                 { icon: Warehouse, value: '1', label: 'Almacen', bg: '#EEF2FF', color: '#6366F1' },
+                { icon: Layers, value: String(wizardAisles.length), label: 'Pasillos', bg: '#F1F5F9', color: '#64748B' },
                 { icon: Grid3X3, value: String(racks.length), label: 'Estantes', bg: '#FEF3C7', color: '#F59E0B' },
                 { icon: MapPin, value: String(zones.length || 1), label: 'Zonas', bg: '#ECFDF5', color: '#10B981' },
                 { icon: Package, value: String(totalLocations), label: 'Ubicaciones', bg: '#FEE2E2', color: '#D3010A' },
@@ -1310,15 +1576,15 @@ export function WarehouseSetupWizard() {
                           linear-gradient(to right, #E2E8F020 1px, transparent 1px),
                           linear-gradient(to bottom, #E2E8F020 1px, transparent 1px)
                         `,
-                        backgroundSize: `${cellW}px ${cellH}px`,
+                        backgroundSize: `${cellW / CELL_SIZE_M}px ${cellH / CELL_SIZE_M}px`,
                       }}
                     >
-                      {/* Zones — cell-based, matching ZonePainter */}
+                      {/* Zones — convert meters to grid cells for positioning */}
                       {effectiveZones.map((zone) => {
-                        const zLeft = zone.x * cellW;
-                        const zTop = zone.y * cellH;
-                        const zW = Math.min(zone.width * cellW, viewW - zLeft);
-                        const zH = Math.min(zone.height * cellH, viewH - zTop);
+                        const zLeft = (zone.x / CELL_SIZE_M) * cellW;
+                        const zTop = (zone.y / CELL_SIZE_M) * cellH;
+                        const zW = Math.min((zone.width / CELL_SIZE_M) * cellW, viewW - zLeft);
+                        const zH = Math.min((zone.height / CELL_SIZE_M) * cellH, viewH - zTop);
                         if (zW <= 0 || zH <= 0) return null;
                         return (
                           <div
@@ -1347,6 +1613,37 @@ export function WarehouseSetupWizard() {
                               }}
                             >
                               {zone.name}
+                            </span>
+                          </div>
+                        );
+                      })}
+
+                      {/* Aisles */}
+                      {placedAisles.map((pa) => {
+                        const aisle = wizardAisles.find((a) => a.id === pa.aisleId);
+                        if (!aisle) return null;
+                        const aw = pa.orientation === 'horizontal' ? pa.lengthCells : pa.widthCells;
+                        const ah = pa.orientation === 'horizontal' ? pa.widthCells : pa.lengthCells;
+                        return (
+                          <div
+                            key={pa.aisleId}
+                            style={{
+                              position: 'absolute',
+                              left: pa.gridX * cellW,
+                              top: pa.gridY * cellH,
+                              width: aw * cellW - 1,
+                              height: ah * cellH - 1,
+                              backgroundColor: '#94A3B825',
+                              border: '1px dashed #94A3B8',
+                              borderRadius: 2,
+                              display: 'flex',
+                              alignItems: 'center',
+                              justifyContent: 'center',
+                            }}
+                          >
+                            <span style={{ fontSize: 8, fontWeight: 700, color: '#94A3B8', fontFamily: 'monospace',
+                              writingMode: pa.orientation === 'vertical' ? 'vertical-rl' : 'horizontal-tb' }}>
+                              {aisle.code}
                             </span>
                           </div>
                         );
@@ -1656,6 +1953,40 @@ export function WarehouseSetupWizard() {
                 })}
               </div>
             </div>
+
+            {/* ── Aisles summary ── */}
+            {wizardAisles.length > 0 && (
+              <div style={{ marginBottom: 20 }}>
+                <h4 style={{ fontSize: 14, fontWeight: 700, color: '#475569', marginBottom: 8 }}>
+                  Pasillos ({wizardAisles.length})
+                </h4>
+                <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8 }}>
+                  {wizardAisles.map((a) => {
+                    const pa = placedAisles.find((p) => p.aisleId === a.id);
+                    return (
+                      <span
+                        key={a.id}
+                        style={{
+                          padding: '6px 12px',
+                          borderRadius: 20,
+                          fontSize: 12,
+                          fontWeight: 600,
+                          backgroundColor: '#F1F5F9',
+                          color: '#475569',
+                          border: '1px solid #CBD5E1',
+                        }}
+                      >
+                        {a.code} — {a.name} ({a.widthCells}m x {a.lengthCells}m)
+                        {pa && <span style={{ color: '#10B981', marginLeft: 6 }}>✓</span>}
+                      </span>
+                    );
+                  })}
+                </div>
+                <p style={{ fontSize: 11, color: '#94A3B8', marginTop: 6 }}>
+                  Formato de ubicacion: {wizardAisles[0]?.code}-01-A-1 (Pasillo-Estante-Nivel-Posicion)
+                </p>
+              </div>
+            )}
 
             {/* ── Zones summary ── */}
             <div>

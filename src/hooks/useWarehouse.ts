@@ -50,6 +50,7 @@ export function useWarehouseDetail(warehouseId: string | undefined) {
 
 interface WarehouseStats {
   zones: number;
+  aisles: number;
   racks: number;
   totalLocations: number;
   occupiedLocations: number;
@@ -57,7 +58,7 @@ interface WarehouseStats {
   totalStock: number;
 }
 
-const EMPTY_STATS: WarehouseStats = { zones: 0, racks: 0, totalLocations: 0, occupiedLocations: 0, occupancyRate: 0, totalStock: 0 };
+const EMPTY_STATS: WarehouseStats = { zones: 0, aisles: 0, racks: 0, totalLocations: 0, occupiedLocations: 0, occupancyRate: 0, totalStock: 0 };
 
 export function useWarehouseStats(warehouseId: string | undefined) {
   const fetcher = useCallback(
@@ -71,6 +72,15 @@ export function useWarehouseStats(warehouseId: string | undefined) {
 
   const { data, loading, error, reload } = useAsyncData<WarehouseStats>(fetcher, [warehouseId]);
   return { stats: data, loading, error, reload };
+}
+
+export function useWarehouseAisles(warehouseId: string | undefined) {
+  const fetcher = useCallback(
+    () => warehouseId ? warehouseService.getAisles(warehouseId) : Promise.resolve({ data: [], error: null }),
+    [warehouseId]
+  );
+
+  return useAsyncData(fetcher, [warehouseId]);
 }
 
 export function useWarehouseZones(warehouseId: string | undefined) {
