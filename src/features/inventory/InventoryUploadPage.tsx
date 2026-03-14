@@ -1,7 +1,9 @@
-import { useState, useCallback } from 'react';
+import { useState, useCallback, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useAuthStore } from '@/stores/authStore.ts';
 import { usePermissions } from '@/hooks/usePermissions.ts';
+import { supabase } from '@/lib/supabase.ts';
+import type { Organization } from '@/lib/database.types.ts';
 
 import type {
   WizardStep,
@@ -29,9 +31,33 @@ import { RecentUploadsTable } from './upload/components/RecentUploadsTable.tsx';
 
 export function InventoryUploadPage() {
   const navigate = useNavigate();
-  const { canWrite } = usePermissions();
+  const { canWrite, isPlatform } = usePermissions();
   const organization = useAuthStore((s) => s.organization);
   const user = useAuthStore((s) => s.user);
+
+  // Target organization selector (for platform users)
+  const [targetOrgId, setTargetOrgId] = useState(organization?.id ?? '');
+  const [availableOrgs, setAvailableOrgs] = useState<Organization[]>([]);
+
+  useEffect(() => {
+    if (isPlatform) {
+      supabase
+        .from('organizations')
+        .select('*')
+        .in('type', ['aggregator', 'associate'])
+        .eq('status', 'active')
+        .order('name')
+        .then(({ data }) => {
+          setAvailableOrgs((data as Organization[]) ?? []);
+          // Default to first aggregator if current is platform
+          if (organization?.type === 'platform' && data?.length) {
+            setTargetOrgId(data[0].id);
+          }
+        });
+    } else {
+      setTargetOrgId(organization?.id ?? '');
+    }
+  }, [isPlatform, organization]);
 
   // Wizard state
   const [step, setStep] = useState<WizardStep>('file');
@@ -145,12 +171,12 @@ export function InventoryUploadPage() {
 
   // Step 3: User confirms upload → batch insert → show results
   const handleConfirmUpload = useCallback(async () => {
-    if (!processingResult || !organization || !user) return;
+    if (!processingResult || !targetOrgId || !user) return;
 
     setStep('uploading');
     const { progress: finalProgress, insertedProducts } = await uploadProducts(
       processingResult.validRows,
-      organization.id,
+      targetOrgId,
       setUploadProgress,
     );
 
@@ -163,7 +189,7 @@ export function InventoryUploadPage() {
 
     // Create inventory lot with product entries
     const lotId = await createInventoryLot(
-      organization.id,
+      targetOrgId,
       user.id,
       fileName,
       insertedProducts,
@@ -171,7 +197,7 @@ export function InventoryUploadPage() {
 
     // Log to bulk_uploads table (linked to lot)
     await logBulkUpload(
-      organization.id,
+      targetOrgId,
       user.id,
       fileName,
       processingResult.totalRows,
@@ -186,7 +212,7 @@ export function InventoryUploadPage() {
     setUploadProgress(finalProgress);
     setUploadsRefreshKey((k) => k + 1);
     setStep('results');
-  }, [processingResult, organization, user, fileName]);
+  }, [processingResult, targetOrgId, user, fileName]);
 
   // Navigate back to a specific step (preserving state)
   const handleGoToStep = useCallback(
@@ -244,6 +270,42 @@ export function InventoryUploadPage() {
           Volver al Inventario
         </button>
       </div>
+
+      {/* Organization selector for platform users */}
+      {isPlatform && availableOrgs.length > 0 && (
+        <div style={{
+          display: 'flex',
+          alignItems: 'center',
+          gap: 12,
+          padding: '12px 16px',
+          backgroundColor: '#FFF7ED',
+          border: '1px solid #FDBA74',
+          borderRadius: 8,
+          marginBottom: 16,
+        }}>
+          <span style={{ fontSize: 13, fontWeight: 600, color: '#9A3412', whiteSpace: 'nowrap' }}>
+            Cargar inventario para:
+          </span>
+          <select
+            value={targetOrgId}
+            onChange={(e) => {
+              setTargetOrgId(e.target.value);
+              setUploadsRefreshKey((k) => k + 1);
+            }}
+            className="rh-select"
+            style={{ maxWidth: 350 }}
+          >
+            {availableOrgs.map((org) => (
+              <option key={org.id} value={org.id}>
+                {org.name} ({org.type === 'aggregator' ? 'Agregador' : 'Asociado'})
+              </option>
+            ))}
+          </select>
+          <span style={{ fontSize: 12, color: '#B45309' }}>
+            Los productos se asignarán a la organización seleccionada
+          </span>
+        </div>
+      )}
 
       {/* Step indicator */}
       <StepIndicator currentStep={step} onStepClick={handleGoToStep} />
@@ -312,9 +374,9 @@ export function InventoryUploadPage() {
       )}
 
       {/* Recent uploads history — visible on file selection and results steps */}
-      {(step === 'file' || step === 'results') && organization && (
+      {(step === 'file' || step === 'results') && targetOrgId && (
         <div style={{ marginTop: 32 }}>
-          <RecentUploadsTable orgId={organization.id} refreshKey={uploadsRefreshKey} />
+          <RecentUploadsTable orgId={targetOrgId} refreshKey={uploadsRefreshKey} />
         </div>
       )}
 
