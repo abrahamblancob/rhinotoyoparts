@@ -430,6 +430,14 @@ export function PackSessionDetail() {
           </h2>
 
           <div style={{ display: 'flex', gap: 24, flexWrap: 'wrap', marginBottom: savedPhotos.length > 0 ? 16 : 0 }}>
+            {(session.package_count ?? 1) > 0 && (
+              <div>
+                <p style={{ fontSize: 12, color: '#605E5C', margin: 0 }}>Bultos</p>
+                <p style={{ fontSize: 18, fontWeight: 700, color: '#1E293B', margin: '4px 0 0' }}>
+                  {session.package_count ?? 1}
+                </p>
+              </div>
+            )}
             {session.package_weight_kg && (
               <div>
                 <p style={{ fontSize: 12, color: '#605E5C', margin: 0 }}>Peso</p>
