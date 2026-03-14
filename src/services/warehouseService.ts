@@ -40,6 +40,21 @@ export async function saveWarehouse(data: WarehouseFormData & { org_id: string }
 }
 
 export async function deleteWarehouse(id: string) {
+  // Delete in dependency order: stock → locations → racks → zones → warehouse
+  const steps: { table: string; filter: { col: string; val: string } }[] = [
+    { table: 'inventory_stock', filter: { col: 'warehouse_id', val: id } },
+    { table: 'warehouse_locations', filter: { col: 'warehouse_id', val: id } },
+    { table: 'warehouse_racks', filter: { col: 'warehouse_id', val: id } },
+    { table: 'warehouse_zones', filter: { col: 'warehouse_id', val: id } },
+  ];
+
+  for (const step of steps) {
+    const { error } = await supabase.from(step.table).delete().eq(step.filter.col, step.filter.val);
+    if (error) {
+      return { data: null, error: `Error eliminando ${step.table}: ${error.message}` };
+    }
+  }
+
   return query<null>((sb) => sb.from('warehouses').delete().eq('id', id));
 }
 
@@ -70,6 +85,19 @@ export async function saveZone(data: ZoneFormData & { warehouse_id: string }, ed
 }
 
 export async function deleteZone(id: string) {
+  // Get racks in this zone to clean up their locations & stock
+  const { data: racks } = await supabase.from('warehouse_racks').select('id').eq('zone_id', id);
+  if (racks && racks.length > 0) {
+    const rackIds = racks.map((r: { id: string }) => r.id);
+    // Get all locations in those racks
+    const { data: locs } = await supabase.from('warehouse_locations').select('id').in('rack_id', rackIds);
+    if (locs && locs.length > 0) {
+      const locIds = locs.map((l: { id: string }) => l.id);
+      await supabase.from('inventory_stock').delete().in('location_id', locIds);
+    }
+    await supabase.from('warehouse_locations').delete().in('rack_id', rackIds);
+    await supabase.from('warehouse_racks').delete().eq('zone_id', id);
+  }
   return query<null>((sb) => sb.from('warehouse_zones').delete().eq('id', id));
 }
 
@@ -98,6 +126,13 @@ export async function saveRack(
 }
 
 export async function deleteRack(id: string) {
+  // Delete stock in locations of this rack, then locations, then rack
+  const { data: locs } = await supabase.from('warehouse_locations').select('id').eq('rack_id', id);
+  if (locs && locs.length > 0) {
+    const locIds = locs.map((l: { id: string }) => l.id);
+    await supabase.from('inventory_stock').delete().in('location_id', locIds);
+  }
+  await supabase.from('warehouse_locations').delete().eq('rack_id', id);
   return query<null>((sb) => sb.from('warehouse_racks').delete().eq('id', id));
 }
 
