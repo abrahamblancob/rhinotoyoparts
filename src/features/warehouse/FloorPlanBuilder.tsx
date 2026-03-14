@@ -11,6 +11,7 @@ export interface WizardRackForm {
   rack_depth_m: number;
   levels: number;
   positions_per_level: number;
+  aisleId?: string;
 }
 
 export interface PlacedRack {
@@ -119,6 +120,16 @@ const RACK_COLORS = [
   '#3B82F6', '#10B981', '#F59E0B', '#EF4444', '#8B5CF6',
   '#EC4899', '#06B6D4', '#84CC16', '#F97316', '#6366F1',
 ];
+
+// ── Display code helper ──
+
+function getRackDisplayCode(rack: WizardRackForm, aisles: WizardAisleForm[]): string {
+  if (rack.aisleId) {
+    const aisle = aisles.find((a) => a.id === rack.aisleId);
+    if (aisle) return `${aisle.code}-${rack.code}`;
+  }
+  return rack.code;
+}
 
 // ── Component ──
 
@@ -624,7 +635,57 @@ export function FloorPlanBuilder({
             </div>
           ) : (
             <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
-              {unplacedRacks.map((rack) => {
+              {/* Group unplaced racks by aisle */}
+              {aisles.map((aisle) => {
+                const aisleUnplaced = unplacedRacks.filter((r) => r.aisleId === aisle.id);
+                if (aisleUnplaced.length === 0) return null;
+                return (
+                  <div key={aisle.id}>
+                    <p style={{ fontSize: 11, fontWeight: 700, color: AISLE_COLOR, marginBottom: 4, marginTop: 8 }}>
+                      {aisle.code}
+                    </p>
+                    {aisleUnplaced.map((rack) => {
+                      const color = RACK_COLORS[racks.indexOf(rack) % RACK_COLORS.length];
+                      const displayCode = getRackDisplayCode(rack, aisles);
+                      return (
+                        <div
+                          key={rack.id}
+                          onMouseDown={(e) => handleSidebarRackMouseDown(rack.id, e)}
+                          style={{
+                            padding: '10px 12px',
+                            backgroundColor: '#FFFFFF',
+                            border: `2px solid ${color}40`,
+                            borderLeft: `4px solid ${color}`,
+                            borderRadius: 8,
+                            cursor: 'grab',
+                            userSelect: 'none',
+                            transition: 'transform 0.1s, box-shadow 0.1s',
+                            marginBottom: 6,
+                          }}
+                          onMouseEnter={(e) => {
+                            e.currentTarget.style.transform = 'translateX(2px)';
+                            e.currentTarget.style.boxShadow = `0 2px 8px ${color}30`;
+                          }}
+                          onMouseLeave={(e) => {
+                            e.currentTarget.style.transform = 'translateX(0)';
+                            e.currentTarget.style.boxShadow = 'none';
+                          }}
+                        >
+                          <div style={{ fontSize: 14, fontWeight: 700, color: '#1E293B', marginBottom: 2 }}>
+                            {displayCode} — {rack.name}
+                          </div>
+                          <div style={{ fontSize: 11, color: '#94A3B8' }}>
+                            {rack.rack_width_m}m x {rack.rack_depth_m}m |{' '}
+                            {rack.levels} niveles | {rack.positions_per_level} pos
+                          </div>
+                        </div>
+                      );
+                    })}
+                  </div>
+                );
+              })}
+              {/* Racks without aisle */}
+              {unplacedRacks.filter((r) => !r.aisleId).map((rack) => {
                 const color = RACK_COLORS[racks.indexOf(rack) % RACK_COLORS.length];
                 return (
                   <div
@@ -649,14 +710,7 @@ export function FloorPlanBuilder({
                       e.currentTarget.style.boxShadow = 'none';
                     }}
                   >
-                    <div
-                      style={{
-                        fontSize: 14,
-                        fontWeight: 700,
-                        color: '#1E293B',
-                        marginBottom: 2,
-                      }}
-                    >
+                    <div style={{ fontSize: 14, fontWeight: 700, color: '#1E293B', marginBottom: 2 }}>
                       {rack.code} — {rack.name}
                     </div>
                     <div style={{ fontSize: 11, color: '#94A3B8' }}>
@@ -704,7 +758,7 @@ export function FloorPlanBuilder({
                       }}
                     >
                       <span style={{ fontWeight: 600 }}>
-                        {rack.code} — ({p.gridX},{p.gridY})
+                        {getRackDisplayCode(rack, aisles)} — ({p.gridX},{p.gridY})
                       </span>
                       {p.rotated && (
                         <span
@@ -912,7 +966,7 @@ export function FloorPlanBuilder({
                       textShadow: '0 1px 2px rgba(255,255,255,0.8)',
                     }}
                   >
-                    {rack.code}
+                    {getRackDisplayCode(rack, aisles)}
                   </span>
                   <span style={{ fontSize: 9, color: '#64748B', marginTop: 1 }}>
                     {rack.levels}x{rack.positions_per_level}
