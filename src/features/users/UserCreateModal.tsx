@@ -74,7 +74,7 @@ export function UserCreateModal({ open, onClose, onCreated }: UserCreateModalPro
   // Aggregator admins can assign both aggregator and associate roles
   const selectedOrg = availableOrgs.find((o) => o.id === form.org_id);
   const selectedOrgType = selectedOrg?.type ?? organization?.type ?? 'associate';
-  const filteredRoles = isAggregator
+  const filteredRoles = (isPlatform || isAggregator) && selectedOrgType === 'aggregator'
     ? availableRoles.filter((r) => ['aggregator', 'associate'].includes(r.org_type))
     : availableRoles.filter((r) => r.org_type === selectedOrgType);
 
