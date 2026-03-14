@@ -4,6 +4,7 @@ import {
   Search,
   Weight,
   CheckSquare,
+  Package,
 } from 'lucide-react';
 import { useAuthStore } from '@/stores/authStore.ts';
 import { usePermissions } from '@/hooks/usePermissions.ts';
@@ -132,6 +133,7 @@ export function PackingDashboard() {
                 <th>Empacador</th>
                 <th>Estado</th>
                 <th>Verificados</th>
+                <th>Bultos</th>
                 <th>Peso (kg)</th>
                 <th>Acciones</th>
               </tr>
@@ -158,6 +160,12 @@ export function PackingDashboard() {
                       <span style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
                         <CheckSquare size={14} style={{ color: '#8A8886' }} />
                         {session.verified_items} / {session.total_items}
+                      </span>
+                    </td>
+                    <td>
+                      <span style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
+                        <Package size={14} style={{ color: '#8A8886' }} />
+                        {session.package_count ?? 1}
                       </span>
                     </td>
                     <td>

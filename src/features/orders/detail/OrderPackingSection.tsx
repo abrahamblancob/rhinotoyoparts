@@ -82,6 +82,14 @@ export function OrderPackingSection({ packSession }: OrderPackingSectionProps) {
         <div style={{ padding: 20, background: '#fff' }}>
           {/* Pack session details */}
           <div style={{ display: 'flex', gap: 24, flexWrap: 'wrap', marginBottom: photos.length > 0 ? 16 : 0 }}>
+            {(packSession.package_count ?? 1) > 0 && (
+              <div>
+                <p style={{ fontSize: 12, color: '#605E5C', margin: 0 }}>Bultos</p>
+                <p style={{ fontSize: 18, fontWeight: 700, color: '#1E293B', margin: '4px 0 0' }}>
+                  {packSession.package_count ?? 1}
+                </p>
+              </div>
+            )}
             {packSession.package_weight_kg != null && (
               <div>
                 <p style={{ fontSize: 12, color: '#605E5C', margin: 0 }}>Peso</p>

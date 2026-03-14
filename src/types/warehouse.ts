@@ -169,6 +169,7 @@ export interface PackSession {
   total_items: number;
   verified_items: number;
   package_weight_kg: number | null;
+  package_count: number;
   package_photo_url: string | null;
   shipping_label_printed: boolean;
   packing_slip_printed: boolean;
