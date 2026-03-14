@@ -71,9 +71,12 @@ export function UserCreateModal({ open, onClose, onCreated }: UserCreateModalPro
   };
 
   // Filter roles based on selected org type
+  // Aggregator admins can assign both aggregator and associate roles
   const selectedOrg = availableOrgs.find((o) => o.id === form.org_id);
   const selectedOrgType = selectedOrg?.type ?? organization?.type ?? 'associate';
-  const filteredRoles = availableRoles.filter((r) => r.org_type === selectedOrgType);
+  const filteredRoles = isAggregator
+    ? availableRoles.filter((r) => ['aggregator', 'associate'].includes(r.org_type))
+    : availableRoles.filter((r) => r.org_type === selectedOrgType);
 
   // Reset role when org changes and role doesn't match
   useEffect(() => {

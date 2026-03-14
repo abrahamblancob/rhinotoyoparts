@@ -31,6 +31,7 @@ const MODULE_LABELS: Record<string, string> = {
   packing: '📦 Packing',
   receiving: '📥 Recepción',
   stock: '📊 Stock',
+  returns: '🔄 Devoluciones',
 };
 
 const ACTION_LABELS: Record<string, string> = {
