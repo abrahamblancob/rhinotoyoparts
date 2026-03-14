@@ -37,6 +37,7 @@ const NAV_CONFIG: Record<OrgType, NavSection[]> = {
         { label: 'Packing', path: '/hub/packing', icon: '📦', module: 'packing' },
         { label: 'Recepción', path: '/hub/receiving', icon: '📥', module: 'receiving' },
         { label: 'Stock por Ubicación', path: '/hub/stock', icon: '📊', module: 'stock' },
+        { label: 'Devoluciones', path: '/hub/returns', icon: '🔄', module: 'returns' },
       ],
     },
     {
@@ -81,6 +82,7 @@ const NAV_CONFIG: Record<OrgType, NavSection[]> = {
         { label: 'Packing', path: '/hub/packing', icon: '📦', module: 'packing' },
         { label: 'Recepción', path: '/hub/receiving', icon: '📥', module: 'receiving' },
         { label: 'Stock por Ubicación', path: '/hub/stock', icon: '📊', module: 'stock' },
+        { label: 'Devoluciones', path: '/hub/returns', icon: '🔄', module: 'returns' },
       ],
     },
     {
@@ -125,6 +127,7 @@ const NAV_CONFIG: Record<OrgType, NavSection[]> = {
         { label: 'Packing', path: '/hub/packing', icon: '📦', module: 'packing' },
         { label: 'Recepción', path: '/hub/receiving', icon: '📥', module: 'receiving' },
         { label: 'Stock por Ubicación', path: '/hub/stock', icon: '📊', module: 'stock' },
+        { label: 'Devoluciones', path: '/hub/returns', icon: '🔄', module: 'returns' },
       ],
     },
     {

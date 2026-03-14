@@ -21,6 +21,7 @@ import { OrderTrackingInfo } from './detail/OrderTrackingInfo.tsx';
 import { OrderTimeline } from './detail/OrderTimeline.tsx';
 import { OrderPickingSection } from './detail/OrderPickingSection.tsx';
 import { OrderPackingSection } from './detail/OrderPackingSection.tsx';
+import { OrderReturnSection } from './detail/OrderReturnSection.tsx';
 import { AssignDispatcherModal } from './detail/AssignDispatcherModal.tsx';
 import { ShipOrderModal } from './detail/ShipOrderModal.tsx';
 import { CancelOrderModal } from './detail/CancelOrderModal.tsx';
@@ -210,6 +211,11 @@ export function OrderDetailPage() {
 
       {/* Packing Module */}
       {packSession && <OrderPackingSection packSession={packSession} />}
+
+      {/* Return Module */}
+      {['returned', 'partial_return'].includes(order.status) && orderId && (
+        <OrderReturnSection orderId={orderId} />
+      )}
 
       {/* Delivery pin map */}
       {isPlatformOwner && !order.dispatcher_current_lat
