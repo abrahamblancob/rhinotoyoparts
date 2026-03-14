@@ -1,13 +1,13 @@
 import { useState, useCallback, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { Search, Package, RotateCcw } from 'lucide-react';
+import { Search, Package } from 'lucide-react';
 import { useAuthStore } from '@/stores/authStore.ts';
 import { usePermissions } from '@/hooks/usePermissions.ts';
 import { useAsyncData } from '@/hooks/useAsyncData.ts';
 import { StatsCard } from '@/components/hub/shared/StatsCard.tsx';
 import { StatusBadge } from '@/components/hub/shared/StatusBadge.tsx';
 import { EmptyState } from '@/components/hub/shared/EmptyState.tsx';
-import { RETURN_STATUS_LABELS, RETURN_REASON_LABELS } from '@/lib/statusConfig.ts';
+import { RETURN_STATUS_LABELS } from '@/lib/statusConfig.ts';
 import { formatDateTime } from '@/utils/dateUtils.ts';
 import * as returnService from '@/services/returnService.ts';
 import { supabase } from '@/lib/supabase.ts';
