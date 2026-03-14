@@ -84,9 +84,12 @@ export function UserEditModal({ user, onClose, onSaved }: UserEditModalProps) {
   };
 
   // Filter roles based on the user's org type
+  // Platform/aggregator admins see both aggregator + associate roles for aggregator orgs
   const editUserOrg = user ? availableOrgs.find((o) => o.id === user.org_id) : null;
   const editOrgType = editUserOrg?.type ?? organization?.type ?? 'associate';
-  const filteredRoles = availableRoles.filter((r) => r.org_type === editOrgType);
+  const filteredRoles = (isPlatform || isAggregator) && editOrgType === 'aggregator'
+    ? availableRoles.filter((r) => ['aggregator', 'associate'].includes(r.org_type))
+    : availableRoles.filter((r) => r.org_type === editOrgType);
 
   const handleSave = async () => {
     if (!user) return;
