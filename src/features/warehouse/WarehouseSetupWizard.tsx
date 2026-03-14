@@ -193,10 +193,14 @@ export function WarehouseSetupWizard() {
           const loadedPlacements: PlacedRack[] = [];
 
           for (const r of racksRes.data) {
+            // DB stores full code (e.g. "P1-01"); form needs just the number part ("01")
+            const formCode = r.aisle_id && r.code.includes('-')
+              ? r.code.split('-').pop()!
+              : r.code;
             const rackForm: WizardRackForm = {
               id: r.id,
               name: r.name,
-              code: r.code,
+              code: formCode,
               rack_width_m: r.rack_width_m ?? 1,
               rack_depth_m: r.rack_depth_m ?? 1,
               levels: r.levels,
@@ -322,7 +326,7 @@ export function WarehouseSetupWizard() {
       ...prev,
       {
         id: tempId(),
-        name: `Estante ${aisle.code}-${code}`,
+        name: `Estante ${code}`,
         code,
         aisleId,
         rack_width_m: 2,
@@ -625,6 +629,10 @@ export function WarehouseSetupWizard() {
         // Determine aisle assignment from explicit aisleId
         const assignedAisleId = rack.aisleId ? (aisleIdMap.get(rack.aisleId) ?? null) : null;
 
+        // Build full rack code with aisle prefix for DB storage (e.g. "P1-01")
+        const aisleForRack = rack.aisleId ? wizardAisles.find((a) => a.id === rack.aisleId) : null;
+        const fullRackCode = aisleForRack ? `${aisleForRack.code}-${rack.code}` : rack.code;
+
         const orientation: RackOrientation = placement?.rotated
           ? 'horizontal'
           : 'vertical';
@@ -633,7 +641,7 @@ export function WarehouseSetupWizard() {
         const rackResult = await warehouseService.saveRack(
           {
             name: rack.name,
-            code: rack.code,
+            code: fullRackCode,
             zone_id: assignedZoneId,
             aisle_id: assignedAisleId,
             levels: rack.levels,
