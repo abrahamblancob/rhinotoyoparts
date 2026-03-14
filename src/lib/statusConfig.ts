@@ -25,6 +25,7 @@ export const STATUS_STYLES: Record<string, StatusStyle> = {
   delivered: { bg: '#10B98115', text: '#10B981', label: 'Entregada' },
   cancelled: { bg: '#D3010A15', text: '#D3010A', label: 'Cancelada' },
   returned: { bg: '#EF444415', text: '#EF4444', label: 'Devuelta' },
+  partial_return: { bg: '#F59E0B15', text: '#F59E0B', label: 'Devolución Parcial' },
   // Product statuses
   active: { bg: '#10B98115', text: '#10B981', label: 'Activo' },
   inactive: { bg: '#8A888615', text: '#8A8886', label: 'Inactivo' },
@@ -50,6 +51,10 @@ export const STATUS_STYLES: Record<string, StatusStyle> = {
   received: { bg: '#10B98115', text: '#10B981', label: 'Recibido' },
   partial: { bg: '#F59E0B15', text: '#F59E0B', label: 'Parcial' },
   damaged: { bg: '#EF444415', text: '#EF4444', label: 'Dañado' },
+  // Return item dispositions
+  replenish: { bg: '#10B98115', text: '#10B981', label: 'Reposición' },
+  defective: { bg: '#EF444415', text: '#EF4444', label: 'Defectuoso' },
+  inspecting: { bg: '#6366F115', text: '#6366F1', label: 'En inspección' },
 };
 
 export const DEFAULT_STATUS_STYLE: StatusStyle = { bg: '#8A888615', text: '#8A8886', label: '' };
@@ -81,6 +86,7 @@ export const ORDER_STATUS_LABELS: Record<string, string> = {
   delivered: 'Entregadas',
   cancelled: 'Canceladas',
   returned: 'Devueltas',
+  partial_return: 'Devolución Parcial',
 };
 
 // Canonical status flow for order progression
@@ -112,6 +118,26 @@ export const PACK_SESSION_STATUS_LABELS: Record<string, string> = {
   verified: 'Verificado',
   labelled: 'Etiquetado',
   completed: 'Completado',
+};
+
+// Return order filter labels
+export const RETURN_STATUS_LABELS: Record<string, string> = {
+  all: 'Todas',
+  pending: 'Pendientes',
+  inspecting: 'En inspección',
+  completed: 'Completadas',
+};
+
+// Return reason labels
+export const RETURN_REASON_LABELS: Record<string, string> = {
+  wrong_product: 'Producto equivocado',
+  damaged_in_transit: 'Dañado en tránsito',
+  defective: 'Defectuoso',
+  incomplete_order: 'Orden incompleta',
+  customer_changed_mind: 'Cambio de opinión',
+  wrong_quantity: 'Cantidad incorrecta',
+  warranty_claim: 'Reclamo de garantía',
+  other: 'Otro',
 };
 
 // Org type labels

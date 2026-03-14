@@ -8,7 +8,7 @@ interface OrderProgressBarProps {
 export function OrderProgressBar({ status }: OrderProgressBarProps) {
   const currentStepIndex = ORDER_STATUS_FLOW.indexOf(status as OrderStatus);
 
-  if (['cancelled', 'returned'].includes(status)) return null;
+  if (['cancelled', 'returned', 'partial_return'].includes(status)) return null;
 
   return (
     <div className="rh-card" style={{ padding: '20px 24px', marginBottom: 20 }}>

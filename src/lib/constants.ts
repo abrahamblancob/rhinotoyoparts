@@ -40,6 +40,7 @@ export const MODULES = [
   'packing',
   'receiving',
   'stock',
+  'returns',
 ] as const;
 
 export const ACTIONS = ['read', 'write', 'delete', 'manage'] as const;
@@ -78,6 +79,7 @@ export const ORDER_STATUSES = [
   'delivered',
   'cancelled',
   'returned',
+  'partial_return',
 ] as const;
 
 export const PRODUCT_STATUSES = [

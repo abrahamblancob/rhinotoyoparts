@@ -32,6 +32,8 @@ const ReceivingDetailPage = lazy(() => import('@/features/receiving/ReceivingDet
 const StockDashboard = lazy(() => import('@/features/stock/StockDashboard.tsx').then(m => ({ default: m.StockDashboard })));
 const StockMovements = lazy(() => import('@/features/stock/StockMovements.tsx').then(m => ({ default: m.StockMovements })));
 const StockAdjustment = lazy(() => import('@/features/stock/StockAdjustment.tsx').then(m => ({ default: m.StockAdjustment })));
+const ReturnsDashboard = lazy(() => import('@/features/returns/ReturnsDashboard.tsx').then(m => ({ default: m.ReturnsDashboard })));
+const ReturnDetailPage = lazy(() => import('@/features/returns/ReturnDetailPage.tsx').then(m => ({ default: m.ReturnDetailPage })));
 
 /** Redirects vendedor/despachador away from Dashboard to their relevant page */
 function SmartIndex() {
@@ -107,6 +109,8 @@ export function HubRouter() {
                   <Route path="stock" element={<StockDashboard />} />
                   <Route path="stock/movements" element={<StockMovements />} />
                   <Route path="stock/adjust" element={<StockAdjustment />} />
+                  <Route path="returns" element={<ReturnsDashboard />} />
+                  <Route path="returns/:returnId" element={<ReturnDetailPage />} />
                   <Route path="*" element={<Navigate to="/hub" replace />} />
                 </Routes>
               </Suspense>

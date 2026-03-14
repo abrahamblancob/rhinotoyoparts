@@ -20,7 +20,7 @@ export function OrderStatusActions({
 }: OrderStatusActionsProps) {
   if (isReadOnly) return null;
 
-  const canCancel = !['delivered', 'cancelled', 'returned'].includes(order.status);
+  const canCancel = !['delivered', 'cancelled', 'returned', 'partial_return'].includes(order.status);
 
   return (
     <div style={{ display: 'flex', gap: 8 }}>

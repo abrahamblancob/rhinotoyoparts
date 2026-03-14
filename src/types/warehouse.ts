@@ -229,6 +229,46 @@ export interface ReceivingOrderItem {
   location?: { code: string };
 }
 
+// ── Returns ──
+
+export type ReturnOrderStatus = 'pending' | 'inspecting' | 'completed';
+export type ReturnItemDisposition = 'pending' | 'replenish' | 'defective' | 'damaged';
+export type ReturnReason =
+  | 'wrong_product' | 'damaged_in_transit' | 'defective'
+  | 'incomplete_order' | 'customer_changed_mind' | 'wrong_quantity'
+  | 'warranty_claim' | 'other';
+
+export interface ReturnOrder {
+  id: string;
+  org_id: string;
+  warehouse_id: string;
+  order_id: string;
+  order_number: string;
+  package_count: number;
+  photo_urls: string[];
+  status: ReturnOrderStatus;
+  received_by: string | null;
+  notes: string | null;
+  created_at: string;
+  completed_at: string | null;
+  // Joined fields
+  receiver?: { full_name: string };
+}
+
+export interface ReturnOrderItem {
+  id: string;
+  return_order_id: string;
+  product_id: string;
+  quantity: number;
+  return_reason: ReturnReason;
+  observation: string | null;
+  disposition: ReturnItemDisposition;
+  inventory_stock_id: string | null;
+  created_at: string;
+  // Joined fields
+  product?: { name: string; sku: string };
+}
+
 // ── Wizard & Forms ──
 
 export interface WarehouseFormData {
