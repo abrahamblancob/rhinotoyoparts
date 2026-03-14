@@ -57,7 +57,7 @@ export function WarehouseLayoutPage() {
   // Platform org selector
   const [availableOrgs, setAvailableOrgs] = useState<Organization[]>([]);
   const [selectedOrgFilter, setSelectedOrgFilter] = useState<string | null>(null);
-  const [loadingOrgs, setLoadingOrgs] = useState(false);
+  const [loadingOrgs, setLoadingOrgs] = useState(isPlatform);
 
   useEffect(() => {
     if (isPlatform) {
