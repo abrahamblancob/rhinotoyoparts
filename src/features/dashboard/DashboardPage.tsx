@@ -3,7 +3,8 @@ import { StatsCard } from '@/components/hub/shared/StatsCard.tsx';
 import { usePermissions } from '@/hooks/usePermissions.ts';
 import { useAuthStore } from '@/stores/authStore.ts';
 import { OrderPipelineWidget } from './OrderPipelineWidget.tsx';
-import { getDashboardStats } from '@/services/dashboardService.ts';
+import { getDashboardStats, getOrgSummaries } from '@/services/dashboardService.ts';
+import type { OrgInventorySummary } from '@/services/dashboardService.ts';
 
 export function DashboardPage() {
   const { isPlatform, isAggregator } = usePermissions();
@@ -11,9 +12,27 @@ export function DashboardPage() {
   const [stats, setStats] = useState({ orgs: 0, products: 0, orders: 0, lowStock: 0 });
   const [salesPeriod, setSalesPeriod] = useState<'6m' | '12m'>('6m');
 
+  // Platform org selector
+  const [orgSummaries, setOrgSummaries] = useState<OrgInventorySummary[]>([]);
+  const [selectedOrgId, setSelectedOrgId] = useState<string | null>(null);
+  const [loadingSummaries, setLoadingSummaries] = useState(false);
+
+  const selectedOrg = orgSummaries.find((o) => o.id === selectedOrgId);
+
   useEffect(() => {
-    getDashboardStats().then(setStats);
-  }, []);
+    if (isPlatform && !selectedOrgId) {
+      setLoadingSummaries(true);
+      getOrgSummaries().then((data) => {
+        setOrgSummaries(data);
+        setLoadingSummaries(false);
+      });
+    }
+  }, [isPlatform, selectedOrgId]);
+
+  useEffect(() => {
+    const orgId = isPlatform ? selectedOrgId ?? undefined : undefined;
+    getDashboardStats(orgId).then(setStats);
+  }, [isPlatform, selectedOrgId]);
 
   // Generate month labels for chart
   const monthLabels = useMemo(() => {
@@ -28,27 +47,146 @@ export function DashboardPage() {
     return labels;
   }, [salesPeriod]);
 
-  // Mock activity data (will be real when audit_logs is populated)
+  // Mock activity data
   const recentActivity = [
-    { color: '#10B981', title: 'Inventario actualizado', time: 'Reciente', dot: true },
-    { color: '#D3010A', title: 'Nuevo lote cargado', time: 'Reciente', dot: true },
-    { color: '#10B981', title: 'Producto creado', time: 'Reciente', dot: true },
+    { color: '#10B981', title: 'Inventario actualizado', time: 'Reciente' },
+    { color: '#D3010A', title: 'Nuevo lote cargado', time: 'Reciente' },
+    { color: '#10B981', title: 'Producto creado', time: 'Reciente' },
   ];
 
-  // Mock regional data
-  const regionData = [
-    { name: 'Nacional', pct: 100 },
-  ];
+  const regionData = [{ name: 'Nacional', pct: 100 }];
+
+  // Platform user without org selected → show org cards
+  if (isPlatform && !selectedOrgId) {
+    const totalProducts = orgSummaries.reduce((s, o) => s + o.productCount, 0);
+    const totalStock = orgSummaries.reduce((s, o) => s + o.totalStock, 0);
+    const totalOrders = orgSummaries.reduce((s, o) => s + o.orderCount, 0);
+
+    return (
+      <div>
+        <div className="rh-page-header">
+          <div>
+            <h1 className="rh-page-title">Dashboard de Plataforma</h1>
+            <p className="rh-page-subtitle">Selecciona una organización para ver su dashboard detallado</p>
+          </div>
+        </div>
+
+        {/* Global stats */}
+        <div className="rh-stats-grid mb-6">
+          <StatsCard title="Total Productos" value={totalProducts.toLocaleString()} icon="📦" color="#6366F1" />
+          <StatsCard title="Stock Total" value={totalStock.toLocaleString()} icon="🏷️" color="#10B981" />
+          <StatsCard title="Órdenes Totales" value={totalOrders} icon="🛒" color="#F59E0B" />
+          <StatsCard title="Organizaciones" value={orgSummaries.length} icon="🏢" color="#8B5CF6" />
+        </div>
+
+        {loadingSummaries ? (
+          <p className="rh-loading">Cargando organizaciones...</p>
+        ) : (
+          <div style={{
+            display: 'grid',
+            gridTemplateColumns: 'repeat(auto-fill, minmax(320px, 1fr))',
+            gap: 16,
+          }}>
+            {orgSummaries.map((org) => (
+              <div
+                key={org.id}
+                onClick={() => setSelectedOrgId(org.id)}
+                className="rh-card"
+                style={{
+                  padding: '20px 24px',
+                  cursor: 'pointer',
+                  transition: 'all 0.15s ease',
+                  border: '1px solid #E2E0DE',
+                }}
+                onMouseEnter={(e) => {
+                  e.currentTarget.style.borderColor = '#D3010A';
+                  e.currentTarget.style.boxShadow = '0 4px 12px rgba(211,1,10,0.1)';
+                  e.currentTarget.style.transform = 'translateY(-2px)';
+                }}
+                onMouseLeave={(e) => {
+                  e.currentTarget.style.borderColor = '#E2E0DE';
+                  e.currentTarget.style.boxShadow = 'none';
+                  e.currentTarget.style.transform = 'none';
+                }}
+              >
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: 16 }}>
+                  <div>
+                    <h3 style={{ fontSize: 16, fontWeight: 700, color: '#1E293B', margin: 0 }}>
+                      {org.name}
+                    </h3>
+                    <span style={{
+                      display: 'inline-block',
+                      marginTop: 4,
+                      padding: '2px 8px',
+                      borderRadius: 4,
+                      fontSize: 11,
+                      fontWeight: 600,
+                      backgroundColor: org.type === 'aggregator' ? 'rgba(99,102,241,0.1)' : 'rgba(16,185,129,0.1)',
+                      color: org.type === 'aggregator' ? '#6366F1' : '#10B981',
+                    }}>
+                      {org.type === 'aggregator' ? 'Agregador' : 'Asociado'}
+                    </span>
+                  </div>
+                  <span style={{ fontSize: 24, opacity: 0.3 }}>→</span>
+                </div>
+
+                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12 }}>
+                  <div style={{ textAlign: 'center', padding: '8px 0', backgroundColor: '#F8FAFC', borderRadius: 8 }}>
+                    <p style={{ fontSize: 20, fontWeight: 800, color: '#6366F1', margin: 0 }}>
+                      {org.productCount.toLocaleString()}
+                    </p>
+                    <p style={{ fontSize: 11, color: '#94A3B8', margin: 0 }}>Productos</p>
+                  </div>
+                  <div style={{ textAlign: 'center', padding: '8px 0', backgroundColor: '#F8FAFC', borderRadius: 8 }}>
+                    <p style={{ fontSize: 20, fontWeight: 800, color: '#10B981', margin: 0 }}>
+                      {org.totalStock.toLocaleString()}
+                    </p>
+                    <p style={{ fontSize: 11, color: '#94A3B8', margin: 0 }}>Stock Total</p>
+                  </div>
+                  <div style={{ textAlign: 'center', padding: '8px 0', backgroundColor: '#F8FAFC', borderRadius: 8 }}>
+                    <p style={{ fontSize: 20, fontWeight: 800, color: '#F59E0B', margin: 0 }}>
+                      {org.orderCount}
+                    </p>
+                    <p style={{ fontSize: 11, color: '#94A3B8', margin: 0 }}>Órdenes</p>
+                  </div>
+                  <div style={{ textAlign: 'center', padding: '8px 0', backgroundColor: '#F8FAFC', borderRadius: 8 }}>
+                    <p style={{ fontSize: 20, fontWeight: 800, color: org.lowStock > 0 ? '#D3010A' : '#94A3B8', margin: 0 }}>
+                      {org.lowStock}
+                    </p>
+                    <p style={{ fontSize: 11, color: '#94A3B8', margin: 0 }}>Stock Bajo</p>
+                  </div>
+                </div>
+              </div>
+            ))}
+          </div>
+        )}
+      </div>
+    );
+  }
 
   return (
     <div>
       <div className="rh-page-header">
-        <h1 className="rh-page-title">
-          {isPlatform ? 'Dashboard de Plataforma' : isAggregator ? 'Dashboard de Agregador' : 'Dashboard'}
-        </h1>
-        <p className="rh-page-subtitle">
-          Bienvenido, {organization?.name}
-        </p>
+        <div>
+          <h1 className="rh-page-title">
+            {isPlatform
+              ? `Dashboard — ${selectedOrg?.name ?? 'Plataforma'}`
+              : isAggregator
+                ? 'Dashboard de Agregador'
+                : 'Dashboard'}
+          </h1>
+          <p className="rh-page-subtitle">
+            Bienvenido, {selectedOrg?.name ?? organization?.name}
+          </p>
+        </div>
+        {isPlatform && selectedOrgId && (
+          <button
+            onClick={() => setSelectedOrgId(null)}
+            className="rh-btn rh-btn-ghost"
+          >
+            ← Todas las organizaciones
+          </button>
+        )}
       </div>
 
       {/* Stats Cards */}
@@ -82,7 +220,7 @@ export function DashboardPage() {
       {/* Order Pipeline (visible for aggregator and platform) */}
       {(isPlatform || isAggregator) && (
         <div style={{ marginBottom: 20 }}>
-          <OrderPipelineWidget />
+          <OrderPipelineWidget orgId={isPlatform ? selectedOrgId ?? undefined : undefined} />
         </div>
       )}
 
@@ -139,7 +277,6 @@ export function DashboardPage() {
               position: 'relative',
             }}
           >
-            {/* Y-axis grid lines */}
             {[0, 1, 2, 3, 4].map((i) => (
               <div
                 key={`grid-${i}`}
@@ -153,7 +290,6 @@ export function DashboardPage() {
               />
             ))}
 
-            {/* Empty bars placeholder */}
             {monthLabels.map((month) => (
               <div key={month} style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', flex: 1, zIndex: 1 }}>
                 <div
@@ -229,7 +365,6 @@ export function DashboardPage() {
 
       {/* Top Products + Sales by Region */}
       <div style={{ display: 'grid', gridTemplateColumns: '1fr 380px', gap: 20 }}>
-        {/* Top Products */}
         <div className="rh-card" style={{ padding: 0, overflow: 'hidden' }}>
           <div style={{ padding: '20px 24px 0' }}>
             <h3 className="rh-card-title" style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
@@ -257,7 +392,6 @@ export function DashboardPage() {
           </div>
         </div>
 
-        {/* Sales by Region */}
         <div className="rh-card" style={{ padding: '24px' }}>
           <h3 className="rh-card-title" style={{ marginBottom: 20 }}>
             📍 Ventas por Region

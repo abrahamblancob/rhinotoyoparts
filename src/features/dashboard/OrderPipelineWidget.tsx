@@ -24,7 +24,11 @@ interface FulfillmentMetrics {
   cancelRate: number;
 }
 
-export function OrderPipelineWidget() {
+interface OrderPipelineWidgetProps {
+  orgId?: string;
+}
+
+export function OrderPipelineWidget({ orgId }: OrderPipelineWidgetProps = {}) {
   const organization = useAuthStore((s) => s.organization);
   const { isPlatform, isAggregator } = usePermissions();
   const [counts, setCounts] = useState<PipelineCounts>({
@@ -40,7 +44,10 @@ export function OrderPipelineWidget() {
 
     let query = supabase.from('orders').select('status, created_at, delivered_at, cancelled_at');
 
-    if (!isPlatform) {
+    if (orgId) {
+      // Filter by specific org (platform user selected an org)
+      query = query.eq('org_id', orgId);
+    } else if (!isPlatform) {
       if (isAggregator) {
         // Aggregator sees orders from child associates
         const { data: hierarchy } = await supabase
@@ -88,7 +95,7 @@ export function OrderPipelineWidget() {
       completedToday: todayCount,
       cancelRate: orders.length > 0 ? (cancelledCount / orders.length) * 100 : 0,
     });
-  }, [organization, isPlatform, isAggregator]);
+  }, [organization, isPlatform, isAggregator, orgId]);
 
   useEffect(() => { loadData(); }, [loadData]);
 
