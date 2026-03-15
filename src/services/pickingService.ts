@@ -1,32 +1,15 @@
-import { query, supabase } from './base.ts';
-import type { Warehouse, WarehouseZone, PickList, PickListItem, WarehouseLocation, WarehouseRack } from '@/types/warehouse.ts';
+import { query, supabase, resolveAggregatorOrgIds, applyOrgScope } from './base.ts';
+import type { PickList, PickListItem, WarehouseLocation, WarehouseRack } from '@/types/warehouse.ts';
 
 export async function getPickLists(opts?: { orgId?: string; isPlatform?: boolean; isAggregator?: boolean; warehouseId?: string; status?: string }) {
-  // If aggregator, fetch child org IDs to include their pick lists
-  let aggregatorOrgIds: string[] | null = null;
-  if (opts?.isAggregator && opts?.orgId) {
-    const { data: hierarchy } = await supabase
-      .from('org_hierarchy')
-      .select('child_id')
-      .eq('parent_id', opts.orgId);
-    const childIds = (hierarchy ?? []).map((h: { child_id: string }) => h.child_id);
-    aggregatorOrgIds = [opts.orgId, ...childIds];
-  }
+  const aggregatorOrgIds = await resolveAggregatorOrgIds(opts);
 
   return query<PickList[]>((sb) => {
     let q = sb.from('pick_lists')
       .select('*, order:orders(order_number, status), assignee:profiles!pick_lists_assigned_to_fkey(full_name)')
       .order('created_at', { ascending: false });
 
-    if (opts?.isPlatform) {
-      // Platform sees everything
-    } else if (aggregatorOrgIds) {
-      // Aggregator sees own + child org pick lists
-      q = q.in('org_id', aggregatorOrgIds);
-    } else if (opts?.orgId) {
-      q = q.eq('org_id', opts.orgId);
-    }
-
+    q = applyOrgScope(q, opts, aggregatorOrgIds);
     if (opts?.warehouseId) q = q.eq('warehouse_id', opts.warehouseId);
     if (opts?.status) q = q.eq('status', opts.status);
     return q;

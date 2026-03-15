@@ -1,32 +1,15 @@
-import { query, supabase } from './base.ts';
+import { query, supabase, resolveAggregatorOrgIds, applyOrgScope } from './base.ts';
 import type { PackSession, PackSessionItem } from '@/types/warehouse.ts';
 
 export async function getPackSessions(opts?: { orgId?: string; isPlatform?: boolean; isAggregator?: boolean; warehouseId?: string; status?: string }) {
-  // If aggregator, fetch child org IDs to include their pack sessions
-  let aggregatorOrgIds: string[] | null = null;
-  if (opts?.isAggregator && opts?.orgId) {
-    const { data: hierarchy } = await supabase
-      .from('org_hierarchy')
-      .select('child_id')
-      .eq('parent_id', opts.orgId);
-    const childIds = (hierarchy ?? []).map((h: { child_id: string }) => h.child_id);
-    aggregatorOrgIds = [opts.orgId, ...childIds];
-  }
+  const aggregatorOrgIds = await resolveAggregatorOrgIds(opts);
 
   return query<PackSession[]>((sb) => {
     let q = sb.from('pack_sessions')
       .select('*, order:orders(order_number, status), packer:profiles!pack_sessions_packed_by_fkey(full_name)')
       .order('created_at', { ascending: false });
 
-    if (opts?.isPlatform) {
-      // Platform sees everything
-    } else if (aggregatorOrgIds) {
-      // Aggregator sees own + child org pack sessions
-      q = q.in('org_id', aggregatorOrgIds);
-    } else if (opts?.orgId) {
-      q = q.eq('org_id', opts.orgId);
-    }
-
+    q = applyOrgScope(q, opts, aggregatorOrgIds);
     if (opts?.warehouseId) q = q.eq('warehouse_id', opts.warehouseId);
     if (opts?.status) q = q.eq('status', opts.status);
     return q;

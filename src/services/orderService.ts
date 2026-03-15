@@ -1,6 +1,5 @@
-import { query } from './base.ts';
+import { query, supabase, resolveAggregatorOrgIds, applyOrgScope } from './base.ts';
 import type { Order } from '@/lib/database.types.ts';
-import { supabase } from '@/lib/supabase.ts';
 
 interface OrderWithCustomer extends Order {
   customers: { name: string } | null;
@@ -14,16 +13,7 @@ export async function getOrders(opts?: {
   assignedTo?: string;
   status?: string;
 }) {
-  // If aggregator, first fetch child org IDs to include their orders
-  let aggregatorOrgIds: string[] | null = null;
-  if (opts?.isAggregator && opts?.orgId) {
-    const { data: hierarchy } = await supabase
-      .from('org_hierarchy')
-      .select('child_id')
-      .eq('parent_id', opts.orgId);
-    const childIds = (hierarchy ?? []).map((h: { child_id: string }) => h.child_id);
-    aggregatorOrgIds = [opts.orgId, ...childIds];
-  }
+  const aggregatorOrgIds = await resolveAggregatorOrgIds(opts);
 
   return query<OrderWithCustomer[]>((sb) => {
     let q = sb
@@ -31,14 +21,7 @@ export async function getOrders(opts?: {
       .select('*, customers(name)')
       .order('created_at', { ascending: false });
 
-    if (opts?.isPlatform) {
-      // Platform sees everything
-    } else if (aggregatorOrgIds) {
-      // Aggregator sees own + child org orders
-      q = q.in('org_id', aggregatorOrgIds);
-    } else if (opts?.orgId) {
-      q = q.eq('org_id', opts.orgId);
-    }
+    q = applyOrgScope(q, opts, aggregatorOrgIds);
     if (opts?.isDispatcher && opts?.assignedTo) {
       q = q.eq('assigned_to', opts.assignedTo);
     }

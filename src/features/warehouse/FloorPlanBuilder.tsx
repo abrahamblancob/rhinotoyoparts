@@ -121,6 +121,42 @@ const RACK_COLORS = [
   '#EC4899', '#06B6D4', '#84CC16', '#F97316', '#6366F1',
 ];
 
+const CONTROL_BTN_STYLE: React.CSSProperties = {
+  width: 22, height: 22, borderRadius: '50%',
+  border: '1px solid #CBD5E1', backgroundColor: '#fff',
+  cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 0,
+};
+
+const CONTROLS_CONTAINER_STYLE: React.CSSProperties = {
+  position: 'absolute', top: -12, right: -4, display: 'flex', gap: 2, zIndex: 10,
+};
+
+function sidebarCardStyle(accentColor: string): React.CSSProperties {
+  return {
+    padding: '10px 12px',
+    backgroundColor: '#FFFFFF',
+    border: `2px solid ${accentColor}40`,
+    borderLeft: `4px solid ${accentColor}`,
+    borderRadius: 8,
+    cursor: 'grab',
+    userSelect: 'none',
+    transition: 'transform 0.1s, box-shadow 0.1s',
+  };
+}
+
+function cardHoverHandlers(accentColor: string) {
+  return {
+    onMouseEnter: (e: React.MouseEvent<HTMLDivElement>) => {
+      e.currentTarget.style.transform = 'translateX(2px)';
+      e.currentTarget.style.boxShadow = `0 2px 8px ${accentColor}30`;
+    },
+    onMouseLeave: (e: React.MouseEvent<HTMLDivElement>) => {
+      e.currentTarget.style.transform = 'translateX(0)';
+      e.currentTarget.style.boxShadow = 'none';
+    },
+  };
+}
+
 // ── Display code helper ──
 
 function getRackDisplayCode(rack: WizardRackForm, aisles: WizardAisleForm[]): string {
@@ -543,24 +579,8 @@ export function FloorPlanBuilder({
                 <div
                   key={aisle.id}
                   onMouseDown={(e) => handleSidebarAisleMouseDown(aisle.id, e)}
-                  style={{
-                    padding: '10px 12px',
-                    backgroundColor: '#FFFFFF',
-                    border: `2px solid ${AISLE_COLOR}40`,
-                    borderLeft: `4px solid ${AISLE_COLOR}`,
-                    borderRadius: 8,
-                    cursor: 'grab',
-                    userSelect: 'none',
-                    transition: 'transform 0.1s, box-shadow 0.1s',
-                  }}
-                  onMouseEnter={(e) => {
-                    e.currentTarget.style.transform = 'translateX(2px)';
-                    e.currentTarget.style.boxShadow = `0 2px 8px ${AISLE_COLOR}30`;
-                  }}
-                  onMouseLeave={(e) => {
-                    e.currentTarget.style.transform = 'translateX(0)';
-                    e.currentTarget.style.boxShadow = 'none';
-                  }}
+                  style={sidebarCardStyle(AISLE_COLOR)}
+                  {...cardHoverHandlers(AISLE_COLOR)}
                 >
                   <div style={{ fontSize: 14, fontWeight: 700, color: '#1E293B', marginBottom: 2 }}>
                     {aisle.code} — {aisle.name}
@@ -651,25 +671,8 @@ export function FloorPlanBuilder({
                         <div
                           key={rack.id}
                           onMouseDown={(e) => handleSidebarRackMouseDown(rack.id, e)}
-                          style={{
-                            padding: '10px 12px',
-                            backgroundColor: '#FFFFFF',
-                            border: `2px solid ${color}40`,
-                            borderLeft: `4px solid ${color}`,
-                            borderRadius: 8,
-                            cursor: 'grab',
-                            userSelect: 'none',
-                            transition: 'transform 0.1s, box-shadow 0.1s',
-                            marginBottom: 6,
-                          }}
-                          onMouseEnter={(e) => {
-                            e.currentTarget.style.transform = 'translateX(2px)';
-                            e.currentTarget.style.boxShadow = `0 2px 8px ${color}30`;
-                          }}
-                          onMouseLeave={(e) => {
-                            e.currentTarget.style.transform = 'translateX(0)';
-                            e.currentTarget.style.boxShadow = 'none';
-                          }}
+                          style={{ ...sidebarCardStyle(color), marginBottom: 6 }}
+                          {...cardHoverHandlers(color)}
                         >
                           <div style={{ fontSize: 14, fontWeight: 700, color: '#1E293B', marginBottom: 2 }}>
                             {displayCode} — {rack.name}
@@ -691,24 +694,8 @@ export function FloorPlanBuilder({
                   <div
                     key={rack.id}
                     onMouseDown={(e) => handleSidebarRackMouseDown(rack.id, e)}
-                    style={{
-                      padding: '10px 12px',
-                      backgroundColor: '#FFFFFF',
-                      border: `2px solid ${color}40`,
-                      borderLeft: `4px solid ${color}`,
-                      borderRadius: 8,
-                      cursor: 'grab',
-                      userSelect: 'none',
-                      transition: 'transform 0.1s, box-shadow 0.1s',
-                    }}
-                    onMouseEnter={(e) => {
-                      e.currentTarget.style.transform = 'translateX(2px)';
-                      e.currentTarget.style.boxShadow = `0 2px 8px ${color}30`;
-                    }}
-                    onMouseLeave={(e) => {
-                      e.currentTarget.style.transform = 'translateX(0)';
-                      e.currentTarget.style.boxShadow = 'none';
-                    }}
+                    style={sidebarCardStyle(color)}
+                    {...cardHoverHandlers(color)}
                   >
                     <div style={{ fontSize: 14, fontWeight: 700, color: '#1E293B', marginBottom: 2 }}>
                       {rack.code} — {rack.name}
@@ -887,24 +874,11 @@ export function FloorPlanBuilder({
                   </span>
 
                   {/* Aisle controls */}
-                  <div
-                    style={{
-                      position: 'absolute',
-                      top: -12,
-                      right: -4,
-                      display: 'flex',
-                      gap: 2,
-                      zIndex: 10,
-                    }}
-                  >
+                  <div style={CONTROLS_CONTAINER_STYLE}>
                     <button
                       onClick={(e) => { e.stopPropagation(); handleRotateAisle(pa.aisleId); }}
                       onMouseDown={(e) => e.stopPropagation()}
-                      style={{
-                        width: 22, height: 22, borderRadius: '50%',
-                        border: '1px solid #CBD5E1', backgroundColor: '#fff',
-                        cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 0,
-                      }}
+                      style={CONTROL_BTN_STYLE}
                       title="Rotar pasillo"
                     >
                       <RotateCw size={12} style={{ color: '#6366F1' }} />
@@ -912,11 +886,7 @@ export function FloorPlanBuilder({
                     <button
                       onClick={(e) => { e.stopPropagation(); handleRemoveAisle(pa.aisleId); }}
                       onMouseDown={(e) => e.stopPropagation()}
-                      style={{
-                        width: 22, height: 22, borderRadius: '50%',
-                        border: '1px solid #CBD5E1', backgroundColor: '#fff',
-                        cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 0,
-                      }}
+                      style={CONTROL_BTN_STYLE}
                       title="Quitar pasillo"
                     >
                       <Trash2 size={12} style={{ color: '#EF4444' }} />
@@ -973,24 +943,11 @@ export function FloorPlanBuilder({
                   </span>
 
                   {/* Rack controls */}
-                  <div
-                    style={{
-                      position: 'absolute',
-                      top: -12,
-                      right: -4,
-                      display: 'flex',
-                      gap: 2,
-                      zIndex: 10,
-                    }}
-                  >
+                  <div style={CONTROLS_CONTAINER_STYLE}>
                     <button
                       onClick={(e) => { e.stopPropagation(); handleRotateRack(p.rackId); }}
                       onMouseDown={(e) => e.stopPropagation()}
-                      style={{
-                        width: 22, height: 22, borderRadius: '50%',
-                        border: '1px solid #CBD5E1', backgroundColor: '#fff',
-                        cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 0,
-                      }}
+                      style={CONTROL_BTN_STYLE}
                       title="Rotar estante"
                     >
                       <RotateCw size={12} style={{ color: '#6366F1' }} />
@@ -998,11 +955,7 @@ export function FloorPlanBuilder({
                     <button
                       onClick={(e) => { e.stopPropagation(); handleRemoveRack(p.rackId); }}
                       onMouseDown={(e) => e.stopPropagation()}
-                      style={{
-                        width: 22, height: 22, borderRadius: '50%',
-                        border: '1px solid #CBD5E1', backgroundColor: '#fff',
-                        cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 0,
-                      }}
+                      style={CONTROL_BTN_STYLE}
                       title="Quitar del plano"
                     >
                       <Trash2 size={12} style={{ color: '#EF4444' }} />
