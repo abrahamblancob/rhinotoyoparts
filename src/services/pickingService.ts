@@ -1,5 +1,5 @@
 import { query, supabase, resolveAggregatorOrgIds, applyOrgScope } from './base.ts';
-import type { PickList, PickListItem, WarehouseLocation, WarehouseRack } from '@/types/warehouse.ts';
+import type { PickList, PickListItem, WarehouseLocation, WarehouseRack, Warehouse, WarehouseZone } from '@/types/warehouse.ts';
 
 export async function getPickLists(opts?: { orgId?: string; isPlatform?: boolean; isAggregator?: boolean; warehouseId?: string; status?: string }) {
   const aggregatorOrgIds = await resolveAggregatorOrgIds(opts);
