@@ -174,19 +174,18 @@ export async function completePickList(pickListId: string) {
       .single()
   );
 
-  // Auto-transition order to 'packing' and create pack session
+  // Auto-transition order to 'picked' which auto-creates the pack session via RPC
   if (result.data) {
     const orderId = result.data.order_id;
     try {
       await supabase.rpc('change_order_status', {
         p_order_id: orderId,
-        p_new_status: 'packing',
-        p_notes: 'Picking completado, iniciando packing',
+        p_new_status: 'picked',
+        p_notes: 'Picking completado',
         p_metadata: {},
       });
-      await supabase.rpc('create_pack_session_for_order', { p_order_id: orderId });
     } catch (err) {
-      console.error('Auto-transition to packing failed:', err);
+      console.error('Auto-transition to picked failed:', err);
     }
   }
 

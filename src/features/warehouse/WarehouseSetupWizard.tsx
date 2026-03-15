@@ -294,7 +294,7 @@ export function WarehouseSetupWizard() {
           )
         );
       case 'layout':
-        return placedRacks.length === racks.length;
+        return placedRacks.length === racks.length && placedAisles.length === wizardAisles.length;
       case 'zones':
         return true; // always valid — default zone created if empty
       case 'confirm':
@@ -353,7 +353,6 @@ export function WarehouseSetupWizard() {
       const filtered = prev.filter((r) => r.id !== id);
       // Renumber remaining racks in the same aisle to stay sequential
       if (removedRack?.aisleId) {
-        const aisle = wizardAisles.find((a) => a.id === removedRack.aisleId);
         let idx = 0;
         return filtered.map((r) => {
           if (r.aisleId === removedRack.aisleId) {
@@ -362,7 +361,7 @@ export function WarehouseSetupWizard() {
             return {
               ...r,
               code: newCode,
-              name: aisle ? `Estante ${aisle.code}-${newCode}` : r.name,
+              name: `Estante ${newCode}`,
             };
           }
           return r;
@@ -376,7 +375,12 @@ export function WarehouseSetupWizard() {
   // ── Aisle helpers ──
 
   const addAisle = () => {
-    const index = wizardAisles.length + 1;
+    // Find next unused aisle number (handles gaps from deletions)
+    const existingNums = wizardAisles.map((a) => {
+      const m = a.code.match(/^P(\d+)$/);
+      return m ? parseInt(m[1]) : 0;
+    });
+    const index = Math.max(0, ...existingNums) + 1;
     const code = `P${index}`;
     setWizardAisles((prev) => [
       ...prev,

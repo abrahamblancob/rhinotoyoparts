@@ -95,7 +95,7 @@ export async function completePackSession(sessionId: string, data: {
   package_weight_kg?: number;
   package_photo_url?: string;
 }) {
-  return query<PackSession>((sb) =>
+  const result = await query<PackSession>((sb) =>
     sb.from('pack_sessions')
       .update({
         ...data,
@@ -106,6 +106,23 @@ export async function completePackSession(sessionId: string, data: {
       .select()
       .single()
   );
+
+  // Auto-transition order to 'packed' after packing is complete
+  if (result.data) {
+    const orderId = result.data.order_id;
+    try {
+      await supabase.rpc('change_order_status', {
+        p_order_id: orderId,
+        p_new_status: 'packed',
+        p_notes: 'Packing completado',
+        p_metadata: {},
+      });
+    } catch (err) {
+      console.error('Auto-transition to packed failed:', err);
+    }
+  }
+
+  return result;
 }
 
 export async function confirmDeliveryStock(orderId: string) {
