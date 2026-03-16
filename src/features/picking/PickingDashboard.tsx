@@ -1,16 +1,16 @@
 import { useState, useCallback, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
-import {
-  Search,
-  Hand,
-  Package,
-} from 'lucide-react';
+import { Search, Hand, Package } from 'lucide-react';
 import { useAuthStore } from '@/stores/authStore.ts';
 import { usePermissions } from '@/hooks/usePermissions.ts';
 import { useAsyncData } from '@/hooks/useAsyncData.ts';
+import { useOrgSelector } from '@/hooks/useOrgSelector.ts';
 import { StatsCard } from '@/components/hub/shared/StatsCard.tsx';
 import { EmptyState } from '@/components/hub/shared/EmptyState.tsx';
+import { OrgSelectorGrid } from '@/components/hub/shared/OrgSelectorGrid.tsx';
 import * as pickingService from '@/services/pickingService.ts';
+import { getOrgPickingSummaries } from '@/services/dashboardService.ts';
+import type { OrgPickingSummary } from '@/services/dashboardService.ts';
 import { supabase } from '@/lib/supabase.ts';
 import { toast } from '@/stores/toastStore.ts';
 import type { PickList, PickListStatus } from '@/types/warehouse.ts';
@@ -52,41 +52,41 @@ export function PickingDashboard() {
   const user = useAuthStore((s) => s.user);
   const [claiming, setClaiming] = useState<string | null>(null);
 
+  const { summaries, selectedOrgId, selectedOrg, loading: loadingSummaries, setSelectedOrgId, showSelector } =
+    useOrgSelector<OrgPickingSummary>(getOrgPickingSummaries, isPlatform);
+
+  const orgId = isPlatform ? selectedOrgId ?? undefined : organization?.id;
+
   const fetcher = useCallback(
     () =>
       pickingService.getPickLists({
-        orgId: organization?.id,
-        isPlatform,
+        orgId,
+        isPlatform: false,
         isAggregator,
         status: statusFilter === 'all' ? undefined : statusFilter,
       }),
-    [organization?.id, isPlatform, isAggregator, statusFilter],
+    [orgId, isAggregator, statusFilter],
   );
 
   const { data: pickLists, loading, reload } = useAsyncData<PickList[]>(fetcher, [
-    organization?.id,
+    orgId,
     statusFilter,
   ]);
 
   // Realtime subscription
   useEffect(() => {
-    if (!organization?.id) return;
-    const channel = pickingService.subscribeToPickLists(organization.id, reload);
-    return () => {
-      supabase.removeChannel(channel);
-    };
-  }, [organization?.id, reload]);
+    const subId = orgId ?? organization?.id;
+    if (!subId) return;
+    const channel = pickingService.subscribeToPickLists(subId, reload);
+    return () => { supabase.removeChannel(channel); };
+  }, [orgId, organization?.id, reload]);
 
-  const items = pickLists ?? [];
+  const items = showSelector ? [] : (pickLists ?? []);
 
-  // Filter by search
   const filtered = search.trim()
-    ? items.filter((pl) =>
-        pl.order?.order_number?.toLowerCase().includes(search.toLowerCase()),
-      )
+    ? items.filter((pl) => pl.order?.order_number?.toLowerCase().includes(search.toLowerCase()))
     : items;
 
-  // Stats
   const totalCount = items.length;
   const pendingCount = items.filter((p) => p.status === 'pending').length;
   const inProgressCount = items.filter((p) => p.status === 'in_progress').length;
@@ -97,7 +97,6 @@ export function PickingDashboard() {
   }).length;
 
   const statuses = ['all', 'pending', 'assigned', 'in_progress', 'completed', 'expired'];
-
   const isPicker = roles.includes('warehouse_picker') || roles.includes('warehouse_manager') || roles.includes('platform_owner');
 
   const handleClaimPickList = async (pickListId: string) => {
@@ -117,18 +116,56 @@ export function PickingDashboard() {
     setClaiming(null);
   };
 
+  // Platform user without org selected → show org cards
+  if (showSelector) {
+    const totalPicks = summaries.reduce((s, o) => s + o.pickListCount, 0);
+    const totalPending = summaries.reduce((s, o) => s + o.pendingPicks, 0);
+    const totalInProgress = summaries.reduce((s, o) => s + o.inProgressPicks, 0);
+
+    return (
+      <OrgSelectorGrid<OrgPickingSummary>
+        summaries={summaries}
+        loading={loadingSummaries}
+        onSelect={setSelectedOrgId}
+        pageTitle="Picking"
+        pageSubtitle="Selecciona una organización para ver sus listas de recolección"
+        globalStats={[
+          { title: 'Total Listas', value: totalPicks, icon: '📋', color: '#6366F1' },
+          { title: 'Pendientes', value: totalPending, icon: '⏳', color: '#F59E0B' },
+          { title: 'En Progreso', value: totalInProgress, icon: '🔄', color: '#F97316' },
+          { title: 'Organizaciones', value: summaries.length, icon: '🏢', color: '#8B5CF6' },
+        ]}
+        statFields={[
+          { key: 'pickListCount', label: 'Listas', color: '#6366F1' },
+          { key: 'pendingPicks', label: 'Pendientes', color: '#F59E0B', highlight: true },
+          { key: 'inProgressPicks', label: 'En Progreso', color: '#F97316' },
+        ]}
+      />
+    );
+  }
+
   return (
     <div>
       <div className="rh-page-header">
         <div>
-          <h1 className="rh-page-title">Picking - Listas de Recoleccion</h1>
+          {isPlatform && selectedOrg && (
+            <button
+              onClick={() => setSelectedOrgId(null)}
+              className="rh-btn rh-btn-ghost"
+              style={{ fontSize: 13, marginBottom: 4, padding: '2px 0' }}
+            >
+              ← Todas las organizaciones
+            </button>
+          )}
+          <h1 className="rh-page-title">
+            Picking{isPlatform && selectedOrg ? ` — ${selectedOrg.name}` : ''}
+          </h1>
           <p style={{ color: '#8A8886', fontSize: 14, marginTop: 4 }}>
             Gestiona las listas de recoleccion de pedidos
           </p>
         </div>
       </div>
 
-      {/* Stats */}
       <div className="rh-stats-grid mb-6">
         <StatsCard title="Total" value={totalCount} icon="📋" color="#6366F1" />
         <StatsCard title="Pendientes" value={pendingCount} icon="⏳" color="#F59E0B" />
@@ -136,43 +173,23 @@ export function PickingDashboard() {
         <StatsCard title="Completados Hoy" value={completedToday} icon="✅" color="#10B981" />
       </div>
 
-      {/* Filters */}
       <div className="rh-filters flex-wrap" style={{ gap: 8, marginBottom: 16 }}>
         {statuses.map((s) => (
-          <button
-            key={s}
-            onClick={() => setStatusFilter(s)}
-            className={`rh-filter-pill ${statusFilter === s ? 'active' : ''}`}
-          >
+          <button key={s} onClick={() => setStatusFilter(s)} className={`rh-filter-pill ${statusFilter === s ? 'active' : ''}`}>
             {STATUS_LABELS[s] ?? s}
           </button>
         ))}
       </div>
 
-      {/* Search */}
       <div style={{ marginBottom: 16, position: 'relative', maxWidth: 360 }}>
-        <Search
-          size={16}
-          style={{ position: 'absolute', left: 12, top: '50%', transform: 'translateY(-50%)', color: '#8A8886' }}
-        />
-        <input
-          type="text"
-          placeholder="Buscar por numero de orden..."
-          value={search}
-          onChange={(e) => setSearch(e.target.value)}
-          className="rh-input"
-          style={{ paddingLeft: 36 }}
-        />
+        <Search size={16} style={{ position: 'absolute', left: 12, top: '50%', transform: 'translateY(-50%)', color: '#8A8886' }} />
+        <input type="text" placeholder="Buscar por numero de orden..." value={search} onChange={(e) => setSearch(e.target.value)} className="rh-input" style={{ paddingLeft: 36 }} />
       </div>
 
       {loading ? (
         <p className="rh-loading">Cargando...</p>
       ) : filtered.length === 0 ? (
-        <EmptyState
-          icon="📋"
-          title="No hay listas de picking"
-          description="Las listas de recoleccion aparecerean aqui cuando se creen pedidos"
-        />
+        <EmptyState icon="📋" title="No hay listas de picking" description="Las listas de recoleccion aparecerean aqui cuando se creen pedidos" />
       ) : (
         <div className="rh-table-wrapper">
           <table className="rh-table">
@@ -189,75 +206,26 @@ export function PickingDashboard() {
             </thead>
             <tbody>
               {filtered.map((pl) => {
-                const pct =
-                  pl.total_items > 0
-                    ? Math.round((pl.picked_items / pl.total_items) * 100)
-                    : 0;
-                const statusStyle = STATUS_COLORS[pl.status] ?? {
-                  bg: '#8A888615',
-                  text: '#8A8886',
-                };
-
+                const pct = pl.total_items > 0 ? Math.round((pl.picked_items / pl.total_items) * 100) : 0;
+                const statusStyle = STATUS_COLORS[pl.status] ?? { bg: '#8A888615', text: '#8A8886' };
                 return (
-                  <tr
-                    key={pl.id}
-                    className="cursor-pointer"
-                    onClick={() => navigate(`/hub/picking/${pl.id}`)}
-                  >
-                    <td className="cell-primary cell-mono">
-                      {pl.order?.order_number ?? '-'}
-                    </td>
-                    <td>
-                      <span style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
-                        <Package size={14} style={{ color: '#8A8886' }} />
-                        {pl.total_items}
-                      </span>
-                    </td>
+                  <tr key={pl.id} className="cursor-pointer" onClick={() => navigate(`/hub/picking/${pl.id}`)}>
+                    <td className="cell-primary cell-mono">{pl.order?.order_number ?? '-'}</td>
+                    <td><span style={{ display: 'flex', alignItems: 'center', gap: 4 }}><Package size={14} style={{ color: '#8A8886' }} />{pl.total_items}</span></td>
                     <td>{pl.assignee?.full_name ?? <span style={{ color: '#C8C6C4' }}>Sin asignar</span>}</td>
-                    <td>
-                      <span
-                        className="rh-badge"
-                        style={{ backgroundColor: statusStyle.bg, color: statusStyle.text }}
-                      >
-                        {STATUS_LABELS[pl.status] ?? pl.status}
-                      </span>
-                    </td>
+                    <td><span className="rh-badge" style={{ backgroundColor: statusStyle.bg, color: statusStyle.text }}>{STATUS_LABELS[pl.status] ?? pl.status}</span></td>
                     <td className="cell-muted">{getElapsedTime(pl.started_at)}</td>
                     <td>
                       <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-                        <div
-                          style={{
-                            width: 60,
-                            height: 6,
-                            borderRadius: 3,
-                            backgroundColor: '#E1DFDD',
-                            overflow: 'hidden',
-                          }}
-                        >
-                          <div
-                            style={{
-                              width: `${pct}%`,
-                              height: '100%',
-                              backgroundColor: pct === 100 ? '#10B981' : '#F97316',
-                              borderRadius: 3,
-                              transition: 'width 0.3s',
-                            }}
-                          />
+                        <div style={{ width: 60, height: 6, borderRadius: 3, backgroundColor: '#E1DFDD', overflow: 'hidden' }}>
+                          <div style={{ width: `${pct}%`, height: '100%', backgroundColor: pct === 100 ? '#10B981' : '#F97316', borderRadius: 3, transition: 'width 0.3s' }} />
                         </div>
                         <span style={{ fontSize: 12, color: '#8A8886' }}>{pct}%</span>
                       </div>
                     </td>
                     <td>
                       {pl.status === 'pending' && isPicker && (
-                        <button
-                          className="rh-btn rh-btn-primary"
-                          style={{ fontSize: 12, padding: '4px 10px' }}
-                          disabled={claiming === pl.id}
-                          onClick={(e) => {
-                            e.stopPropagation();
-                            handleClaimPickList(pl.id);
-                          }}
-                        >
+                        <button className="rh-btn rh-btn-primary" style={{ fontSize: 12, padding: '4px 10px' }} disabled={claiming === pl.id} onClick={(e) => { e.stopPropagation(); handleClaimPickList(pl.id); }}>
                           <Hand size={14} style={{ marginRight: 4 }} />
                           {claiming === pl.id ? 'Tomando...' : 'Tomar'}
                         </button>

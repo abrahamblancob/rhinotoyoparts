@@ -1,19 +1,18 @@
 import { useState, useCallback, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
-import {
-  Search,
-  Weight,
-  CheckSquare,
-  Package,
-} from 'lucide-react';
+import { Search, Weight, CheckSquare, Package } from 'lucide-react';
 import { useAuthStore } from '@/stores/authStore.ts';
 import { usePermissions } from '@/hooks/usePermissions.ts';
 import { useAsyncData } from '@/hooks/useAsyncData.ts';
+import { useOrgSelector } from '@/hooks/useOrgSelector.ts';
 import { StatsCard } from '@/components/hub/shared/StatsCard.tsx';
 import { StatusBadge } from '@/components/hub/shared/StatusBadge.tsx';
 import { EmptyState } from '@/components/hub/shared/EmptyState.tsx';
+import { OrgSelectorGrid } from '@/components/hub/shared/OrgSelectorGrid.tsx';
 import { PACK_SESSION_STATUS_LABELS } from '@/lib/statusConfig.ts';
 import * as packingService from '@/services/packingService.ts';
+import { getOrgPackingSummaries } from '@/services/dashboardService.ts';
+import type { OrgPackingSummary } from '@/services/dashboardService.ts';
 import { supabase } from '@/lib/supabase.ts';
 import type { PackSession } from '@/types/warehouse.ts';
 
@@ -24,39 +23,39 @@ export function PackingDashboard() {
   const { isPlatform, isAggregator } = usePermissions();
   const organization = useAuthStore((s) => s.organization);
 
+  const { summaries, selectedOrgId, selectedOrg, loading: loadingSummaries, setSelectedOrgId, showSelector } =
+    useOrgSelector<OrgPackingSummary>(getOrgPackingSummaries, isPlatform);
+
+  const orgId = isPlatform ? selectedOrgId ?? undefined : organization?.id;
+
   const fetcher = useCallback(
     () =>
       packingService.getPackSessions({
-        orgId: organization?.id,
-        isPlatform,
+        orgId,
+        isPlatform: false,
         isAggregator,
         status: statusFilter === 'all' ? undefined : statusFilter,
       }),
-    [organization?.id, isPlatform, isAggregator, statusFilter],
+    [orgId, isAggregator, statusFilter],
   );
 
   const { data: sessions, loading, reload } = useAsyncData<PackSession[]>(fetcher, [
-    organization?.id,
+    orgId,
     statusFilter,
   ]);
 
-  // Realtime
   useEffect(() => {
-    if (!organization?.id) return;
-    const channel = packingService.subscribeToPackSessions(organization.id, reload);
-    return () => {
-      supabase.removeChannel(channel);
-    };
-  }, [organization?.id, reload]);
+    const subId = orgId ?? organization?.id;
+    if (!subId) return;
+    const channel = packingService.subscribeToPackSessions(subId, reload);
+    return () => { supabase.removeChannel(channel); };
+  }, [orgId, organization?.id, reload]);
 
-  const items = sessions ?? [];
+  const items = showSelector ? [] : (sessions ?? []);
   const filtered = search.trim()
-    ? items.filter((s) =>
-        s.order?.order_number?.toLowerCase().includes(search.toLowerCase()),
-      )
+    ? items.filter((s) => s.order?.order_number?.toLowerCase().includes(search.toLowerCase()))
     : items;
 
-  // Stats
   const totalCount = items.length;
   const pendingCount = items.filter((s) => s.status === 'pending').length;
   const inProgressCount = items.filter((s) => s.status === 'in_progress').length;
@@ -68,18 +67,51 @@ export function PackingDashboard() {
 
   const statuses = ['all', 'pending', 'in_progress', 'verified', 'labelled', 'completed'];
 
+  if (showSelector) {
+    const totalSessions = summaries.reduce((s, o) => s + o.packSessionCount, 0);
+    const totalPending = summaries.reduce((s, o) => s + o.pendingPacks, 0);
+    const totalInProgress = summaries.reduce((s, o) => s + o.inProgressPacks, 0);
+
+    return (
+      <OrgSelectorGrid<OrgPackingSummary>
+        summaries={summaries}
+        loading={loadingSummaries}
+        onSelect={setSelectedOrgId}
+        pageTitle="Packing"
+        pageSubtitle="Selecciona una organización para ver sus sesiones de empaque"
+        globalStats={[
+          { title: 'Total Sesiones', value: totalSessions, icon: '📦', color: '#6366F1' },
+          { title: 'Pendientes', value: totalPending, icon: '⏳', color: '#F59E0B' },
+          { title: 'En Progreso', value: totalInProgress, icon: '🔄', color: '#F97316' },
+          { title: 'Organizaciones', value: summaries.length, icon: '🏢', color: '#8B5CF6' },
+        ]}
+        statFields={[
+          { key: 'packSessionCount', label: 'Sesiones', color: '#6366F1' },
+          { key: 'pendingPacks', label: 'Pendientes', color: '#F59E0B', highlight: true },
+          { key: 'inProgressPacks', label: 'En Progreso', color: '#F97316' },
+        ]}
+      />
+    );
+  }
+
   return (
     <div>
       <div className="rh-page-header">
         <div>
-          <h1 className="rh-page-title">Packing - Sesiones de Empaque</h1>
+          {isPlatform && selectedOrg && (
+            <button onClick={() => setSelectedOrgId(null)} className="rh-btn rh-btn-ghost" style={{ fontSize: 13, marginBottom: 4, padding: '2px 0' }}>
+              ← Todas las organizaciones
+            </button>
+          )}
+          <h1 className="rh-page-title">
+            Packing{isPlatform && selectedOrg ? ` — ${selectedOrg.name}` : ''}
+          </h1>
           <p style={{ color: '#8A8886', fontSize: 14, marginTop: 4 }}>
             Gestiona la verificacion y empaque de pedidos
           </p>
         </div>
       </div>
 
-      {/* Stats */}
       <div className="rh-stats-grid mb-6">
         <StatsCard title="Total" value={totalCount} icon="📦" color="#6366F1" />
         <StatsCard title="Pendientes" value={pendingCount} icon="⏳" color="#F59E0B" />
@@ -87,43 +119,23 @@ export function PackingDashboard() {
         <StatsCard title="Completados Hoy" value={completedToday} icon="✅" color="#10B981" />
       </div>
 
-      {/* Filters */}
       <div className="rh-filters flex-wrap" style={{ gap: 8, marginBottom: 16 }}>
         {statuses.map((s) => (
-          <button
-            key={s}
-            onClick={() => setStatusFilter(s)}
-            className={`rh-filter-pill ${statusFilter === s ? 'active' : ''}`}
-          >
+          <button key={s} onClick={() => setStatusFilter(s)} className={`rh-filter-pill ${statusFilter === s ? 'active' : ''}`}>
             {PACK_SESSION_STATUS_LABELS[s] ?? s}
           </button>
         ))}
       </div>
 
-      {/* Search */}
       <div style={{ marginBottom: 16, position: 'relative', maxWidth: 360 }}>
-        <Search
-          size={16}
-          style={{ position: 'absolute', left: 12, top: '50%', transform: 'translateY(-50%)', color: '#8A8886' }}
-        />
-        <input
-          type="text"
-          placeholder="Buscar por numero de orden..."
-          value={search}
-          onChange={(e) => setSearch(e.target.value)}
-          className="rh-input"
-          style={{ paddingLeft: 36 }}
-        />
+        <Search size={16} style={{ position: 'absolute', left: 12, top: '50%', transform: 'translateY(-50%)', color: '#8A8886' }} />
+        <input type="text" placeholder="Buscar por numero de orden..." value={search} onChange={(e) => setSearch(e.target.value)} className="rh-input" style={{ paddingLeft: 36 }} />
       </div>
 
       {loading ? (
         <p className="rh-loading">Cargando...</p>
       ) : filtered.length === 0 ? (
-        <EmptyState
-          icon="📦"
-          title="No hay sesiones de packing"
-          description="Las sesiones de empaque aparecerean aqui cuando se completen listas de picking"
-        />
+        <EmptyState icon="📦" title="No hay sesiones de packing" description="Las sesiones de empaque aparecerean aqui cuando se completen listas de picking" />
       ) : (
         <div className="rh-table-wrapper">
           <table className="rh-table">
@@ -140,55 +152,19 @@ export function PackingDashboard() {
             </thead>
             <tbody>
               {filtered.map((session) => (
-                  <tr
-                    key={session.id}
-                    className="cursor-pointer"
-                    onClick={() => navigate(`/hub/packing/${session.id}`)}
-                  >
-                    <td className="cell-primary cell-mono">
-                      {session.order?.order_number ?? '-'}
-                    </td>
-                    <td>
-                      {session.packer?.full_name ?? (
-                        <span style={{ color: '#C8C6C4' }}>Sin asignar</span>
-                      )}
-                    </td>
-                    <td>
-                      <StatusBadge status={session.status} />
-                    </td>
-                    <td>
-                      <span style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
-                        <CheckSquare size={14} style={{ color: '#8A8886' }} />
-                        {session.verified_items} / {session.total_items}
-                      </span>
-                    </td>
-                    <td>
-                      <span style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
-                        <Package size={14} style={{ color: '#8A8886' }} />
-                        {session.package_count ?? 1}
-                      </span>
-                    </td>
-                    <td>
-                      <span style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
-                        <Weight size={14} style={{ color: '#8A8886' }} />
-                        {session.package_weight_kg != null
-                          ? `${session.package_weight_kg} kg`
-                          : '-'}
-                      </span>
-                    </td>
-                    <td>
-                      <button
-                        className="rh-btn"
-                        style={{ fontSize: 12, padding: '4px 10px' }}
-                        onClick={(e) => {
-                          e.stopPropagation();
-                          navigate(`/hub/packing/${session.id}`);
-                        }}
-                      >
-                        Ver detalle
-                      </button>
-                    </td>
-                  </tr>
+                <tr key={session.id} className="cursor-pointer" onClick={() => navigate(`/hub/packing/${session.id}`)}>
+                  <td className="cell-primary cell-mono">{session.order?.order_number ?? '-'}</td>
+                  <td>{session.packer?.full_name ?? <span style={{ color: '#C8C6C4' }}>Sin asignar</span>}</td>
+                  <td><StatusBadge status={session.status} /></td>
+                  <td><span style={{ display: 'flex', alignItems: 'center', gap: 4 }}><CheckSquare size={14} style={{ color: '#8A8886' }} />{session.verified_items} / {session.total_items}</span></td>
+                  <td><span style={{ display: 'flex', alignItems: 'center', gap: 4 }}><Package size={14} style={{ color: '#8A8886' }} />{session.package_count ?? 1}</span></td>
+                  <td><span style={{ display: 'flex', alignItems: 'center', gap: 4 }}><Weight size={14} style={{ color: '#8A8886' }} />{session.package_weight_kg != null ? `${session.package_weight_kg} kg` : '-'}</span></td>
+                  <td>
+                    <button className="rh-btn" style={{ fontSize: 12, padding: '4px 10px' }} onClick={(e) => { e.stopPropagation(); navigate(`/hub/packing/${session.id}`); }}>
+                      Ver detalle
+                    </button>
+                  </td>
+                </tr>
               ))}
             </tbody>
           </table>

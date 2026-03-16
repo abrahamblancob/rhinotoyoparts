@@ -42,19 +42,22 @@ export interface OrgInventorySummary {
   orderCount: number;
 }
 
-export async function getOrgSummaries(): Promise<OrgInventorySummary[]> {
-  // Get all aggregator/associate orgs
-  const { data: orgs } = await supabase
+/* ── Shared helper: fetch active orgs ── */
+async function fetchActiveOrgs() {
+  const { data } = await supabase
     .from('organizations')
     .select('id, name, type')
     .in('type', ['aggregator', 'associate'])
     .eq('status', 'active')
     .order('type')
     .order('name');
+  return data ?? [];
+}
 
-  if (!orgs || orgs.length === 0) return [];
+export async function getOrgSummaries(): Promise<OrgInventorySummary[]> {
+  const orgs = await fetchActiveOrgs();
+  if (orgs.length === 0) return [];
 
-  // Get counts per org in parallel
   const summaries = await Promise.all(
     orgs.map(async (org) => {
       const [productsRes, stockRes, lowStockRes, ordersRes] = await Promise.all([
@@ -79,4 +82,109 @@ export async function getOrgSummaries(): Promise<OrgInventorySummary[]> {
   );
 
   return summaries;
+}
+
+/* ── Page-specific org summaries ── */
+
+export interface OrgOrderSummary {
+  id: string;
+  name: string;
+  type: string;
+  orderCount: number;
+  pendingOrders: number;
+  inProgressOrders: number;
+  revenue: number;
+}
+
+export async function getOrgOrderSummaries(): Promise<OrgOrderSummary[]> {
+  const orgs = await fetchActiveOrgs();
+  if (orgs.length === 0) return [];
+
+  return Promise.all(
+    orgs.map(async (org) => {
+      const [totalRes, pendingRes, inProgressRes, revenueRes] = await Promise.all([
+        supabase.from('orders').select('id', { count: 'exact', head: true }).eq('org_id', org.id),
+        supabase.from('orders').select('id', { count: 'exact', head: true }).eq('org_id', org.id).in('status', ['draft', 'pending', 'confirmed']),
+        supabase.from('orders').select('id', { count: 'exact', head: true }).eq('org_id', org.id).in('status', ['picking', 'packing', 'packed', 'assigned', 'picked']),
+        supabase.from('orders').select('total').eq('org_id', org.id),
+      ]);
+      const revenue = (revenueRes.data ?? []).reduce((s, o) => s + Number((o as { total: number }).total ?? 0), 0);
+      return { id: org.id, name: org.name, type: org.type as string, orderCount: totalRes.count ?? 0, pendingOrders: pendingRes.count ?? 0, inProgressOrders: inProgressRes.count ?? 0, revenue };
+    }),
+  );
+}
+
+export interface OrgPickingSummary {
+  id: string;
+  name: string;
+  type: string;
+  pickListCount: number;
+  pendingPicks: number;
+  inProgressPicks: number;
+}
+
+export async function getOrgPickingSummaries(): Promise<OrgPickingSummary[]> {
+  const orgs = await fetchActiveOrgs();
+  if (orgs.length === 0) return [];
+
+  return Promise.all(
+    orgs.map(async (org) => {
+      const [totalRes, pendingRes, inProgressRes] = await Promise.all([
+        supabase.from('pick_lists').select('id', { count: 'exact', head: true }).eq('org_id', org.id),
+        supabase.from('pick_lists').select('id', { count: 'exact', head: true }).eq('org_id', org.id).eq('status', 'pending'),
+        supabase.from('pick_lists').select('id', { count: 'exact', head: true }).eq('org_id', org.id).in('status', ['assigned', 'in_progress']),
+      ]);
+      return { id: org.id, name: org.name, type: org.type as string, pickListCount: totalRes.count ?? 0, pendingPicks: pendingRes.count ?? 0, inProgressPicks: inProgressRes.count ?? 0 };
+    }),
+  );
+}
+
+export interface OrgPackingSummary {
+  id: string;
+  name: string;
+  type: string;
+  packSessionCount: number;
+  pendingPacks: number;
+  inProgressPacks: number;
+}
+
+export async function getOrgPackingSummaries(): Promise<OrgPackingSummary[]> {
+  const orgs = await fetchActiveOrgs();
+  if (orgs.length === 0) return [];
+
+  return Promise.all(
+    orgs.map(async (org) => {
+      const [totalRes, pendingRes, inProgressRes] = await Promise.all([
+        supabase.from('pack_sessions').select('id', { count: 'exact', head: true }).eq('org_id', org.id),
+        supabase.from('pack_sessions').select('id', { count: 'exact', head: true }).eq('org_id', org.id).eq('status', 'pending'),
+        supabase.from('pack_sessions').select('id', { count: 'exact', head: true }).eq('org_id', org.id).in('status', ['in_progress', 'verified']),
+      ]);
+      return { id: org.id, name: org.name, type: org.type as string, packSessionCount: totalRes.count ?? 0, pendingPacks: pendingRes.count ?? 0, inProgressPacks: inProgressRes.count ?? 0 };
+    }),
+  );
+}
+
+export interface OrgReturnSummary {
+  id: string;
+  name: string;
+  type: string;
+  returnCount: number;
+  pendingReturns: number;
+  inspectingReturns: number;
+}
+
+export async function getOrgReturnSummaries(): Promise<OrgReturnSummary[]> {
+  const orgs = await fetchActiveOrgs();
+  if (orgs.length === 0) return [];
+
+  return Promise.all(
+    orgs.map(async (org) => {
+      const [totalRes, pendingRes, inspectingRes] = await Promise.all([
+        supabase.from('return_orders').select('id', { count: 'exact', head: true }).eq('org_id', org.id),
+        supabase.from('return_orders').select('id', { count: 'exact', head: true }).eq('org_id', org.id).eq('status', 'pending'),
+        supabase.from('return_orders').select('id', { count: 'exact', head: true }).eq('org_id', org.id).eq('status', 'inspecting'),
+      ]);
+      return { id: org.id, name: org.name, type: org.type as string, returnCount: totalRes.count ?? 0, pendingReturns: pendingRes.count ?? 0, inspectingReturns: inspectingRes.count ?? 0 };
+    }),
+  );
 }
