@@ -214,34 +214,36 @@ Deno.serve(async (req) => {
     </body>
     </html>`
 
-    // Try to send via Resend API
+    // Send via Resend API
     const resendApiKey = Deno.env.get('RESEND_API_KEY')
 
-    if (resendApiKey) {
-      const resendRes = await fetch('https://api.resend.com/emails', {
-        method: 'POST',
-        headers: {
-          'Authorization': `Bearer ${resendApiKey}`,
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({
-          from: 'Rhino Hub <noreply@rhinotoyoparts.com>',
-          to: [email as string],
-          subject: `Reporte de Auditoria — ${warehouseName} — ${auditDate}`,
-          html: htmlBody,
-        }),
-      })
-
-      if (!resendRes.ok) {
-        const errBody = await resendRes.text()
-        console.error('Resend error:', errBody)
-        return jsonResponse({ error: `Error al enviar email: ${errBody}` }, 500)
-      }
-    } else {
-      // No Resend key — log the email for debugging
-      console.log('RESEND_API_KEY not set. Email would be sent to:', email)
-      console.log('Subject:', `Reporte de Auditoria — ${warehouseName} — ${auditDate}`)
+    if (!resendApiKey) {
+      console.error('RESEND_API_KEY not configured in Supabase secrets')
+      return jsonResponse({ error: 'Servicio de email no configurado. Contacta al administrador.' }, 503)
     }
+
+    const resendRes = await fetch('https://api.resend.com/emails', {
+      method: 'POST',
+      headers: {
+        'Authorization': `Bearer ${resendApiKey}`,
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({
+        from: 'Rhino Hub <noreply@rhinotoyoparts.com>',
+        to: [email as string],
+        subject: `Reporte de Auditoria — ${warehouseName} — ${auditDate}`,
+        html: htmlBody,
+      }),
+    })
+
+    if (!resendRes.ok) {
+      const errBody = await resendRes.text()
+      console.error('Resend API error:', resendRes.status, errBody)
+      return jsonResponse({ error: `Error al enviar email: ${errBody}` }, 500)
+    }
+
+    const resendData = await resendRes.json()
+    console.log('Email sent successfully via Resend:', resendData.id)
 
     // Update audit with email_sent_to
     await supabaseAdmin
