@@ -6,12 +6,16 @@ import {
 } from 'lucide-react';
 import { useAuthStore } from '@/stores/authStore.ts';
 import { usePermissions } from '@/hooks/usePermissions.ts';
+import { useOrgSelector } from '@/hooks/useOrgSelector.ts';
 import { useAsyncData } from '@/hooks/useAsyncData.ts';
 import { useWarehouses } from '@/hooks/useWarehouse.ts';
+import { OrgSelectorGrid } from '@/components/hub/shared/OrgSelectorGrid.tsx';
 import { StatsCard } from '@/components/hub/shared/StatsCard.tsx';
 import { EmptyState } from '@/components/hub/shared/EmptyState.tsx';
 import { Modal } from '@/components/hub/shared/Modal.tsx';
 import * as receivingService from '@/services/receivingService.ts';
+import { getOrgReceivingSummaries } from '@/services/dashboardService.ts';
+import type { OrgReceivingSummary } from '@/services/dashboardService.ts';
 import { getAllActiveSuppliers } from '@/services/supplierService.ts';
 import type { Supplier } from '@/lib/database.types.ts';
 import type { ReceivingOrder, ReceivingStatus } from '@/types/warehouse.ts';
@@ -39,19 +43,32 @@ export function ReceivingPage() {
   const { isPlatform, canWrite } = usePermissions();
   const organization = useAuthStore((s) => s.organization);
 
+  const {
+    summaries,
+    selectedOrgId,
+    loading: loadingSummaries,
+    setSelectedOrgId,
+    showSelector,
+  } = useOrgSelector<OrgReceivingSummary>(getOrgReceivingSummaries, isPlatform);
+
+  const orgId = selectedOrgId ?? organization?.id;
+
   const fetcher = useCallback(
-    () =>
-      receivingService.getReceivingOrders({
-        orgId: organization?.id,
-        isPlatform,
+    () => {
+      if (showSelector) return Promise.resolve({ data: [], error: null });
+      return receivingService.getReceivingOrders({
+        orgId,
+        isPlatform: false,
         status: statusFilter === 'all' ? undefined : statusFilter,
-      }),
-    [organization?.id, isPlatform, statusFilter],
+      });
+    },
+    [orgId, statusFilter, showSelector],
   );
 
   const { data: orders, loading, reload } = useAsyncData<ReceivingOrder[]>(fetcher, [
-    organization?.id,
+    orgId,
     statusFilter,
+    showSelector,
   ]);
 
   const items = orders ?? [];
@@ -71,10 +88,49 @@ export function ReceivingPage() {
 
   const statuses = ['all', 'pending', 'receiving', 'completed', 'cancelled'];
 
+  // Platform org selector view
+  if (showSelector) {
+    const totalReceiving = summaries.reduce((s, o) => s + o.receivingCount, 0);
+    const totalPending = summaries.reduce((s, o) => s + o.pendingReceiving, 0);
+    const totalInProgress = summaries.reduce((s, o) => s + o.inProgressReceiving, 0);
+    const totalCompleted = summaries.reduce((s, o) => s + o.completedReceiving, 0);
+
+    return (
+      <OrgSelectorGrid<OrgReceivingSummary>
+        summaries={summaries}
+        loading={loadingSummaries}
+        onSelect={setSelectedOrgId}
+        pageTitle="Recepcion de Mercancia"
+        pageSubtitle="Selecciona una organizacion para gestionar sus recepciones"
+        globalStats={[
+          { title: 'Total Recepciones', value: totalReceiving, icon: '📥', color: '#6366F1' },
+          { title: 'Pendientes', value: totalPending, icon: '⏳', color: '#F59E0B' },
+          { title: 'Recibiendo', value: totalInProgress, icon: '🔄', color: '#3B82F6' },
+          { title: 'Completados', value: totalCompleted, icon: '✅', color: '#10B981' },
+        ]}
+        statFields={[
+          { key: 'receivingCount', label: 'Recepciones', color: '#6366F1' },
+          { key: 'pendingReceiving', label: 'Pendientes', color: '#F59E0B', highlight: true },
+          { key: 'inProgressReceiving', label: 'Recibiendo', color: '#3B82F6' },
+          { key: 'completedReceiving', label: 'Completados', color: '#10B981' },
+        ]}
+      />
+    );
+  }
+
   return (
     <div>
       <div className="rh-page-header">
         <div>
+          {isPlatform && (
+            <button
+              className="rh-btn rh-btn-ghost"
+              onClick={() => setSelectedOrgId(null)}
+              style={{ marginBottom: 8, fontSize: 13 }}
+            >
+              ← Volver a organizaciones
+            </button>
+          )}
           <h1 className="rh-page-title">Recepcion de Mercancia</h1>
           <p style={{ color: '#8A8886', fontSize: 14, marginTop: 4 }}>
             Gestiona la recepcion de productos en almacen

@@ -12,3 +12,7 @@ export const IN_PROGRESS_PICK_STATUSES = ['assigned', 'in_progress'] as const;
 /* ── Pack-session status groups ── */
 export const PENDING_PACK_STATUSES = ['pending'] as const;
 export const IN_PROGRESS_PACK_STATUSES = ['in_progress', 'verified'] as const;
+
+/* ── Receiving status groups ── */
+export const PENDING_RECEIVING_STATUSES = ['pending'] as const;
+export const IN_PROGRESS_RECEIVING_STATUSES = ['receiving'] as const;

@@ -7,6 +7,8 @@ import {
   IN_PROGRESS_PICK_STATUSES,
   PENDING_PACK_STATUSES,
   IN_PROGRESS_PACK_STATUSES,
+  PENDING_RECEIVING_STATUSES,
+  IN_PROGRESS_RECEIVING_STATUSES,
 } from './constants.ts';
 
 interface DashboardStats {
@@ -198,6 +200,35 @@ export function getOrgReturnSummaries(): Promise<OrgReturnSummary[]> {
       supabase.from('return_orders').select('id', { count: 'exact', head: true }).eq('org_id', org.id).eq('status', 'inspecting'),
     ]);
     return { returnCount: totalRes.count ?? 0, pendingReturns: pendingRes.count ?? 0, inspectingReturns: inspectingRes.count ?? 0 };
+  });
+}
+
+/* ── Receiving ── */
+
+export interface OrgReceivingSummary {
+  id: string;
+  name: string;
+  type: string;
+  receivingCount: number;
+  pendingReceiving: number;
+  inProgressReceiving: number;
+  completedReceiving: number;
+}
+
+export function getOrgReceivingSummaries(): Promise<OrgReceivingSummary[]> {
+  return buildOrgSummaries<OrgReceivingSummary>(async (org) => {
+    const [totalRes, pendingRes, inProgressRes, completedRes] = await Promise.all([
+      supabase.from('receiving_orders').select('id', { count: 'exact', head: true }).eq('org_id', org.id),
+      supabase.from('receiving_orders').select('id', { count: 'exact', head: true }).eq('org_id', org.id).in('status', [...PENDING_RECEIVING_STATUSES]),
+      supabase.from('receiving_orders').select('id', { count: 'exact', head: true }).eq('org_id', org.id).in('status', [...IN_PROGRESS_RECEIVING_STATUSES]),
+      supabase.from('receiving_orders').select('id', { count: 'exact', head: true }).eq('org_id', org.id).eq('status', 'completed'),
+    ]);
+    return {
+      receivingCount: totalRes.count ?? 0,
+      pendingReceiving: pendingRes.count ?? 0,
+      inProgressReceiving: inProgressRes.count ?? 0,
+      completedReceiving: completedRes.count ?? 0,
+    };
   });
 }
 
