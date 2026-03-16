@@ -246,6 +246,7 @@ export function ReceivingPage() {
       {/* Create Modal */}
       <CreateReceivingModal
         open={showCreateModal}
+        filterOrgId={selectedOrgId ?? undefined}
         onClose={() => setShowCreateModal(false)}
         onCreated={() => {
           setShowCreateModal(false);
@@ -260,12 +261,16 @@ export function ReceivingPage() {
 
 interface CreateReceivingModalProps {
   open: boolean;
+  filterOrgId?: string;
   onClose: () => void;
   onCreated: () => void;
 }
 
-function CreateReceivingModal({ open, onClose, onCreated }: CreateReceivingModalProps) {
-  const { data: warehouses } = useWarehouses();
+function CreateReceivingModal({ open, filterOrgId, onClose, onCreated }: CreateReceivingModalProps) {
+  const { data: allWarehouses } = useWarehouses();
+  const warehouses = filterOrgId
+    ? (allWarehouses ?? []).filter((w) => w.org_id === filterOrgId)
+    : allWarehouses;
   const [warehouseId, setWarehouseId] = useState('');
   const [suppliers, setSuppliers] = useState<Supplier[]>([]);
   const [supplierId, setSupplierId] = useState('');
