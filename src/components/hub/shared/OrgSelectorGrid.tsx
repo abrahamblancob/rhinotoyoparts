@@ -5,6 +5,7 @@ interface StatField<T> {
   label: string;
   color: string;
   highlight?: boolean;
+  prefix?: string;
 }
 
 interface GlobalStat {
@@ -118,7 +119,7 @@ export function OrgSelectorGrid<T extends { id: string; name: string; type: stri
                       style={{ textAlign: 'center', padding: '8px 0', backgroundColor: '#F8FAFC', borderRadius: 8 }}
                     >
                       <p style={{ fontSize: 20, fontWeight: 800, color: displayColor, margin: 0 }}>
-                        {typeof val === 'number' ? val.toLocaleString() : val}
+                        {field.prefix ?? ''}{typeof val === 'number' ? val.toLocaleString() : val}
                       </p>
                       <p style={{ fontSize: 11, color: '#94A3B8', margin: 0 }}>{field.label}</p>
                     </div>

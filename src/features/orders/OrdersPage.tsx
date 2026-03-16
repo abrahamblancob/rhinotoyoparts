@@ -83,7 +83,7 @@ export function OrdersPage() {
         ]}
         statFields={[
           { key: 'orderCount', label: 'Órdenes', color: '#6366F1' },
-          { key: 'revenue', label: 'Ingresos', color: '#10B981' },
+          { key: 'revenue', label: 'Ingresos', color: '#10B981', prefix: '$' },
           { key: 'pendingOrders', label: 'Pendientes', color: '#F59E0B', highlight: true },
           { key: 'inProgressOrders', label: 'En Proceso', color: '#8B5CF6' },
         ]}
