@@ -1268,11 +1268,11 @@ export function WarehouseLayoutPage() {
                               <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 8 }}>
                                 <Grid3X3 size={16} style={{ color: zoneColor, flexShrink: 0 }} />
                                 <div style={{ minWidth: 0 }}>
-                                  <h5 style={{ fontSize: 14, fontWeight: 700, color: '#1E293B', margin: 0, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
-                                    {rack.name}
-                                  </h5>
-                                  <p style={{ fontSize: 10, color: '#94A3B8', margin: 0, fontFamily: 'monospace' }}>
+                                  <h5 style={{ fontSize: 14, fontWeight: 700, color: '#1E293B', margin: 0, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', fontFamily: 'monospace' }}>
                                     {rack.code}
+                                  </h5>
+                                  <p style={{ fontSize: 10, color: '#94A3B8', margin: 0 }}>
+                                    {rack.name}
                                   </p>
                                 </div>
                               </div>
