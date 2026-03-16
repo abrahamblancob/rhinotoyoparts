@@ -18,6 +18,8 @@ export default defineConfig({
           'vendor-three': ['three', '@react-three/fiber', '@react-three/drei'],
           'vendor-xlsx': ['xlsx'],
           'vendor-motion': ['framer-motion'],
+          'vendor-leaflet': ['leaflet'],
+          'vendor-supabase': ['@supabase/supabase-js'],
         },
       },
     },
