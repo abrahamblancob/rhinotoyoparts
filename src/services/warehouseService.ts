@@ -88,20 +88,9 @@ export async function saveZone(data: ZoneFormData & { warehouse_id: string }, ed
 }
 
 export async function deleteZone(id: string) {
-  // Get racks in this zone to clean up their locations & stock
-  const { data: racks } = await supabase.from('warehouse_racks').select('id').eq('zone_id', id);
-  if (racks && racks.length > 0) {
-    const rackIds = racks.map((r: { id: string }) => r.id);
-    const { data: locs } = await supabase.from('warehouse_locations').select('id').in('rack_id', rackIds);
-    if (locs && locs.length > 0) {
-      const locIds = locs.map((l: { id: string }) => l.id);
-      await supabase.from('inventory_stock').delete().in('location_id', locIds);
-    }
-    await supabase.from('warehouse_locations').delete().in('rack_id', rackIds);
-    await supabase.from('warehouse_racks').delete().eq('zone_id', id);
-  }
-  // Delete aisles in this zone
-  await supabase.from('warehouse_aisles').delete().eq('zone_id', id);
+  // Unlink racks and aisles from this zone (don't delete them — the wizard will reassign)
+  await supabase.from('warehouse_racks').update({ zone_id: null }).eq('zone_id', id);
+  await supabase.from('warehouse_aisles').update({ zone_id: null }).eq('zone_id', id);
   return query<null>((sb) => sb.from('warehouse_zones').delete().eq('id', id));
 }
 

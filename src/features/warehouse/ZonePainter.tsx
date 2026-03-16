@@ -1,6 +1,7 @@
-import { useState, useRef, useEffect } from 'react';
+import { useState, useRef, useEffect, useMemo } from 'react';
 import { MapPin, Trash2, Paintbrush } from 'lucide-react';
-import type { PlacedRack, WizardRackForm } from './FloorPlanBuilder.tsx';
+import type { PlacedRack, PlacedAisle, WizardRackForm, WizardAisleForm } from './FloorPlanBuilder.tsx';
+import { CELL_SIZE_M } from './FloorPlanBuilder.tsx';
 import type { ZoneType } from '@/types/warehouse.ts';
 
 // ── Types ──
@@ -22,6 +23,8 @@ interface ZonePainterProps {
   warehouseLength: number;
   placedRacks: PlacedRack[];
   racks: WizardRackForm[];
+  aisles: WizardAisleForm[];
+  placedAisles: PlacedAisle[];
   zones: WizardZoneForm[];
   onZonesChange: (z: WizardZoneForm[]) => void;
 }
@@ -30,6 +33,11 @@ interface ZonePainterProps {
 
 const MIN_CELL = 20;
 const GRID_LINE = '#CBD5E1';
+
+/** Visual colors matching the FloorPlanBuilder reference diagram */
+const AISLE_BG = '#1E293B';
+const SHELF_UNIT_BORDER = '#16A34A';
+const SHELF_BORDER = '#2563EB';
 
 const ZONE_TYPES: { value: ZoneType; label: string }[] = [
   { value: 'storage', label: 'Almacenamiento' },
@@ -49,10 +57,65 @@ function tempZoneId() {
   return `zone_${++zoneIdCounter}_${Date.now()}`;
 }
 
-const RACK_COLORS = [
-  '#3B82F6', '#10B981', '#F59E0B', '#EF4444', '#8B5CF6',
-  '#EC4899', '#06B6D4', '#84CC16', '#F97316', '#6366F1',
-];
+// ── Block layout helpers (mirrored from FloorPlanBuilder) ──
+
+interface AisleBlockZ {
+  aisleId: string;
+  aisle: WizardAisleForm;
+  racks: WizardRackForm[];
+  orientation: 'vertical' | 'horizontal';
+  mirrored: boolean;
+}
+
+interface BlockLayoutZ {
+  widthCells: number;
+  heightCells: number;
+  aisleOffsetX: number;
+  aisleOffsetY: number;
+  aisleW: number;
+  aisleH: number;
+  rackColBounds: { x: number; y: number; w: number; h: number } | null;
+  rackOffsets: { rackId: string; offsetX: number; offsetY: number; wCells: number; dCells: number }[];
+}
+
+function computeBlockLayoutZ(block: AisleBlockZ): BlockLayoutZ {
+  const { aisle, racks, orientation, mirrored } = block;
+  const aisleWCells = Math.max(1, Math.ceil(aisle.widthCells / CELL_SIZE_M));
+  const toRackCells = (r: WizardRackForm) => ({
+    wAlong: Math.max(1, Math.ceil(r.rack_width_m / CELL_SIZE_M)),
+    dPerp: Math.max(1, Math.ceil(r.rack_depth_m / CELL_SIZE_M)),
+  });
+  const sortedRacks = [...racks].sort((a, b) => a.code.localeCompare(b.code));
+  const maxDepth = sortedRacks.length > 0 ? Math.max(...sortedRacks.map((r) => toRackCells(r).dPerp)) : 0;
+  const totalAlong = sortedRacks.reduce((s, r) => s + toRackCells(r).wAlong, 0);
+  const blockPerp = maxDepth + aisleWCells;
+  const blockAlong = Math.max(totalAlong, 1);
+
+  const rackOffsets: BlockLayoutZ['rackOffsets'] = [];
+  let yAccum = 0;
+  for (const r of sortedRacks) {
+    const { wAlong, dPerp } = toRackCells(r);
+    if (orientation === 'vertical') {
+      const rackBaseX = mirrored ? aisleWCells : 0;
+      rackOffsets.push({ rackId: r.id, offsetX: rackBaseX + (maxDepth - dPerp), offsetY: yAccum, wCells: dPerp, dCells: wAlong });
+    } else {
+      const rackBaseY = mirrored ? aisleWCells : 0;
+      rackOffsets.push({ rackId: r.id, offsetX: yAccum, offsetY: rackBaseY + (maxDepth - dPerp), wCells: wAlong, dCells: dPerp });
+    }
+    yAccum += wAlong;
+  }
+
+  const rackColBounds = sortedRacks.length > 0
+    ? (orientation === 'vertical'
+      ? { x: mirrored ? aisleWCells : 0, y: 0, w: maxDepth, h: totalAlong }
+      : { x: 0, y: mirrored ? aisleWCells : 0, w: totalAlong, h: maxDepth })
+    : null;
+
+  if (orientation === 'vertical') {
+    return { widthCells: blockPerp, heightCells: blockAlong, aisleOffsetX: mirrored ? 0 : maxDepth, aisleOffsetY: 0, aisleW: aisleWCells, aisleH: blockAlong, rackColBounds, rackOffsets };
+  }
+  return { widthCells: blockAlong, heightCells: blockPerp, aisleOffsetX: 0, aisleOffsetY: mirrored ? 0 : maxDepth, aisleW: blockAlong, aisleH: aisleWCells, rackColBounds, rackOffsets };
+}
 
 // ── Component ──
 
@@ -61,6 +124,8 @@ export function ZonePainter({
   warehouseLength,
   placedRacks,
   racks,
+  aisles,
+  placedAisles,
   zones,
   onZonesChange,
 }: ZonePainterProps) {
@@ -74,6 +139,36 @@ export function ZonePainter({
 
   const gridW = Math.ceil(warehouseWidth);
   const gridH = Math.ceil(warehouseLength);
+
+  // ── Build blocks for rendering ──
+  const blocks = useMemo(() => {
+    return aisles.map((aisle, idx) => {
+      const aisleRacks = racks.filter((r) => r.aisleId === aisle.id);
+      const pa = placedAisles.find((p) => p.aisleId === aisle.id);
+      return {
+        aisleId: aisle.id,
+        aisle,
+        racks: aisleRacks,
+        orientation: pa?.orientation ?? aisle.orientation ?? ('vertical' as const),
+        mirrored: pa?.mirrored ?? (idx % 2 === 0),
+      };
+    });
+  }, [aisles, racks, placedAisles]);
+
+  const blockPositions = useMemo(() => {
+    const map = new Map<string, { gridX: number; gridY: number }>();
+    for (const block of blocks) {
+      const layout = computeBlockLayoutZ(block);
+      const pa = placedAisles.find((p) => p.aisleId === block.aisleId);
+      if (pa) {
+        map.set(block.aisleId, {
+          gridX: pa.gridX - layout.aisleOffsetX,
+          gridY: pa.gridY - layout.aisleOffsetY,
+        });
+      }
+    }
+    return map;
+  }, [blocks, placedAisles]);
 
   // ── Measure container to fit grid exactly ──
   useEffect(() => {
@@ -449,42 +544,95 @@ export function ZonePainter({
               </div>
             ))}
 
-            {/* Placed racks (read-only) */}
-            {placedRacks.map((p) => {
-              const rack = racks.find((r) => r.id === p.rackId);
-              if (!rack) return null;
-              const color =
-                RACK_COLORS[racks.indexOf(rack) % RACK_COLORS.length];
+            {/* ═══ Blocks: aisles + racks (read-only, same as FloorPlanBuilder) ═══ */}
+            {blocks.map((block) => {
+              const pos = blockPositions.get(block.aisleId);
+              if (!pos) return null;
+              const layout = computeBlockLayoutZ(block);
+              // Convert from grid cells (0.5m each) to meters for this canvas
+              const cellToM = CELL_SIZE_M;
+
               return (
-                <div
-                  key={p.rackId}
-                  data-rack="true"
-                  style={{
-                    position: 'absolute',
-                    left: p.gridX * CELL_W,
-                    top: p.gridY * CELL_H,
-                    width: p.widthCells * CELL_W - 2,
-                    height: p.depthCells * CELL_H - 2,
-                    backgroundColor: color + '30',
-                    border: `2px solid ${color}`,
-                    borderRadius: 4,
-                    display: 'flex',
-                    alignItems: 'center',
-                    justifyContent: 'center',
-                    zIndex: 3,
-                    pointerEvents: 'none',
-                  }}
-                >
-                  <span
+                <div key={block.aisleId}>
+                  {/* Green rack column border */}
+                  {layout.rackColBounds && (
+                    <div
+                      style={{
+                        position: 'absolute',
+                        left: (pos.gridX + layout.rackColBounds.x) * cellToM * CELL_W,
+                        top: (pos.gridY + layout.rackColBounds.y) * cellToM * CELL_H,
+                        width: layout.rackColBounds.w * cellToM * CELL_W,
+                        height: layout.rackColBounds.h * cellToM * CELL_H,
+                        border: `2px solid ${SHELF_UNIT_BORDER}60`,
+                        borderRadius: 3,
+                        backgroundColor: `${SHELF_UNIT_BORDER}08`,
+                        pointerEvents: 'none',
+                        zIndex: 2,
+                      }}
+                    />
+                  )}
+
+                  {/* Black aisle corridor */}
+                  <div
                     style={{
-                      fontSize: 12,
-                      fontWeight: 800,
-                      color,
-                      fontFamily: 'monospace',
+                      position: 'absolute',
+                      left: (pos.gridX + layout.aisleOffsetX) * cellToM * CELL_W,
+                      top: (pos.gridY + layout.aisleOffsetY) * cellToM * CELL_H,
+                      width: layout.aisleW * cellToM * CELL_W,
+                      height: layout.aisleH * cellToM * CELL_H,
+                      backgroundColor: `${AISLE_BG}40`,
+                      borderRadius: 2,
+                      display: 'flex',
+                      alignItems: 'center',
+                      justifyContent: 'center',
+                      pointerEvents: 'none',
+                      zIndex: 2,
                     }}
                   >
-                    {rack.code}
-                  </span>
+                    <span
+                      style={{
+                        fontSize: 10, fontWeight: 800, color: AISLE_BG, fontFamily: 'monospace',
+                        writingMode: block.orientation === 'vertical' ? 'vertical-rl' : 'horizontal-tb',
+                        textOrientation: 'mixed', letterSpacing: 1, opacity: 0.7,
+                      }}
+                    >
+                      {block.aisle.code}
+                    </span>
+                  </div>
+
+                  {/* Blue individual racks */}
+                  {layout.rackOffsets.map((ro) => {
+                    const rack = block.racks.find((r) => r.id === ro.rackId);
+                    if (!rack) return null;
+                    const aisleForCode = aisles.find((a) => a.id === rack.aisleId);
+                    const displayCode = aisleForCode ? `${aisleForCode.code}-${rack.code}` : rack.code;
+
+                    return (
+                      <div
+                        key={ro.rackId}
+                        data-rack="true"
+                        style={{
+                          position: 'absolute',
+                          left: (pos.gridX + ro.offsetX) * cellToM * CELL_W + 2,
+                          top: (pos.gridY + ro.offsetY) * cellToM * CELL_H + 1,
+                          width: ro.wCells * cellToM * CELL_W - 4,
+                          height: ro.dCells * cellToM * CELL_H - 2,
+                          backgroundColor: '#EFF6FF',
+                          border: `1.5px solid ${SHELF_BORDER}80`,
+                          borderRadius: 2,
+                          display: 'flex',
+                          alignItems: 'center',
+                          justifyContent: 'center',
+                          pointerEvents: 'none',
+                          zIndex: 3,
+                        }}
+                      >
+                        <span style={{ fontSize: 9, fontWeight: 800, color: SHELF_BORDER, fontFamily: 'monospace', opacity: 0.7 }}>
+                          {displayCode}
+                        </span>
+                      </div>
+                    );
+                  })}
                 </div>
               );
             })}

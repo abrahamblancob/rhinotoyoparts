@@ -24,16 +24,19 @@ import {
   useWarehouseStats,
   useWarehouseZones,
   useWarehouseRacks,
+  useWarehouseAisles,
   useWarehouseLocations,
   useWarehouseStock,
 } from '@/hooks/useWarehouse.ts';
 import { RackDetailView } from './RackDetailView.tsx';
 import { RackMiniGrid } from './components/RackMiniGrid.tsx';
+import { WarehouseCenitalMini } from './components/WarehouseCenitalMini.tsx';
+import { CELL_SIZE_M } from './FloorPlanBuilder.tsx';
 import { ConfirmDeleteModal } from '@/components/hub/shared/ConfirmDeleteModal.tsx';
 import * as warehouseService from '@/services/warehouseService.ts';
 import { supabase } from '@/lib/supabase.ts';
 import type { Organization } from '@/lib/database.types.ts';
-import type { Warehouse, WarehouseRack, WarehouseLocation, InventoryStock } from '@/types/warehouse.ts';
+import type { Warehouse, WarehouseAisle, WarehouseRack, WarehouseLocation, InventoryStock } from '@/types/warehouse.ts';
 
 const ZONE_TYPE_LABELS: Record<string, string> = {
   storage: 'Almacenamiento',
@@ -93,8 +96,9 @@ export function WarehouseLayoutPage() {
   const [deleteLoading, setDeleteLoading] = useState(false);
   const [showUnlocated, setShowUnlocated] = useState(false);
 
-  // All racks (for cenital/lateral views)
+  // All racks & aisles (for cenital/lateral views)
   const { data: allRacks, reload: reloadAllRacks } = useWarehouseRacks(activeWarehouse?.id);
+  const { data: allAisles, reload: reloadAllAisles } = useWarehouseAisles(activeWarehouse?.id);
 
   // All locations & stock (for lateral view occupancy)
   const { data: allLocations, reload: reloadAllLocations } = useWarehouseLocations(activeWarehouse?.id);
@@ -155,6 +159,7 @@ export function WarehouseLayoutPage() {
     reloadStats();
     reloadZones();
     reloadAllRacks();
+    reloadAllAisles();
     reloadAllLocations();
     reloadAllStock();
   };
@@ -839,30 +844,24 @@ export function WarehouseLayoutPage() {
         const whW = activeWarehouse.width_m!;
         const whL = activeWarehouse.length_m!;
 
-        const displayZones = (zones ?? []).filter(
-          (z) => z.position_x != null && z.position_y != null && z.width != null && z.height != null,
-        );
-
         const displayRacks = (allRacks ?? []).filter(
           (r) => r.position_x != null && r.position_y != null,
         );
 
-        /* Simple full-warehouse scaling */
+        /* Build placedAisles for the CenitalMini component from DB aisles */
+        const dbPlacedAisles = (allAisles ?? [])
+          .filter((a) => a.position_x != null && a.position_y != null)
+          .map((a) => ({
+            aisleId: a.id,
+            gridX: Math.round((a.position_x ?? 0) / CELL_SIZE_M),
+            gridY: Math.round((a.position_y ?? 0) / CELL_SIZE_M),
+            lengthCells: Math.max(1, Math.ceil((a.length_cells ?? 10) / CELL_SIZE_M)),
+            widthCells: Math.max(1, Math.ceil((a.width_m ?? 0.5) / CELL_SIZE_M)),
+            orientation: (a.orientation as 'vertical' | 'horizontal') ?? 'vertical',
+          }));
+
         const viewW = 520;
         const viewH = 420;
-        const cellW = viewW / whW;    /* px per meter */
-        const cellH = viewH / whL;
-
-        /* Compute rack-only bounding box for the legend (ignore zones — they
-           often cover the full warehouse and would hide the space-usage info) */
-        let racksMaxY = 0;
-        for (const r of displayRacks) {
-          const ry = r.position_y ?? 0;
-          const rh = r.orientation === 'horizontal' ? (r.rack_width_m ?? 1) : (r.rack_depth_m ?? 1);
-          racksMaxY = Math.max(racksMaxY, ry + rh);
-        }
-        const usedPct = whL > 0 ? Math.round((racksMaxY / whL) * 100) : 100;
-        const unusedPct = 100 - usedPct;
 
         return (
           <div
@@ -900,134 +899,38 @@ export function WarehouseLayoutPage() {
                 </span>
               </h4>
               <div style={{ display: 'flex', justifyContent: 'center' }}>
-                <div style={{ position: 'relative', paddingBottom: 22, paddingRight: 48 }}>
-                  <div
-                    style={{
-                      width: viewW,
-                      height: viewH,
-                      position: 'relative',
-                      overflow: 'hidden',
-                      backgroundColor: '#FFFFFF',
-                      border: '2px solid #CBD5E1',
-                      borderRadius: 6,
-                      backgroundImage: `
-                        linear-gradient(to right, #E2E8F020 1px, transparent 1px),
-                        linear-gradient(to bottom, #E2E8F020 1px, transparent 1px)
-                      `,
-                      backgroundSize: `${cellW}px ${cellH}px`,
-                    }}
-                  >
-                    {/* Zones */}
-                    {displayZones.map((zone) => {
-                      const zLeft = (zone.position_x ?? 0) * cellW;
-                      const zTop = (zone.position_y ?? 0) * cellH;
-                      const zW = Math.min((zone.width ?? 0) * cellW, viewW - zLeft);
-                      const zH = Math.min((zone.height ?? 0) * cellH, viewH - zTop);
-                      if (zW <= 0 || zH <= 0) return null;
-                      const color = zone.color ?? '#6366F1';
-                      return (
-                        <div
-                          key={zone.id}
-                          style={{
-                            position: 'absolute',
-                            left: zLeft,
-                            top: zTop,
-                            width: zW,
-                            height: zH,
-                            backgroundColor: color + '15',
-                            border: `1px dashed ${color}60`,
-                            borderRadius: 3,
-                          }}
-                        >
-                        </div>
-                      );
-                    })}
-
-                    {/* Racks */}
-                    {displayRacks.map((rack, rIdx) => {
-                      const color = RACK_COLORS[rIdx % RACK_COLORS.length];
-                      const rWidthM = rack.orientation === 'horizontal'
-                        ? (rack.rack_depth_m ?? 1)
-                        : (rack.rack_width_m ?? 1);
-                      const rDepthM = rack.orientation === 'horizontal'
-                        ? (rack.rack_width_m ?? 1)
-                        : (rack.rack_depth_m ?? 1);
-                      const rLeft = (rack.position_x ?? 0) * cellW;
-                      const rTop = (rack.position_y ?? 0) * cellH;
-                      const rW = rWidthM * cellW - 2;
-                      const rH = rDepthM * cellH - 2;
-                      if (rW <= 0 || rH <= 0) return null;
-                      return (
-                        <div
-                          key={rack.id}
-                          style={{
-                            position: 'absolute',
-                            left: rLeft,
-                            top: rTop,
-                            width: rW,
-                            height: rH,
-                            backgroundColor: color + '35',
-                            border: `1.5px solid ${color}`,
-                            borderRadius: 2,
-                            display: 'flex',
-                            alignItems: 'center',
-                            justifyContent: 'center',
-                            overflow: 'hidden',
-                          }}
-                        >
-                          <span
-                            style={{
-                              fontSize: Math.max(9, Math.min(12, Math.min(cellW, cellH) * 0.6)),
-                              fontWeight: 800,
-                              color,
-                              fontFamily: 'monospace',
-                            }}
-                          >
-                            {rack.code}
-                          </span>
-                        </div>
-                      );
-                    })}
-                  </div>
-
-                  {/* Dimension labels */}
-                  <span
-                    style={{
-                      position: 'absolute',
-                      bottom: 2,
-                      left: viewW / 2,
-                      transform: 'translateX(-50%)',
-                      fontSize: 10,
-                      color: '#94A3B8',
-                      fontFamily: 'monospace',
-                      whiteSpace: 'nowrap',
-                    }}
-                  >
-                    {whW}m (ancho)
-                  </span>
-                  <span
-                    style={{
-                      position: 'absolute',
-                      right: 0,
-                      top: viewH / 2,
-                      transform: 'translateY(-50%) rotate(90deg)',
-                      fontSize: 10,
-                      color: '#94A3B8',
-                      fontFamily: 'monospace',
-                      whiteSpace: 'nowrap',
-                    }}
-                  >
-                    {whL}m (largo)
-                  </span>
-                </div>
+                <WarehouseCenitalMini
+                  warehouseWidth={whW}
+                  warehouseLength={whL}
+                  aisles={(allAisles ?? []).map((a) => ({
+                    id: a.id,
+                    code: a.code,
+                    width_m: a.width_m ?? undefined,
+                    orientation: (a.orientation as 'vertical' | 'horizontal') ?? undefined,
+                  }))}
+                  racks={(allRacks ?? []).map((r) => ({
+                    id: r.id,
+                    code: r.code,
+                    rack_width_m: r.rack_width_m ?? 1,
+                    rack_depth_m: r.rack_depth_m ?? 1,
+                    aisle_id: r.aisle_id,
+                  }))}
+                  placedAisles={dbPlacedAisles}
+                  zones={(zones ?? []).map((z) => ({
+                    id: z.id,
+                    name: z.name,
+                    code: z.code,
+                    color: z.color ?? '#6366F1',
+                    position_x: z.position_x,
+                    position_y: z.position_y,
+                    width: z.width,
+                    height: z.height,
+                  }))}
+                  viewWidth={viewW}
+                  viewHeight={viewH}
+                  showZoneLabels={true}
+                />
               </div>
-              {/* Legend */}
-              {displayRacks.length > 0 && unusedPct > 20 && (
-                <p style={{ fontSize: 11, color: '#94A3B8', margin: '8px 0 0', textAlign: 'center' }}>
-                  {displayRacks.length} estantes posicionados en los primeros ~{Math.ceil(racksMaxY)}m de {whL}m
-                  {' '}&mdash; {unusedPct}% del espacio sin usar
-                </p>
-              )}
             </div>
 
             {/* ── Side / Lateral view ── */}

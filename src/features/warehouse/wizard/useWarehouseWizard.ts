@@ -191,6 +191,7 @@ export function useWarehouseWizard() {
               code: a.code,
               widthCells: a.width_m ?? 0.5,
               lengthCells: a.length_cells ?? 10,
+              orientation: (a.orientation as 'vertical' | 'horizontal') ?? 'vertical',
             });
 
             if (a.position_x != null && a.position_y != null) {
@@ -332,6 +333,7 @@ export function useWarehouseWizard() {
         code,
         widthCells: 0.5,
         lengthCells: warehouse.length_m ?? 10,
+        orientation: 'vertical',
       },
     ]);
   };
@@ -340,7 +342,7 @@ export function useWarehouseWizard() {
     setWizardAisles((prev) =>
       prev.map((a) => (a.id === id ? { ...a, [field]: value } : a)),
     );
-    if (field === 'widthCells' || field === 'lengthCells') {
+    if (field === 'widthCells' || field === 'lengthCells' || field === 'orientation') {
       setPlacedAisles((prev) => prev.filter((p) => p.aisleId !== id));
     }
   };
@@ -473,7 +475,8 @@ export function useWarehouseWizard() {
       // 4. Create/update aisles
       const aisleIdMap = new Map<string, string>();
 
-      if (editId) {
+      if (editId && wizardAisles.length > 0) {
+        // Only delete removed aisles when wizard has aisles loaded (guard against empty-state save)
         const existingAisles = await warehouseService.getAisles(warehouseId);
         const currentAisleIds = new Set(wizardAisles.map((a) => a.id));
         for (const ea of existingAisles.data ?? []) {
@@ -509,7 +512,7 @@ export function useWarehouseWizard() {
             position_x: pa ? pa.gridX * CELL_SIZE_M : null,
             position_y: pa ? pa.gridY * CELL_SIZE_M : null,
             length_cells: aisle.lengthCells,
-            orientation: pa?.orientation ?? 'vertical',
+            orientation: pa?.orientation ?? aisle.orientation ?? 'vertical',
             warehouse_id: warehouseId,
             zone_id: aisleZoneId,
           },
@@ -526,7 +529,8 @@ export function useWarehouseWizard() {
       }
 
       // 5. Create/update racks
-      if (editId) {
+      if (editId && racks.length > 0) {
+        // Only delete removed racks when wizard has racks loaded (guard against empty-state save)
         const existingRacks = await warehouseService.getRacks(warehouseId);
         const currentRackIds = new Set(racks.map((r) => r.id));
         for (const er of existingRacks.data ?? []) {

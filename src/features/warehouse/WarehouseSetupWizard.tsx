@@ -94,6 +94,8 @@ export function WarehouseSetupWizard() {
                 warehouseLength={w.warehouse.length_m}
                 placedRacks={w.placedRacks}
                 racks={w.racks}
+                aisles={w.wizardAisles}
+                placedAisles={w.placedAisles}
                 zones={w.zones}
                 onZonesChange={w.setZones}
               />

@@ -129,6 +129,18 @@ export function RacksStep({
                       style={{ fontSize: 13 }}
                     />
                   </div>
+                  <div className="rh-field" style={{ width: 110 }}>
+                    <label className="rh-label" style={{ fontSize: 11 }}>Orientacion</label>
+                    <select
+                      value={aisle.orientation ?? 'vertical'}
+                      onChange={(e) => updateAisle(aisle.id, 'orientation', e.target.value)}
+                      className="rh-input"
+                      style={{ fontSize: 13 }}
+                    >
+                      <option value="vertical">↕ Vertical</option>
+                      <option value="horizontal">↔ Horizontal</option>
+                    </select>
+                  </div>
                   <button
                     onClick={() => removeAisle(aisle.id)}
                     className="rh-btn rh-btn-ghost"

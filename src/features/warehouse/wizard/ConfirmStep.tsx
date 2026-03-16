@@ -7,7 +7,6 @@ import {
   BarChart3,
   Layers,
 } from 'lucide-react';
-import { CELL_SIZE_M } from '../FloorPlanBuilder.tsx';
 import {
   RACK_COLORS,
   levelToLetter,
@@ -18,7 +17,7 @@ import {
   type PlacedAisle,
   type WizardZoneForm,
 } from './types.ts';
-import type { ZoneType } from '@/types/warehouse.ts';
+import { WarehouseCenitalMini } from '../components/WarehouseCenitalMini.tsx';
 
 interface ConfirmStepProps {
   warehouse: WarehouseForm;
@@ -51,17 +50,11 @@ export function ConfirmStep({
   const whL = warehouse.length_m || 10;
   const maxViewW = 460;
   const maxViewH = 320;
-  const gridW = Math.ceil(whW / CELL_SIZE_M);
-  const gridH = Math.ceil(whL / CELL_SIZE_M);
-  const cellW = maxViewW / gridW;
-  const cellH = maxViewH / gridH;
-  const viewW = maxViewW;
-  const viewH = maxViewH;
   const effectiveZones = zones.length > 0 ? zones : [{
     id: 'default',
     name: 'Almacenamiento',
     code: 'Z-01',
-    zone_type: 'storage' as ZoneType,
+    zone_type: 'storage' as const,
     color: '#3B82F6',
     x: 0,
     y: 0,
@@ -158,167 +151,37 @@ export function ConfirmStep({
             </span>
           </h4>
           <div style={{ display: 'flex', justifyContent: 'center' }}>
-            <div style={{ position: 'relative', paddingBottom: 22, paddingRight: 48 }}>
-              <div
-                style={{
-                  width: viewW,
-                  height: viewH,
-                  position: 'relative',
-                  overflow: 'hidden',
-                  backgroundColor: '#FFFFFF',
-                  border: '2px solid #CBD5E1',
-                  borderRadius: 6,
-                  backgroundImage: `
-                    linear-gradient(to right, #E2E8F020 1px, transparent 1px),
-                    linear-gradient(to bottom, #E2E8F020 1px, transparent 1px)
-                  `,
-                  backgroundSize: `${cellW / CELL_SIZE_M}px ${cellH / CELL_SIZE_M}px`,
-                }}
-              >
-                {/* Zones */}
-                {effectiveZones.map((zone) => {
-                  const zLeft = (zone.x / CELL_SIZE_M) * cellW;
-                  const zTop = (zone.y / CELL_SIZE_M) * cellH;
-                  const zW = Math.min((zone.width / CELL_SIZE_M) * cellW, viewW - zLeft);
-                  const zH = Math.min((zone.height / CELL_SIZE_M) * cellH, viewH - zTop);
-                  if (zW <= 0 || zH <= 0) return null;
-                  return (
-                    <div
-                      key={zone.id}
-                      style={{
-                        position: 'absolute',
-                        left: zLeft,
-                        top: zTop,
-                        width: zW,
-                        height: zH,
-                        backgroundColor: zone.color + '15',
-                        border: `1px dashed ${zone.color}60`,
-                        borderRadius: 3,
-                      }}
-                    >
-                      <span
-                        style={{
-                          position: 'absolute',
-                          top: 2,
-                          left: 3,
-                          fontSize: 9,
-                          color: zone.color,
-                          fontWeight: 600,
-                          whiteSpace: 'nowrap',
-                          overflow: 'hidden',
-                        }}
-                      >
-                        {zone.name}
-                      </span>
-                    </div>
-                  );
-                })}
-
-                {/* Aisles */}
-                {placedAisles.map((pa) => {
-                  const aisle = wizardAisles.find((a) => a.id === pa.aisleId);
-                  if (!aisle) return null;
-                  const aw = pa.orientation === 'horizontal' ? pa.lengthCells : pa.widthCells;
-                  const ah = pa.orientation === 'horizontal' ? pa.widthCells : pa.lengthCells;
-                  return (
-                    <div
-                      key={pa.aisleId}
-                      style={{
-                        position: 'absolute',
-                        left: pa.gridX * cellW,
-                        top: pa.gridY * cellH,
-                        width: aw * cellW - 1,
-                        height: ah * cellH - 1,
-                        backgroundColor: '#94A3B825',
-                        border: '1px dashed #94A3B8',
-                        borderRadius: 2,
-                        display: 'flex',
-                        alignItems: 'center',
-                        justifyContent: 'center',
-                      }}
-                    >
-                      <span style={{ fontSize: 8, fontWeight: 700, color: '#94A3B8', fontFamily: 'monospace',
-                        writingMode: pa.orientation === 'vertical' ? 'vertical-rl' : 'horizontal-tb' }}>
-                        {aisle.code}
-                      </span>
-                    </div>
-                  );
-                })}
-
-                {/* Racks */}
-                {placedRacks.map((p) => {
-                  const rack = racks.find((r) => r.id === p.rackId);
-                  if (!rack) return null;
-                  const rIdx = racks.indexOf(rack);
-                  const color = RACK_COLORS[rIdx % RACK_COLORS.length];
-                  const rLeft = p.gridX * cellW;
-                  const rTop = p.gridY * cellH;
-                  const rW = p.widthCells * cellW - 2;
-                  const rH = p.depthCells * cellH - 2;
-                  if (rW <= 0 || rH <= 0) return null;
-                  return (
-                    <div
-                      key={p.rackId}
-                      style={{
-                        position: 'absolute',
-                        left: rLeft,
-                        top: rTop,
-                        width: rW,
-                        height: rH,
-                        backgroundColor: color + '35',
-                        border: `1.5px solid ${color}`,
-                        borderRadius: 2,
-                        display: 'flex',
-                        alignItems: 'center',
-                        justifyContent: 'center',
-                        overflow: 'hidden',
-                      }}
-                    >
-                      <span
-                        style={{
-                          fontSize: Math.max(9, Math.min(12, Math.min(cellW, cellH) * 0.6)),
-                          fontWeight: 800,
-                          color,
-                          fontFamily: 'monospace',
-                        }}
-                      >
-                        {rackDisplayCode(rack)}
-                      </span>
-                    </div>
-                  );
-                })}
-              </div>
-
-              {/* Dimension labels */}
-              <span
-                style={{
-                  position: 'absolute',
-                  bottom: 2,
-                  left: viewW / 2,
-                  transform: 'translateX(-50%)',
-                  fontSize: 10,
-                  color: '#94A3B8',
-                  fontFamily: 'monospace',
-                  whiteSpace: 'nowrap',
-                }}
-              >
-                {whW}m (ancho)
-              </span>
-              <span
-                style={{
-                  position: 'absolute',
-                  right: 0,
-                  top: viewH / 2,
-                  transform: 'translateY(-50%) rotate(90deg)',
-                  fontSize: 10,
-                  color: '#94A3B8',
-                  fontFamily: 'monospace',
-                  whiteSpace: 'nowrap',
-                }}
-              >
-                {whL}m (largo)
-              </span>
-            </div>
+            <WarehouseCenitalMini
+              warehouseWidth={whW}
+              warehouseLength={whL}
+              aisles={wizardAisles.map((a) => ({
+                id: a.id,
+                code: a.code,
+                widthCells: a.widthCells,
+                orientation: a.orientation,
+              }))}
+              racks={racks.map((r) => ({
+                id: r.id,
+                code: r.code,
+                rack_width_m: r.rack_width_m,
+                rack_depth_m: r.rack_depth_m,
+                aisleId: r.aisleId,
+              }))}
+              placedAisles={placedAisles}
+              zones={effectiveZones.map((z) => ({
+                id: z.id,
+                name: z.name,
+                code: z.code,
+                color: z.color,
+                x: z.x,
+                y: z.y,
+                width: z.width,
+                height: z.height,
+              }))}
+              viewWidth={maxViewW}
+              viewHeight={maxViewH}
+              showZoneLabels={true}
+            />
           </div>
           <p style={{ fontSize: 10, color: '#94A3B8', textAlign: 'center', marginTop: 20 }}>
             Huella de estantes: {rackFootprint.toFixed(1)} m² de {area.toFixed(1)} m² ({occupancyPct}%)
@@ -332,6 +195,8 @@ export function ConfirmStep({
             borderRadius: 10,
             padding: 16,
             backgroundColor: '#FAFBFC',
+            minWidth: 0,
+            overflow: 'hidden',
           }}
         >
           <h4

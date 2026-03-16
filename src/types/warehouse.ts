@@ -62,7 +62,7 @@ export interface WarehouseAisle {
 
 export interface WarehouseRack {
   id: string;
-  zone_id: string;
+  zone_id: string | null;
   warehouse_id: string;
   aisle_id: string | null;
   name: string;
@@ -328,7 +328,7 @@ export interface AisleFormData {
 export interface RackFormData {
   name: string;
   code: string;
-  zone_id: string;
+  zone_id: string | null;
   aisle_id: string | null;
   levels: number;
   positions_per_level: number;

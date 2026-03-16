@@ -2,7 +2,9 @@ import { useState, useEffect, useMemo } from 'react';
 import { MapPin, LayoutGrid, Layers } from 'lucide-react';
 import * as pickingService from '@/services/pickingService.ts';
 import { RackMiniGrid } from '@/features/warehouse/components/RackMiniGrid.tsx';
-import type { Warehouse, WarehouseZone, WarehouseLocation, WarehouseRack } from '@/types/warehouse.ts';
+import { WarehouseCenitalMini } from '@/features/warehouse/components/WarehouseCenitalMini.tsx';
+import { CELL_SIZE_M } from '@/features/warehouse/FloorPlanBuilder.tsx';
+import type { Warehouse, WarehouseZone, WarehouseLocation, WarehouseRack, WarehouseAisle } from '@/types/warehouse.ts';
 
 interface PickingMiniMapProps {
   warehouseId: string;
@@ -12,32 +14,30 @@ interface PickingMiniMapProps {
 
 type LocationWithRack = WarehouseLocation & { rack: WarehouseRack | null };
 
-const RACK_COLORS = [
-  '#3B82F6', '#10B981', '#F59E0B', '#EF4444', '#8B5CF6',
-  '#EC4899', '#06B6D4', '#84CC16', '#F97316', '#6366F1',
-];
-
 export function PickingMiniMap({ warehouseId, locationIds, pickedLocationIds }: PickingMiniMapProps) {
   const [warehouse, setWarehouse] = useState<Warehouse | null>(null);
   const [zones, setZones] = useState<WarehouseZone[]>([]);
   const [allRacks, setAllRacks] = useState<WarehouseRack[]>([]);
+  const [allAisles, setAllAisles] = useState<WarehouseAisle[]>([]);
   const [targetLocations, setTargetLocations] = useState<LocationWithRack[]>([]);
   const [loading, setLoading] = useState(true);
 
-  // Load warehouse details, zones, racks and target locations
+  // Load warehouse details, zones, racks, aisles and target locations
   useEffect(() => {
     setLoading(true);
     Promise.all([
       pickingService.getWarehouseDetail(warehouseId),
       pickingService.getWarehouseZones(warehouseId),
       pickingService.getWarehouseRacks(warehouseId),
+      pickingService.getWarehouseAisles(warehouseId),
       locationIds.length > 0
         ? pickingService.getPickListLocations(locationIds)
         : Promise.resolve({ data: [], error: null }),
-    ]).then(([whRes, zonesRes, racksRes, locsRes]) => {
+    ]).then(([whRes, zonesRes, racksRes, aislesRes, locsRes]) => {
       setWarehouse((whRes.data as Warehouse) ?? null);
       setZones((zonesRes.data as WarehouseZone[]) ?? []);
       setAllRacks((racksRes.data as WarehouseRack[]) ?? []);
+      setAllAisles((aislesRes.data as WarehouseAisle[]) ?? []);
       setTargetLocations((locsRes.data as LocationWithRack[]) ?? []);
       setLoading(false);
     });
@@ -74,17 +74,18 @@ export function PickingMiniMap({ warehouseId, locationIds, pickedLocationIds }: 
   const hasCenital = warehouse && warehouse.width_m && warehouse.length_m;
   const whW = warehouse?.width_m ?? 10;
   const whL = warehouse?.length_m ?? 10;
-  const maxViewW = 520;
-  const maxViewH = 420;
-  const cellW = maxViewW / whW;   /* px per meter */
-  const cellH = maxViewH / whL;
 
-  const displayZones = zones.filter(
-    (z) => z.position_x != null && z.position_y != null && z.width != null && z.height != null,
-  );
-  const displayRacks = allRacks.filter(
-    (r) => r.position_x != null && r.position_y != null,
-  );
+  // Build placed aisles from DB aisle positions
+  const dbPlacedAisles = allAisles
+    .filter((a) => a.position_x != null && a.position_y != null)
+    .map((a) => ({
+      aisleId: a.id,
+      gridX: Math.round((a.position_x ?? 0) / CELL_SIZE_M),
+      gridY: Math.round((a.position_y ?? 0) / CELL_SIZE_M),
+      lengthCells: Math.max(1, Math.ceil((a.length_cells ?? 10) / CELL_SIZE_M)),
+      widthCells: Math.max(1, Math.ceil((a.width_m ?? 0.5) / CELL_SIZE_M)),
+      orientation: (a.orientation as 'vertical' | 'horizontal') ?? 'vertical',
+    }));
 
   return (
     <div
@@ -131,135 +132,42 @@ export function PickingMiniMap({ warehouseId, locationIds, pickedLocationIds }: 
               </span>
             </h4>
             <div style={{ display: 'flex', justifyContent: 'center' }}>
-              <div style={{ position: 'relative', paddingBottom: 22, paddingRight: 48 }}>
-                <div
-                  style={{
-                    width: maxViewW,
-                    height: maxViewH,
-                    position: 'relative',
-                    overflow: 'hidden',
-                    backgroundColor: '#FFFFFF',
-                    border: '2px solid #CBD5E1',
-                    borderRadius: 6,
-                    backgroundImage: `
-                      linear-gradient(to right, #E2E8F020 1px, transparent 1px),
-                      linear-gradient(to bottom, #E2E8F020 1px, transparent 1px)
-                    `,
-                    backgroundSize: `${cellW}px ${cellH}px`,
-                  }}
-                >
-                  {/* Zones */}
-                  {displayZones.map((zone) => {
-                    const zLeft = (zone.position_x ?? 0) * cellW;
-                    const zTop = (zone.position_y ?? 0) * cellH;
-                    const zW = Math.min((zone.width ?? 0) * cellW, maxViewW - zLeft);
-                    const zH = Math.min((zone.height ?? 0) * cellH, maxViewH - zTop);
-                    if (zW <= 0 || zH <= 0) return null;
-                    const color = zone.color ?? '#6366F1';
-                    return (
-                      <div
-                        key={zone.id}
-                        style={{
-                          position: 'absolute',
-                          left: zLeft,
-                          top: zTop,
-                          width: zW,
-                          height: zH,
-                          backgroundColor: color + '15',
-                          border: `1px dashed ${color}60`,
-                          borderRadius: 3,
-                        }}
-                      >
-                      </div>
-                    );
-                  })}
-
-                  {/* Racks — highlight targets */}
-                  {displayRacks.map((rack, rIdx) => {
-                    const isTarget = targetRackIds.has(rack.id);
-                    const baseColor = RACK_COLORS[rIdx % RACK_COLORS.length];
-                    const rWidthM = rack.orientation === 'horizontal'
-                      ? (rack.rack_depth_m ?? 1)
-                      : (rack.rack_width_m ?? 1);
-                    const rDepthM = rack.orientation === 'horizontal'
-                      ? (rack.rack_width_m ?? 1)
-                      : (rack.rack_depth_m ?? 1);
-                    const rLeft = (rack.position_x ?? 0) * cellW;
-                    const rTop = (rack.position_y ?? 0) * cellH;
-                    const rW = rWidthM * cellW - 2;
-                    const rH = rDepthM * cellH - 2;
-                    if (rW <= 0 || rH <= 0) return null;
-
-                    // Target racks get orange highlight, non-target use base color but dimmed
-                    const fillColor = isTarget ? '#F9731640' : baseColor + '35';
-                    const borderColor = isTarget ? '#F97316' : baseColor;
-                    const borderWidth = isTarget ? 2.5 : 1.5;
-
-                    return (
-                      <div
-                        key={rack.id}
-                        style={{
-                          position: 'absolute',
-                          left: rLeft,
-                          top: rTop,
-                          width: rW,
-                          height: rH,
-                          backgroundColor: fillColor,
-                          border: `${borderWidth}px solid ${borderColor}`,
-                          borderRadius: 2,
-                          display: 'flex',
-                          alignItems: 'center',
-                          justifyContent: 'center',
-                          overflow: 'hidden',
-                          opacity: isTarget ? 1 : 0.45,
-                          transition: 'opacity 0.2s',
-                        }}
-                      >
-                        <span
-                          style={{
-                            fontSize: Math.max(9, Math.min(12, Math.min(cellW, cellH) * 0.6)),
-                            fontWeight: 800,
-                            color: isTarget ? '#F97316' : baseColor,
-                            fontFamily: 'monospace',
-                          }}
-                        >
-                          {rack.code}
-                        </span>
-                      </div>
-                    );
-                  })}
-                </div>
-
-                {/* Dimension labels */}
-                <span
-                  style={{
-                    position: 'absolute',
-                    bottom: 2,
-                    left: maxViewW / 2,
-                    transform: 'translateX(-50%)',
-                    fontSize: 10,
-                    color: '#94A3B8',
-                    fontFamily: 'monospace',
-                    whiteSpace: 'nowrap',
-                  }}
-                >
-                  {whW}m (ancho)
-                </span>
-                <span
-                  style={{
-                    position: 'absolute',
-                    right: 0,
-                    top: maxViewH / 2,
-                    transform: 'translateY(-50%) rotate(90deg)',
-                    fontSize: 10,
-                    color: '#94A3B8',
-                    fontFamily: 'monospace',
-                    whiteSpace: 'nowrap',
-                  }}
-                >
-                  {whL}m (largo)
-                </span>
-              </div>
+              <WarehouseCenitalMini
+                warehouseWidth={whW}
+                warehouseLength={whL}
+                aisles={allAisles.map((a) => ({
+                  id: a.id,
+                  code: a.code,
+                  width_m: a.width_m ?? undefined,
+                  orientation: a.orientation ?? undefined,
+                }))}
+                racks={allRacks.map((r) => ({
+                  id: r.id,
+                  code: r.code,
+                  rack_width_m: r.rack_width_m ?? 1,
+                  rack_depth_m: r.rack_depth_m ?? 1,
+                  aisle_id: r.aisle_id,
+                }))}
+                placedAisles={dbPlacedAisles}
+                zones={zones
+                  .filter((z) => z.position_x != null && z.position_y != null)
+                  .map((z) => ({
+                    id: z.id,
+                    name: z.name,
+                    code: z.code,
+                    color: z.color ?? '#6366F1',
+                    position_x: z.position_x,
+                    position_y: z.position_y,
+                    width: z.width,
+                    height: z.height,
+                  }))}
+                viewWidth={520}
+                viewHeight={420}
+                showZoneLabels={false}
+                highlightRackIds={targetRackIds}
+                highlightColor="#F97316"
+                dimNonHighlighted={true}
+              />
             </div>
           </div>
         )}
@@ -271,6 +179,8 @@ export function PickingMiniMap({ warehouseId, locationIds, pickedLocationIds }: 
             borderRadius: 10,
             padding: 14,
             backgroundColor: '#FAFBFC',
+            minWidth: 0,
+            overflow: 'hidden',
           }}
         >
           <h4
@@ -287,7 +197,7 @@ export function PickingMiniMap({ warehouseId, locationIds, pickedLocationIds }: 
             <Layers size={14} style={{ color: '#F97316' }} />
             Vista Lateral (Estantes)
           </h4>
-          <div style={{ display: 'flex', gap: 14, flexWrap: 'wrap' }}>
+          <div style={{ display: 'flex', gap: 14, flexWrap: 'wrap', overflowX: 'auto', paddingBottom: 8 }}>
             {allRacks.map((rack) => {
               const rackTargets = targetsByRack.get(rack.id) ?? [];
               const hasTargets = rackTargets.length > 0;
