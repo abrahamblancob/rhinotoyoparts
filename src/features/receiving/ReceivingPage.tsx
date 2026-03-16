@@ -14,6 +14,7 @@ import { StatsCard } from '@/components/hub/shared/StatsCard.tsx';
 import { EmptyState } from '@/components/hub/shared/EmptyState.tsx';
 import { Modal } from '@/components/hub/shared/Modal.tsx';
 import * as receivingService from '@/services/receivingService.ts';
+import { logActivity } from '@/services/activityLogService.ts';
 import { getOrgReceivingSummaries } from '@/services/dashboardService.ts';
 import type { OrgReceivingSummary } from '@/services/dashboardService.ts';
 import { getAllActiveSuppliers } from '@/services/supplierService.ts';
@@ -312,6 +313,7 @@ function CreateReceivingModal({ open, filterOrgId, onClose, onCreated }: CreateR
       return;
     }
 
+    logActivity({ action: 'create', entityType: 'receiving_order', entityId: result.data?.id, description: 'Creó orden de recepción' });
     setSaving(false);
     setWarehouseId('');
     setSupplierId('');

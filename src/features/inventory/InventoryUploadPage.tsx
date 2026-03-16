@@ -20,6 +20,7 @@ import { uploadProducts, logBulkUpload, createInventoryLot } from './upload/uplo
 import { smartMapColumns } from './upload/smartMapping.ts';
 import type { SmartMappingResult } from './upload/smartMapping.ts';
 
+import { logActivity } from '@/services/activityLogService.ts';
 import { StepIndicator } from './upload/components/StepIndicator.tsx';
 import { FileDropzone } from './upload/components/FileDropzone.tsx';
 import { ProcessingView } from './upload/components/ProcessingView.tsx';
@@ -221,6 +222,8 @@ export function InventoryUploadPage() {
       lotId,
       selectedSupplierId || null,
     );
+
+    logActivity({ action: 'upload', entityType: 'bulk_upload', description: `Subió ${finalProgress.successCount} productos por carga masiva` });
 
     setUploadProgress(finalProgress);
     setUploadsRefreshKey((k) => k + 1);

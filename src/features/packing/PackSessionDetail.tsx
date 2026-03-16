@@ -188,7 +188,7 @@ export function PackSessionDetail() {
                       className="rh-btn rh-btn-primary"
                       style={{ fontSize: 12, padding: '4px 12px' }}
                       disabled={actionLoading}
-                      onClick={() => handleVerifyItem(item.id, item.quantity_expected)}
+                      onClick={() => handleVerifyItem(item.id, item.quantity_expected, item.product?.name)}
                     >
                       Verificar
                     </button>

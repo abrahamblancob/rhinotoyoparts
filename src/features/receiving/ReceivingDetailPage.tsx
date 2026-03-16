@@ -18,6 +18,7 @@ import { QRCodeSVG } from 'qrcode.react';
 import { supabase } from '@/lib/supabase.ts';
 import { Modal } from '@/components/hub/shared/Modal.tsx';
 import * as receivingService from '@/services/receivingService.ts';
+import { logActivity } from '@/services/activityLogService.ts';
 import { useReceivingDetail } from './useReceivingDetail.ts';
 import type {
   ReceivingOrderItem,
@@ -914,6 +915,7 @@ function ReceiveItemModal({ item, warehouseId, orgId, onClose, onReceived }: Rec
       return;
     }
 
+    logActivity({ action: 'receive_item', entityType: 'receiving_order', entityId: item.id, description: `Recibió ${qty}x ${item.product?.name ?? 'producto'}` });
     setSaving(false);
     setReceivedQty('');
     setLotNumber('');

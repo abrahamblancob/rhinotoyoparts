@@ -1,6 +1,7 @@
 import { useState, useCallback } from 'react';
 import { useAuthStore } from '@/stores/authStore.ts';
 import { toast } from '@/stores/toastStore.ts';
+import { logActivity } from '@/services/activityLogService.ts';
 import * as stockAuditService from '@/services/stockAuditService.ts';
 import * as warehouseService from '@/services/warehouseService.ts';
 import type { StockAudit, StockAuditItem, StockAuditType, Warehouse } from '@/types/warehouse.ts';
@@ -158,6 +159,7 @@ export function useStockAudit(orgId: string | undefined): UseStockAuditReturn {
     }
 
     setPhase('confirmation');
+    logActivity({ action: 'create', entityType: 'stock_audit', entityId: newAudit.id, description: `Inició auditoría en ${selectedWarehouse.name}` });
   }, [selectedWarehouse, auditType, user, orgId, selectedLocationIds]);
 
   const updateItem = useCallback(async (itemId: string, actualQuantity: number) => {
@@ -188,6 +190,7 @@ export function useStockAudit(orgId: string | undefined): UseStockAuditReturn {
     setCompleting(false);
     setPhase('email_modal');
     toast('success', 'Auditoría completada exitosamente');
+    logActivity({ action: 'complete', entityType: 'stock_audit', entityId: audit.id, description: `Completó auditoría: ${matchCount} coincidencias, ${discrepancyCount} discrepancias` });
   }, [audit, auditItems]);
 
   const sendEmail = useCallback(async (email: string) => {
@@ -199,6 +202,7 @@ export function useStockAudit(orgId: string | undefined): UseStockAuditReturn {
     }
     toast('success', `Reporte enviado a ${email}`);
     setPhase('done');
+    logActivity({ action: 'send_email', entityType: 'stock_audit', entityId: audit.id, description: `Envió reporte de auditoría a ${email}` });
   }, [audit]);
 
   const skipEmail = useCallback(() => {

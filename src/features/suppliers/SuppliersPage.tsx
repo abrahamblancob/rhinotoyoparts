@@ -19,6 +19,7 @@ import { ConfirmDeleteModal } from '@/components/hub/shared/ConfirmDeleteModal.t
 import { EmptyState } from '@/components/hub/shared/EmptyState.tsx';
 import type { Supplier } from '@/lib/database.types.ts';
 import * as supplierService from '@/services/supplierService.ts';
+import { logActivity } from '@/services/activityLogService.ts';
 
 const emptyForm = {
   name: '',
@@ -124,6 +125,12 @@ export function SuppliersPage() {
         setSaveLoading(false);
         return;
       }
+      logActivity({
+        action: 'update',
+        entityType: 'supplier',
+        entityId: editSupplier.id,
+        description: `Actualizó proveedor ${payload.name}`,
+      });
       toast('success', 'Proveedor actualizado correctamente');
     } else {
       const orgId = organization?.id;
@@ -138,6 +145,12 @@ export function SuppliersPage() {
         setSaveLoading(false);
         return;
       }
+      logActivity({
+        action: 'create',
+        entityType: 'supplier',
+        entityId: result.data?.id,
+        description: `Creó proveedor ${payload.name}`,
+      });
       toast('success', 'Proveedor creado correctamente');
     }
 
@@ -157,6 +170,12 @@ export function SuppliersPage() {
     if (result.error) {
       toast('error', result.error);
     } else {
+      logActivity({
+        action: 'delete',
+        entityType: 'supplier',
+        entityId: deleteConfirm.id,
+        description: `Eliminó proveedor ${deleteConfirm.name}`,
+      });
       toast('success', 'Proveedor eliminado');
     }
 

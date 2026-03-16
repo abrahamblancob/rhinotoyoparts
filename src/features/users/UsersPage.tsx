@@ -1,4 +1,5 @@
 import { useEffect, useState } from 'react';
+import { useNavigate } from 'react-router-dom';
 import { supabase } from '@/lib/supabase.ts';
 import { callEdgeFunction } from '@/lib/edgeFunction.ts';
 import { usePermissions } from '@/hooks/usePermissions.ts';
@@ -12,6 +13,7 @@ import { UserCreateModal } from './UserCreateModal.tsx';
 import { UserEditModal } from './UserEditModal.tsx';
 import type { UserWithRole } from './UserEditModal.tsx';
 import { getRoleBadgeStyle } from '@/lib/statusConfig.ts';
+import { logActivity } from '@/services/activityLogService.ts';
 
 function getUserStatus(user: UserWithRole): 'active' | 'pending' | 'inactive' {
   if (!user.is_active && !user.last_login) return 'pending';
@@ -112,6 +114,7 @@ export function UsersPage() {
     try {
       const data = await callEdgeFunction<{ message?: string }>('resend-invitation', { user_id: userId });
       setResendMsg(data?.message || 'Correo enviado');
+      logActivity({ action: 'resend_invitation', entityType: 'user', entityId: userId, description: `Reenvió invitación a ${users.find(u => u.id === userId)?.email ?? userId}` });
     } catch (err) {
       setResendMsg((err as Error).message);
     }
@@ -128,6 +131,7 @@ export function UsersPage() {
       const data = await callEdgeFunction<{ message?: string }>('delete-user', { user_id: deleteTarget.id });
       setResendMsg(data?.message || 'Usuario eliminado');
       loadUsers();
+      logActivity({ action: 'delete', entityType: 'user', entityId: deleteTarget.id, description: `Eliminó al usuario ${deleteTarget.full_name}` });
     } catch (err) {
       setResendMsg((err as Error).message);
     }
@@ -138,6 +142,7 @@ export function UsersPage() {
   };
 
   const currentUserId = useAuthStore((s) => s.user?.id);
+  const navigate = useNavigate();
 
   return (
     <div>
@@ -198,7 +203,11 @@ export function UsersPage() {
                 const status = getUserStatus(user);
                 const isPending = status === 'pending';
                 return (
-                  <tr key={user.id}>
+                  <tr
+                    key={user.id}
+                    onClick={() => navigate(`/hub/users/${user.id}`)}
+                    style={{ cursor: 'pointer' }}
+                  >
                     <td>
                       <div className="flex items-center gap-3">
                         <div className="rh-avatar">
@@ -230,7 +239,7 @@ export function UsersPage() {
                     </td>
                     {canWrite('users') && (
                       <td>
-                        <div className="flex items-center gap-2" style={{ whiteSpace: 'nowrap' }}>
+                        <div className="flex items-center gap-2" style={{ whiteSpace: 'nowrap' }} onClick={(e) => e.stopPropagation()}>
                           <button
                             onClick={() => setEditUser(user)}
                             className="rh-btn rh-btn-ghost"

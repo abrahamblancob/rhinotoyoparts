@@ -4,6 +4,7 @@ import { useAsyncData } from '@/hooks/useAsyncData.ts';
 import * as supplierService from '@/services/supplierService.ts';
 import type { Product, Supplier } from '@/lib/database.types.ts';
 import * as productService from '@/services/productService.ts';
+import { logActivity } from '@/services/activityLogService.ts';
 
 const EMPTY_FORM = {
   sku: '',
@@ -122,6 +123,15 @@ export function ProductFormModal({
       }
       setLoading(false);
       return;
+    }
+
+    const savedSku = productData.sku;
+    const savedName = productData.name;
+    const savedId = result.data?.id ?? product?.id;
+    if (isEditMode) {
+      logActivity({ action: 'update', entityType: 'product', entityId: savedId, description: `Actualizó producto ${savedSku}` });
+    } else {
+      logActivity({ action: 'create', entityType: 'product', entityId: savedId, description: `Creó producto ${savedSku} - ${savedName}` });
     }
 
     setSuccess(isEditMode ? 'Producto actualizado exitosamente' : 'Producto creado exitosamente');

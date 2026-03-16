@@ -5,6 +5,7 @@ import { usePermissions } from '@/hooks/usePermissions.ts';
 import { useAuthStore } from '@/stores/authStore.ts';
 import { Modal } from '@/components/hub/shared/Modal.tsx';
 import type { Role, Organization } from '@/lib/database.types.ts';
+import { logActivity } from '@/services/activityLogService.ts';
 
 interface UserCreateModalProps {
   open: boolean;
@@ -130,6 +131,7 @@ export function UserCreateModal({ open, onClose, onCreated }: UserCreateModalPro
 
     setSuccess(fnData?.message || `Invitación enviada a ${form.email}`);
     setLoading(false);
+    logActivity({ action: 'create', entityType: 'user', entityId: fnData?.user_id, description: `Creó usuario ${form.full_name} (${form.email})` });
     setForm({ full_name: '', email: '', phone: '', role_id: '', org_id: organization?.id ?? '' });
     onCreated();
 

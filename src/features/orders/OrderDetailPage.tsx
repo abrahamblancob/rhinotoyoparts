@@ -9,6 +9,7 @@ import { DeliveryPinMap } from '@/components/tracking/DeliveryPinMap.tsx';
 import { OrderCreateModal } from './OrderCreateModal.tsx';
 import { reserveOrderStock } from '@/services/orderService.ts';
 import { createPickListForOrder } from '@/services/pickingService.ts';
+import { logActivity } from '@/services/activityLogService.ts';
 import type { Profile, Carrier } from '@/lib/database.types.ts';
 
 import { OrderProgressBar } from './detail/OrderProgressBar.tsx';
@@ -86,6 +87,12 @@ export function OrderDetailPage() {
         try { await createPickListForOrder(orderId, order.warehouse_id); }
         catch (pickErr) { console.error('Pick list auto-creation failed:', pickErr); }
       }
+      logActivity({
+        action: 'status_change',
+        entityType: 'order',
+        entityId: orderId,
+        description: `Cambió pedido #${order.order_number} a ${newStatus}`,
+      });
       await loadOrder();
     }
     else alert(result?.error ?? 'Error al cambiar estado');
@@ -107,6 +114,12 @@ export function OrderDetailPage() {
     });
 
     await changeStatus('assigned', 'Orden asignada a despachador');
+    logActivity({
+      action: 'assign',
+      entityType: 'order',
+      entityId: order.id,
+      description: `Asignó motorizado a pedido #${order.order_number}`,
+    });
     setShowAssign(false);
     setSelectedDispatcher(null);
     setUpdating(false);
@@ -121,6 +134,12 @@ export function OrderDetailPage() {
 
   const handleCancel = async (reason: string) => {
     await changeStatus('cancelled', reason);
+    logActivity({
+      action: 'cancel',
+      entityType: 'order',
+      entityId: order!.id,
+      description: `Canceló pedido #${order!.order_number}`,
+    });
     setShowCancelModal(false);
   };
 

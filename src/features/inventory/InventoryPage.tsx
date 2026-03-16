@@ -10,6 +10,7 @@ import { Pagination } from '@/features/inventory/upload/components/Pagination.ts
 import { ProductFormModal } from './ProductFormModal.tsx';
 import type { Product } from '@/lib/database.types.ts';
 import * as productService from '@/services/productService.ts';
+import { logActivity } from '@/services/activityLogService.ts';
 import { getOrgSummaries } from '@/services/dashboardService.ts';
 import type { OrgInventorySummary } from '@/services/dashboardService.ts';
 
@@ -82,6 +83,8 @@ export function InventoryPage() {
     setDeleteLoading(true);
 
     await productService.deleteProduct(deleteTarget.id);
+
+    logActivity({ action: 'delete', entityType: 'product', entityId: deleteTarget.id, description: `Eliminó producto ${deleteTarget.sku} - ${deleteTarget.name}` });
 
     setDeleteLoading(false);
     setDeleteTarget(null);

@@ -5,6 +5,7 @@ import { toast } from '@/stores/toastStore.ts';
 import { usePermissions } from '@/hooks/usePermissions.ts';
 import * as warehouseService from '@/services/warehouseService.ts';
 import * as orgService from '@/services/orgService.ts';
+import { logActivity } from '@/services/activityLogService.ts';
 import { CELL_SIZE_M } from '../FloorPlanBuilder.tsx';
 import type { Organization } from '@/lib/database.types.ts';
 import type { ZoneType, RackOrientation } from '@/types/warehouse.ts';
@@ -600,6 +601,15 @@ export function useWarehouseWizard() {
           });
         }
       }
+
+      logActivity({
+        action: editId ? 'update' : 'create',
+        entityType: 'warehouse',
+        entityId: warehouseId,
+        description: editId
+          ? `Actualizó almacén ${warehouse.name}`
+          : `Creó almacén ${warehouse.name}`,
+      });
 
       toast('success', editId ? 'Almacen actualizado exitosamente.' : 'Almacen creado exitosamente.');
       navigate('/hub/warehouse');

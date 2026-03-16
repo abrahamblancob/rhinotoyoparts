@@ -7,6 +7,7 @@ import type { Customer, Product, Organization, Order } from '@/lib/database.type
 import type { Warehouse } from '@/types/warehouse.ts';
 import { reserveOrderStock } from '@/services/orderService.ts';
 import { createPickListForOrder } from '@/services/pickingService.ts';
+import { logActivity } from '@/services/activityLogService.ts';
 
 import { OrgSelectionStep } from './create/OrgSelectionStep.tsx';
 import { OrderFormStep } from './create/OrderFormStep.tsx';
@@ -367,6 +368,12 @@ export function OrderCreateModal({ open, onClose, onCreated, editOrder, editItem
           from_status: editOrder.status, to_status: editOrder.status,
           changed_by: profile.id, note: 'Orden editada', metadata: { action: 'edit' },
         });
+        logActivity({
+          action: 'update',
+          entityType: 'order',
+          entityId: editOrder.id,
+          description: `Editó pedido #${editOrder.order_number}`,
+        });
         onCreated(); onClose(); return;
       }
 
@@ -463,6 +470,12 @@ export function OrderCreateModal({ open, onClose, onCreated, editOrder, editItem
         }
       }
 
+      logActivity({
+        action: 'create',
+        entityType: 'order',
+        entityId: order.id,
+        description: `Creó pedido #${orderNumber}`,
+      });
       onCreated(); onClose();
     } catch (err) { console.error('Error creating order:', err); }
     finally { setSaving(false); }

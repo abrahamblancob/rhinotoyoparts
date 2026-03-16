@@ -3,6 +3,7 @@ import { Modal } from '@/components/hub/shared/Modal.tsx';
 import { supabase } from '@/lib/supabase.ts';
 import { usePermissions } from '@/hooks/usePermissions.ts';
 import type { Organization } from '@/lib/database.types.ts';
+import { logActivity } from '@/services/activityLogService.ts';
 
 interface OrgCreateModalProps {
   open: boolean;
@@ -90,16 +91,20 @@ export function OrgCreateModal({ open, onClose, onCreated, editOrg }: OrgCreateM
         setLoading(false);
         return;
       }
+      logActivity({ action: 'update', entityType: 'organization', entityId: editOrg.id, description: `Actualizó organización ${payload.name}` });
     } else {
-      const { error: insertError } = await supabase
+      const { data: insertedOrg, error: insertError } = await supabase
         .from('organizations')
-        .insert(payload);
+        .insert(payload)
+        .select('id')
+        .single();
 
       if (insertError) {
         setError(insertError.message);
         setLoading(false);
         return;
       }
+      logActivity({ action: 'create', entityType: 'organization', entityId: insertedOrg?.id, description: `Creó organización ${payload.name}` });
     }
 
     setLoading(false);

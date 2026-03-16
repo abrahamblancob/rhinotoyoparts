@@ -251,8 +251,12 @@ export interface AuditLog {
   entity_id: string | null;
   old_data: Record<string, unknown> | null;
   new_data: Record<string, unknown> | null;
+  description: string | null;
+  metadata: Record<string, unknown> | null;
   ip_address: string | null;
   created_at: string;
+  // Joined fields (optional)
+  profiles?: { full_name: string; email: string; avatar_url: string | null };
 }
 
 export interface Notification {

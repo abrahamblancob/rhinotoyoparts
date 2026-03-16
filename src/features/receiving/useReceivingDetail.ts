@@ -4,6 +4,7 @@ import { useAuthStore } from '@/stores/authStore.ts';
 import { usePermissions } from '@/hooks/usePermissions.ts';
 import { useAsyncData } from '@/hooks/useAsyncData.ts';
 import * as receivingService from '@/services/receivingService.ts';
+import { logActivity } from '@/services/activityLogService.ts';
 import type { ReceivingOrder, ReceivingOrderItem } from '@/types/warehouse.ts';
 
 export function useReceivingDetail() {
@@ -57,6 +58,7 @@ export function useReceivingDetail() {
     if (!receivingId || !user) return;
     setActionLoading(true);
     await receivingService.completeReceiving(receivingId, user.id);
+    logActivity({ action: 'complete', entityType: 'receiving_order', entityId: receivingId, description: 'Completó recepción' });
     await reloadOrder();
     setActionLoading(false);
   };

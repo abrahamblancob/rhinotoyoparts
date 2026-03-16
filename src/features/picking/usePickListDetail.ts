@@ -5,6 +5,7 @@ import { usePermissions } from '@/hooks/usePermissions.ts';
 import { useAsyncData } from '@/hooks/useAsyncData.ts';
 import { toast } from '@/stores/toastStore.ts';
 import * as pickingService from '@/services/pickingService.ts';
+import { logActivity } from '@/services/activityLogService.ts';
 import type { PickList, PickListItem } from '@/types/warehouse.ts';
 
 /** Get countdown color based on percentage of time remaining */
@@ -138,6 +139,7 @@ export function usePickListDetail() {
         toast('error', 'No se pudo tomar la lista. Puede que otro almacenista ya la haya tomado.');
       } else {
         toast('success', 'Lista tomada exitosamente');
+        logActivity({ action: 'claim', entityType: 'pick_list', entityId: pickListId, description: 'Reclamó lista de picking' });
         await reloadPickList();
       }
     } catch {
@@ -150,14 +152,16 @@ export function usePickListDetail() {
     if (!pickListId) return;
     setActionLoading(true);
     await pickingService.startPicking(pickListId);
+    logActivity({ action: 'start', entityType: 'pick_list', entityId: pickListId, description: 'Inició picking' });
     await reloadPickList();
     setActionLoading(false);
   };
 
-  const handlePickItem = async (itemId: string, qtyRequired: number) => {
+  const handlePickItem = async (itemId: string, qtyRequired: number, productName?: string) => {
     if (!user) return;
     setActionLoading(true);
     await pickingService.pickItem(itemId, qtyRequired, user.id);
+    logActivity({ action: 'pick_item', entityType: 'pick_list', entityId: pickListId, description: `Pickó ${qtyRequired}x ${productName ?? 'producto'}` });
     await Promise.all([reloadItems(), reloadPickList()]);
     setActionLoading(false);
   };
@@ -166,6 +170,7 @@ export function usePickListDetail() {
     if (!pickListId) return;
     setActionLoading(true);
     await pickingService.completePickList(pickListId);
+    logActivity({ action: 'complete', entityType: 'pick_list', entityId: pickListId, description: 'Completó lista de picking' });
     await reloadPickList();
     setActionLoading(false);
   };

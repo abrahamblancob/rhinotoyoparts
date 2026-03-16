@@ -9,6 +9,7 @@ import { ConfirmDeleteModal } from '@/components/hub/shared/ConfirmDeleteModal.t
 import GooglePlacesAutocomplete from '@/components/GooglePlacesAutocomplete.tsx';
 import type { Customer } from '@/lib/database.types.ts';
 import * as customerService from '@/services/customerService.ts';
+import { logActivity } from '@/services/activityLogService.ts';
 import { getOrgNameMap } from '@/services/orgService.ts';
 import { getOrgCustomerSummaries } from '@/services/dashboardService.ts';
 import type { OrgCustomerSummary } from '@/services/dashboardService.ts';
@@ -131,6 +132,7 @@ export function CustomersPage() {
         setSaveLoading(false);
         return;
       }
+      logActivity({ action: 'update', entityType: 'customer', entityId: editCustomer.id, description: `Actualizó cliente ${payload.name}` });
     } else {
       const orgId = organization?.id;
       if (!orgId) {
@@ -144,6 +146,7 @@ export function CustomersPage() {
         setSaveLoading(false);
         return;
       }
+      logActivity({ action: 'create', entityType: 'customer', entityId: result.data?.id, description: `Creó cliente ${payload.name}` });
     }
 
     setSaveLoading(false);
@@ -159,6 +162,8 @@ export function CustomersPage() {
     setDeleteLoading(true);
 
     await customerService.deleteCustomer(deleteConfirm.id);
+
+    logActivity({ action: 'delete', entityType: 'customer', entityId: deleteConfirm.id, description: `Eliminó cliente ${deleteConfirm.name}` });
 
     setDeleteLoading(false);
     setDeleteConfirm(null);

@@ -406,7 +406,7 @@ export function PickListDetail() {
                         className="rh-btn rh-btn-primary"
                         style={{ fontSize: 12, padding: '4px 12px' }}
                         disabled={actionLoading}
-                        onClick={() => handlePickItem(item.id, item.quantity_required)}
+                        onClick={() => handlePickItem(item.id, item.quantity_required, item.product?.name)}
                       >
                         <CheckCircle2 size={14} style={{ marginRight: 4 }} />
                         Marcar como recogido

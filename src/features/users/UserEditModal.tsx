@@ -4,6 +4,7 @@ import { usePermissions } from '@/hooks/usePermissions.ts';
 import { useAuthStore } from '@/stores/authStore.ts';
 import { Modal } from '@/components/hub/shared/Modal.tsx';
 import type { Role, Organization, Profile } from '@/lib/database.types.ts';
+import { logActivity } from '@/services/activityLogService.ts';
 
 interface UserWithRole extends Profile {
   role_name?: string;
@@ -130,6 +131,7 @@ export function UserEditModal({ user, onClose, onSaved }: UserEditModalProps) {
     }
 
     setLoading(false);
+    logActivity({ action: 'update', entityType: 'user', entityId: user.id, description: `Actualizó usuario ${form.full_name}` });
     onClose();
     onSaved();
   };

@@ -5,6 +5,7 @@ import { useAsyncData } from '@/hooks/useAsyncData.ts';
 import { supabase } from '@/lib/supabase.ts';
 import { parsePhotoUrls } from '@/utils/photos.ts';
 import * as packingService from '@/services/packingService.ts';
+import { logActivity } from '@/services/activityLogService.ts';
 import type { PackSession, PackSessionItem } from '@/types/warehouse.ts';
 
 export function usePackSessionDetail() {
@@ -51,9 +52,10 @@ export function usePackSessionDetail() {
   const allVerified = allItems.length > 0 && allItems.every((i) => i.quantity_verified >= i.quantity_expected);
   const savedPhotos = session ? parsePhotoUrls(session.package_photo_url) : [];
 
-  const handleVerifyItem = async (itemId: string, qtyExpected: number) => {
+  const handleVerifyItem = async (itemId: string, qtyExpected: number, productName?: string) => {
     setActionLoading(true);
     await packingService.verifyPackItem(itemId, qtyExpected);
+    logActivity({ action: 'verify_item', entityType: 'pack_session', entityId: sessionId, description: `Verificó ${qtyExpected}x ${productName ?? 'producto'}` });
     await Promise.all([reloadItems(), reloadSession()]);
     setActionLoading(false);
   };
@@ -92,11 +94,16 @@ export function usePackSessionDetail() {
       setUploadProgress('');
     }
 
+    if (photoUrls.length > 0) {
+      logActivity({ action: 'add_photo', entityType: 'pack_session', entityId: sessionId, description: 'Agregó foto de empaque' });
+    }
+
     const weightKg = parseFloat(weight) || undefined;
     await packingService.completePackSession(sessionId, {
       package_weight_kg: weightKg,
       package_photo_url: photoUrls.length > 0 ? JSON.stringify(photoUrls) : undefined,
     });
+    logActivity({ action: 'complete', entityType: 'pack_session', entityId: sessionId, description: 'Completó empaque' });
     await reloadSession();
     setActionLoading(false);
   };

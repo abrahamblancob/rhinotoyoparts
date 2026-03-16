@@ -1,6 +1,7 @@
 import { create } from 'zustand';
 import { supabase } from '@/lib/supabase.ts';
 import type { Organization, Profile } from '@/lib/database.types.ts';
+import { logActivity } from '@/services/activityLogService.ts';
 
 interface UserPermission {
   module: string;
@@ -53,11 +54,13 @@ export const useAuthStore = create<AuthState>((set, get) => ({
         .eq('id', data.user.id)
         .then(undefined, (err: unknown) => console.error('Failed to update last_login:', err));
     }
+    logActivity({ action: 'login', entityType: 'session', description: 'Inició sesión' });
     set({ loading: false });
     return { error: null };
   },
 
   logout: async () => {
+    logActivity({ action: 'logout', entityType: 'session', description: 'Cerró sesión' });
     await supabase.auth.signOut();
     set({
       user: null,

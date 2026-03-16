@@ -35,6 +35,7 @@ const StockMovements = lazy(() => import('@/features/stock/StockMovements.tsx').
 const StockAdjustment = lazy(() => import('@/features/stock/StockAdjustment.tsx').then(m => ({ default: m.StockAdjustment })));
 const ReturnsDashboard = lazy(() => import('@/features/returns/ReturnsDashboard.tsx').then(m => ({ default: m.ReturnsDashboard })));
 const ReturnDetailPage = lazy(() => import('@/features/returns/ReturnDetailPage.tsx').then(m => ({ default: m.ReturnDetailPage })));
+const UserActivityPage = lazy(() => import('@/features/users/UserActivityPage.tsx').then(m => ({ default: m.UserActivityPage })));
 
 /** Redirects vendedor/despachador away from Dashboard to their relevant page */
 function SmartIndex() {
@@ -88,6 +89,7 @@ export function HubRouter() {
                   <Route index element={<SmartIndex />} />
                   <Route path="organizations" element={<OrgListPage />} />
                   <Route path="users" element={<UsersPage />} />
+                  <Route path="users/:userId" element={<UserActivityPage />} />
                   <Route path="suppliers" element={<SuppliersPage />} />
                   <Route path="inventory" element={<InventoryPage />} />
                   <Route path="inventory/upload" element={<InventoryUploadPage />} />

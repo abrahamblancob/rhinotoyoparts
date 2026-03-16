@@ -4,6 +4,7 @@ import { QRCodeSVG } from 'qrcode.react';
 import { Modal } from '@/components/hub/shared/Modal.tsx';
 import { useAsyncData } from '@/hooks/useAsyncData.ts';
 import * as warehouseService from '@/services/warehouseService.ts';
+import { logActivity } from '@/services/activityLogService.ts';
 import type { WarehouseLocation, InventoryStock } from '@/types/warehouse.ts';
 
 interface LocationDetailModalProps {
@@ -121,6 +122,13 @@ export function LocationDetailModal({ open, location, warehouseId, orgId, onClos
     // 3. Mark destination location as occupied
     await warehouseService.updateLocation(location.id, { is_occupied: true });
 
+    logActivity({
+      action: 'assign_stock',
+      entityType: 'location',
+      entityId: location.id,
+      description: `Asignó ${selectedProduct.product?.name ?? 'producto'} a ubicación ${location.code}`,
+    });
+
     setAssigning(false);
     setShowProductSearch(false);
     setSelectedProduct(null);
@@ -156,6 +164,13 @@ export function LocationDetailModal({ open, location, warehouseId, orgId, onClos
       setRemoving(false);
       return;
     }
+
+    logActivity({
+      action: 'remove_stock',
+      entityType: 'location',
+      entityId: location.id,
+      description: `Removió stock de ubicación ${location.code}`,
+    });
 
     setRemoving(false);
     setConfirmRemove(false);
