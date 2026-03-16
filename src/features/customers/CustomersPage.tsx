@@ -2,7 +2,6 @@ import { useEffect, useState, useCallback } from 'react';
 import { usePermissions } from '@/hooks/usePermissions.ts';
 import { useAuthStore } from '@/stores/authStore.ts';
 import { useOrgSelector } from '@/hooks/useOrgSelector.ts';
-import { StatsCard } from '@/components/hub/shared/StatsCard.tsx';
 import { EmptyState } from '@/components/hub/shared/EmptyState.tsx';
 import { OrgSelectorGrid } from '@/components/hub/shared/OrgSelectorGrid.tsx';
 import { Modal } from '@/components/hub/shared/Modal.tsx';
