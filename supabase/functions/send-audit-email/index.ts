@@ -89,7 +89,7 @@ Deno.serve(async (req) => {
         '*, location:warehouse_locations!location_id(code, level, position), rack:warehouse_racks!rack_id(code, name)'
       )
       .eq('audit_id', audit_id as string)
-      .order('created_at')
+      .order('location_id')
 
     const auditItems = items ?? []
 
