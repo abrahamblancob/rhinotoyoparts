@@ -336,3 +336,45 @@ export interface RackFormData {
   rack_width_m: number | null;
   rack_depth_m: number | null;
 }
+
+// ── Stock Audit ──
+
+export type StockAuditType = 'manual' | 'random_single' | 'random_multiple';
+export type StockAuditStatus = 'in_progress' | 'completed';
+export type StockAuditItemStatus = 'pending' | 'match' | 'discrepancy' | 'empty';
+
+export interface StockAudit {
+  id: string;
+  org_id: string;
+  warehouse_id: string;
+  audited_by: string;
+  audit_type: StockAuditType;
+  status: StockAuditStatus;
+  location_count: number;
+  match_count: number;
+  discrepancy_count: number;
+  created_at: string;
+  completed_at: string | null;
+  email_sent_to: string | null;
+  notes: string | null;
+  // Joins
+  auditor?: { full_name: string; email: string };
+  warehouse?: { name: string; code: string };
+}
+
+export interface StockAuditItem {
+  id: string;
+  audit_id: string;
+  location_id: string;
+  rack_id: string;
+  product_id: string | null;
+  product_name: string | null;
+  product_sku: string | null;
+  expected_quantity: number;
+  actual_quantity: number | null;
+  status: StockAuditItemStatus;
+  audited_at: string | null;
+  // Joins
+  location?: { code: string; level: number; position: number };
+  rack?: { code: string; name: string };
+}

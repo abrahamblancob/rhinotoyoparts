@@ -64,6 +64,8 @@ export interface WarehouseCenitalMiniProps {
   highlightColor?: string;
   /** Dim non-highlighted racks when highlightRackIds is provided */
   dimNonHighlighted?: boolean;
+  /** Click handler for a rack in the cenital view */
+  onRackClick?: (rackId: string) => void;
 }
 
 // ── Constants ──
@@ -149,6 +151,7 @@ export function WarehouseCenitalMini({
   highlightRackIds,
   highlightColor = '#F97316',
   dimNonHighlighted = false,
+  onRackClick,
 }: WarehouseCenitalMiniProps) {
   // Build blocks from aisles + racks
   const sortedAisles = [...aisles].sort((a, b) => a.code.localeCompare(b.code));
@@ -333,6 +336,7 @@ export function WarehouseCenitalMini({
                 return (
                   <div
                     key={ro.rackId}
+                    onClick={onRackClick ? () => onRackClick(rack.id) : undefined}
                     style={{
                       position: 'absolute',
                       left: (pos.gridX + ro.offsetX) * CELL_W + 2,
@@ -349,6 +353,7 @@ export function WarehouseCenitalMini({
                       zIndex: isHighlighted ? 4 : 3,
                       opacity: rackOpacity,
                       transition: 'opacity 0.2s',
+                      cursor: onRackClick ? 'pointer' : undefined,
                     }}
                   >
                     <span style={{

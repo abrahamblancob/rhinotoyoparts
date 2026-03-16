@@ -38,11 +38,27 @@ interface PickingData {
   pickedSet: Set<string>;
 }
 
+interface AuditData {
+  mode: 'audit';
+  /** Set of location IDs selected for audit */
+  selectedLocationIds: Set<string>;
+  /** Set of location IDs currently animating (jackpot) */
+  animatingLocationIds?: Set<string>;
+  /** Set of location IDs already audited */
+  auditedLocationIds?: Set<string>;
+  /** Set of location IDs that have stock (products) */
+  stockLocationIds?: Set<string>;
+  /** Click handler for a location cell */
+  onLocationClick?: (locationId: string, rackId: string) => void;
+}
+
 /* ── Props ─────────────────────────────────────────── */
 
 interface RackMiniGridProps {
   rack: WarehouseRack;
-  data: OccupancyData | PickingData;
+  data: OccupancyData | PickingData | AuditData;
+  /** All locations for this rack (used in audit mode) */
+  allLocations?: WarehouseLocation[];
   /** Per-rack color (hex) – used in occupancy mode for rack identity */
   rackColor?: string;
   /** Pixel size per cell – defaults to { width: 18, height: 16 } */
@@ -62,6 +78,7 @@ interface RackMiniGridProps {
 export function RackMiniGrid({
   rack,
   data,
+  allLocations,
   rackColor,
   cellSize = { width: 18, height: 16 },
   maxLevels,
@@ -76,12 +93,15 @@ export function RackMiniGrid({
 
   const locationMap = useMemo(() => {
     const map = new Map<string, WarehouseLocation>();
-    const locs = data.mode === 'occupancy' ? data.locations : data.targetLocations;
+    const locs =
+      data.mode === 'occupancy' ? data.locations
+      : data.mode === 'picking' ? data.targetLocations
+      : allLocations ?? [];
     for (const loc of locs) {
       map.set(`${loc.level}-${loc.position}`, loc);
     }
     return map;
-  }, [data]);
+  }, [data, allLocations]);
 
   /* ── Build grid rows (level 1 = top, levels = bottom) ── */
 
@@ -142,7 +162,7 @@ export function RackMiniGrid({
           title = `${location.code} | Vacio`;
         }
       }
-    } else {
+    } else if (data.mode === 'picking') {
       // picking mode
       const isTarget = location !== null;
       const isPicked = location ? data.pickedSet.has(location.id) : false;
@@ -162,12 +182,48 @@ export function RackMiniGrid({
       title = location
         ? `${location.code} — ${isPicked ? 'Recogido' : 'Pendiente'}`
         : `${String.fromCharCode(64 + level)}-${position}`;
+    } else {
+      // audit mode
+      const isSelected = location ? data.selectedLocationIds.has(location.id) : false;
+      const isAnimating = location ? (data.animatingLocationIds?.has(location.id) ?? false) : false;
+      const isAudited = location ? (data.auditedLocationIds?.has(location.id) ?? false) : false;
+      const hasStock = location ? (data.stockLocationIds?.has(location.id) ?? false) : false;
+
+      if (isAudited) {
+        bg = '#10B981';
+        border = '#059669';
+        icon = cellSize.width >= 30 ? <CheckCircle2 size={14} color="#fff" /> : null;
+      } else if (isSelected) {
+        bg = '#F97316';
+        border = '#EA580C';
+        icon = cellSize.width >= 30 ? <MapPin size={14} color="#fff" /> : null;
+      } else if (isAnimating) {
+        bg = '#FBBF24';
+        border = '#F59E0B';
+      } else if (location && hasStock) {
+        // Location with product — blue tint
+        bg = '#DBEAFE';
+        border = '#3B82F6';
+      } else if (location) {
+        // Empty location
+        bg = '#F3F2F1';
+        border = '#E1DFDD';
+      } else {
+        bg = '#F9FAFB';
+        border = '#E5E7EB';
+      }
+      title = location
+        ? `${location.code}${hasStock ? ' — Con producto' : ' — Vacio'}${isSelected ? ' — Seleccionado' : isAudited ? ' — Auditado' : ''}`
+        : `${String.fromCharCode(64 + level)}-${position}`;
     }
+
+    const isClickable = data.mode === 'audit' && location && data.onLocationClick;
 
     return (
       <div
         key={position}
         title={title}
+        onClick={isClickable ? () => data.onLocationClick!(location!.id, rack.id) : undefined}
         style={{
           width: cellSize.width,
           height: cellSize.height,
@@ -177,7 +233,11 @@ export function RackMiniGrid({
           display: 'flex',
           alignItems: 'center',
           justifyContent: 'center',
-          transition: 'background-color 0.2s',
+          transition: 'background-color 0.15s, transform 0.15s',
+          cursor: isClickable ? 'pointer' : undefined,
+          ...(data.mode === 'audit' && location && (data.animatingLocationIds?.has(location.id))
+            ? { animation: 'auditPulse 0.4s ease-in-out infinite alternate' }
+            : {}),
         }}
       >
         {icon}
