@@ -37,7 +37,7 @@ export function WarehouseSelector({ orgId, isPlatform, onSelect }: WarehouseSele
     <div>
       <h3 style={{ fontSize: 16, fontWeight: 700, color: '#1E293B', marginBottom: 16, display: 'flex', alignItems: 'center', gap: 8 }}>
         <WarehouseIcon size={18} />
-        Selecciona un Almacen
+        Selecciona un Almacén
       </h3>
 
       <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(280px, 1fr))', gap: 16 }}>
@@ -80,7 +80,7 @@ export function WarehouseSelector({ orgId, isPlatform, onSelect }: WarehouseSele
               )}
               <span style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
                 <Package size={12} />
-                Almacen
+                Almacén
               </span>
               <span style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
                 <ClipboardCheck size={12} />

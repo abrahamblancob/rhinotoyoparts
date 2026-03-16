@@ -27,7 +27,7 @@ export function AuditHistory({ warehouseId }: AuditHistoryProps) {
 
   const handleResendEmail = async (audit: StockAudit) => {
     if (!audit.email_sent_to) {
-      toast('error', 'Esta auditoria no tiene correo asociado');
+      toast('error', 'Esta auditoría no tiene correo asociado');
       return;
     }
     setResendingId(audit.id);
@@ -50,8 +50,8 @@ export function AuditHistory({ warehouseId }: AuditHistoryProps) {
     return (
       <div style={{ textAlign: 'center', padding: 40, color: '#94A3B8' }}>
         <Clock size={48} style={{ marginBottom: 12, opacity: 0.4 }} />
-        <p style={{ fontSize: 14, fontWeight: 600 }}>No hay auditorias registradas</p>
-        <p style={{ fontSize: 12 }}>Las auditorias completadas aparecen aqui</p>
+        <p style={{ fontSize: 14, fontWeight: 600 }}>No hay auditorías registradas</p>
+        <p style={{ fontSize: 12 }}>Las auditorías completadas aparecen aquí</p>
       </div>
     );
   }
@@ -61,7 +61,7 @@ export function AuditHistory({ warehouseId }: AuditHistoryProps) {
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 16 }}>
         <h3 style={{ fontSize: 16, fontWeight: 700, color: '#1E293B', display: 'flex', alignItems: 'center', gap: 8 }}>
           <Clock size={18} />
-          Historial de Auditorias ({items.length})
+          Historial de Auditorías ({items.length})
         </h3>
         <button
           onClick={reload}

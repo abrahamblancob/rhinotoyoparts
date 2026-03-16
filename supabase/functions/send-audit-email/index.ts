@@ -37,7 +37,7 @@ Deno.serve(async (req) => {
     try {
       body = await req.json()
     } catch {
-      return jsonResponse({ error: 'Body JSON invalido' }, 400)
+      return jsonResponse({ error: 'Body JSON inválido' }, 400)
     }
 
     const { audit_id, email } = body
@@ -80,7 +80,7 @@ Deno.serve(async (req) => {
 
     if (auditError || !audit) {
       console.error('Audit query error:', auditError?.message, auditError?.details, auditError?.hint)
-      return jsonResponse({ error: `Auditoria no encontrada: ${auditError?.message ?? 'sin datos'}` }, 404)
+      return jsonResponse({ error: `Auditoría no encontrada: ${auditError?.message ?? 'sin datos'}` }, 404)
     }
 
     const { data: items } = await supabaseAdmin
@@ -111,7 +111,7 @@ Deno.serve(async (req) => {
     const statusLabels: Record<string, string> = {
       match: 'Coincide',
       discrepancy: 'Discrepancia',
-      empty: 'Vacio',
+      empty: 'Vacío',
       pending: 'Pendiente',
     }
     const statusColors: Record<string, string> = {
@@ -124,7 +124,7 @@ Deno.serve(async (req) => {
     const typeLabels: Record<string, string> = {
       manual: 'Manual',
       random_single: '1 Aleatorio',
-      random_multiple: 'Multiples Aleatorios',
+      random_multiple: 'Múltiples Aleatorios',
     }
 
     // Build HTML email
@@ -159,7 +159,7 @@ Deno.serve(async (req) => {
     <head><meta charset="UTF-8"></head>
     <body style="font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; color: #1E293B; max-width: 700px; margin: 0 auto; padding: 20px;">
       <div style="background: linear-gradient(135deg, #D3010A 0%, #B91C1C 100%); color: #fff; padding: 24px 32px; border-radius: 12px 12px 0 0;">
-        <h1 style="margin: 0; font-size: 22px;">Reporte de Auditoria de Stock</h1>
+        <h1 style="margin: 0; font-size: 22px;">Reporte de Auditoría de Stock</h1>
         <p style="margin: 6px 0 0; opacity: 0.9; font-size: 14px;">${warehouseName} (${warehouseCode}) — ${auditDate}</p>
       </div>
 
@@ -191,7 +191,7 @@ Deno.serve(async (req) => {
         <table style="width: 100%; border-collapse: collapse; font-size: 13px;">
           <thead>
             <tr style="background: #F8FAFC; border-bottom: 2px solid #E2E8F0;">
-              <th style="text-align: left; padding: 10px 12px; color: #64748B; font-size: 11px;">Ubicacion</th>
+              <th style="text-align: left; padding: 10px 12px; color: #64748B; font-size: 11px;">Ubicación</th>
               <th style="text-align: left; padding: 10px 12px; color: #64748B; font-size: 11px;">Estante</th>
               <th style="text-align: left; padding: 10px 12px; color: #64748B; font-size: 11px;">Producto</th>
               <th style="text-align: left; padding: 10px 12px; color: #64748B; font-size: 11px;">SKU</th>
@@ -207,7 +207,7 @@ Deno.serve(async (req) => {
 
         <hr style="border: none; border-top: 1px solid #E2E8F0; margin: 24px 0;">
         <p style="font-size: 11px; color: #94A3B8; text-align: center;">
-          Generado por Rhino Hub — Auditoria de Stock<br>
+          Generado por Rhino Hub — Auditoría de Stock<br>
           Este es un registro inmutable. No se puede editar una vez completado.
         </p>
       </div>
@@ -231,7 +231,7 @@ Deno.serve(async (req) => {
       body: JSON.stringify({
         from: 'Rhino Hub <noreply@rhinotoyoparts.com>',
         to: [email as string],
-        subject: `Reporte de Auditoria — ${warehouseName} — ${auditDate}`,
+        subject: `Reporte de Auditoría — ${warehouseName} — ${auditDate}`,
         html: htmlBody,
       }),
     })

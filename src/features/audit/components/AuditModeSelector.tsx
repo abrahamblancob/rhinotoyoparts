@@ -14,7 +14,7 @@ export function AuditModeSelector({ onSelect }: AuditModeSelectorProps) {
       type: 'manual',
       icon: Target,
       title: '1 Lugar Manual',
-      description: 'Selecciona la ubicacion directamente en el mapa del almacen',
+      description: 'Selecciona la ubicación directamente en el mapa del almacén',
       color: '#3B82F6',
       bg: '#EFF6FF',
     },
@@ -22,7 +22,7 @@ export function AuditModeSelector({ onSelect }: AuditModeSelectorProps) {
       type: 'random_single',
       icon: Dice1,
       title: '1 Lugar Aleatorio',
-      description: 'El sistema seleccionara 1 ubicacion al azar con animacion tipo jackpot',
+      description: 'El sistema seleccionará 1 ubicación al azar con animación tipo jackpot',
       color: '#F97316',
       bg: '#FFF7ED',
     },
@@ -30,7 +30,7 @@ export function AuditModeSelector({ onSelect }: AuditModeSelectorProps) {
       type: 'random_multiple',
       icon: Dice5,
       title: 'X Lugares Aleatorios',
-      description: 'Selecciona multiples ubicaciones al azar para auditar',
+      description: 'Selecciona múltiples ubicaciones al azar para auditar',
       color: '#8B5CF6',
       bg: '#F5F3FF',
     },
@@ -39,7 +39,7 @@ export function AuditModeSelector({ onSelect }: AuditModeSelectorProps) {
   return (
     <div>
       <h3 style={{ fontSize: 16, fontWeight: 700, color: '#1E293B', marginBottom: 16 }}>
-        Selecciona el modo de auditoria
+        Selecciona el modo de auditoría
       </h3>
 
       <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: 16 }}>

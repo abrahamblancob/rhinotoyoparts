@@ -40,7 +40,7 @@ export function AuditEmailModal({
     <Modal
       open={open}
       onClose={onClose}
-      title="Enviar Reporte de Auditoria"
+      title="Enviar Reporte de Auditoría"
       footer={
         <div style={{ display: 'flex', gap: 10, justifyContent: 'flex-end' }}>
           <button
@@ -92,7 +92,7 @@ export function AuditEmailModal({
         <div>
           <label style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 13, fontWeight: 600, color: '#475569', marginBottom: 6 }}>
             <Mail size={14} />
-            Correo electronico
+            Correo electrónico
           </label>
           <input
             type="email"
@@ -103,7 +103,7 @@ export function AuditEmailModal({
             style={{ width: '100%' }}
           />
           <p style={{ fontSize: 11, color: '#94A3B8', marginTop: 4 }}>
-            Se enviara un resumen detallado de la auditoria a este correo.
+            Se enviará un resumen detallado de la auditoría a este correo.
           </p>
         </div>
       </div>

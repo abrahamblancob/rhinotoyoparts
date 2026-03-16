@@ -113,10 +113,10 @@ export function StockAuditPage() {
         summaries={summaries}
         loading={loadingSummaries}
         onSelect={setSelectedOrgId}
-        pageTitle="Auditoria de Stock"
-        pageSubtitle="Selecciona una organizacion para auditar su inventario"
+        pageTitle="Auditoría de Stock"
+        pageSubtitle="Selecciona una organización para auditar su inventario"
         statFields={[
-          { key: 'totalAudits', label: 'Auditorias', color: '#6366F1' },
+          { key: 'totalAudits', label: 'Auditorías', color: '#6366F1' },
           { key: 'warehouseCount', label: 'Almacenes', color: '#10B981' },
         ]}
       />
@@ -150,11 +150,11 @@ export function StockAuditPage() {
             </button>
           )}
           <div>
-            <h1 className="rh-page-title">Auditoria de Stock</h1>
+            <h1 className="rh-page-title">Auditoría de Stock</h1>
             <p className="rh-page-subtitle">
               {audit.selectedWarehouse
                 ? `${audit.selectedWarehouse.name} (${audit.selectedWarehouse.code})`
-                : 'Verificacion de inventario fisico vs sistema'}
+                : 'Verificación de inventario físico vs sistema'}
             </p>
           </div>
         </div>
@@ -181,7 +181,7 @@ export function StockAuditPage() {
           <div style={{ display: 'flex', gap: 0, marginBottom: 20, borderBottom: '2px solid #E2E8F0' }}>
             <button onClick={() => setTab('new')} style={tabStyle(tab === 'new')}>
               <Plus size={14} />
-              Nueva Auditoria
+              Nueva Auditoría
             </button>
             <button onClick={() => setTab('history')} style={tabStyle(tab === 'history')}>
               <History size={14} />
@@ -233,7 +233,7 @@ export function StockAuditPage() {
                       }}
                     >
                       <ClipboardCheck size={14} />
-                      Iniciar Auditoria ({audit.selectedLocationIds.size} ubicacion{audit.selectedLocationIds.size !== 1 ? 'es' : ''})
+                      Iniciar Auditoría ({audit.selectedLocationIds.size} ubicación{audit.selectedLocationIds.size !== 1 ? 'es' : ''})
                     </button>
                   </div>
                 </>
@@ -250,7 +250,7 @@ export function StockAuditPage() {
                       animation: jackpot.phase !== 'done' ? 'pulse 1s ease-in-out infinite' : undefined,
                     }}>
                       {jackpot.phase === 'done'
-                        ? `Seleccionadas ${jackpot.finalIds.size} ubicacion${jackpot.finalIds.size !== 1 ? 'es' : ''}`
+                        ? `Seleccionadas ${jackpot.finalIds.size} ubicación${jackpot.finalIds.size !== 1 ? 'es' : ''}`
                         : jackpot.phase === 'settling' ? 'Deteniendo...' : 'Seleccionando ubicaciones...'}
                     </p>
                   </div>
@@ -306,10 +306,10 @@ export function StockAuditPage() {
                 <div style={{ textAlign: 'center', padding: 40 }}>
                   <ClipboardCheck size={48} style={{ color: '#10B981', marginBottom: 16 }} />
                   <h3 style={{ fontSize: 18, fontWeight: 700, color: '#1E293B', marginBottom: 8 }}>
-                    Auditoria Completada
+                    Auditoría Completada
                   </h3>
                   <p style={{ fontSize: 13, color: '#64748B', marginBottom: 24 }}>
-                    La auditoria ha sido registrada exitosamente.
+                    La auditoría ha sido registrada exitosamente.
                   </p>
                   <div style={{ display: 'flex', gap: 12, justifyContent: 'center' }}>
                     <button
@@ -318,7 +318,7 @@ export function StockAuditPage() {
                       style={{ display: 'flex', alignItems: 'center', gap: 6 }}
                     >
                       <Plus size={14} />
-                      Nueva Auditoria
+                      Nueva Auditoría
                     </button>
                     <button
                       onClick={() => setTab('history')}

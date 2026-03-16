@@ -97,7 +97,7 @@ export function useStockAudit(orgId: string | undefined): UseStockAuditReturn {
   const startAudit = useCallback(async () => {
     if (!selectedWarehouse || !auditType || !user || !orgId) return;
     if (selectedLocationIds.size === 0) {
-      toast('error', 'Selecciona al menos una ubicacion');
+      toast('error', 'Selecciona al menos una ubicación');
       return;
     }
 
@@ -111,7 +111,7 @@ export function useStockAudit(orgId: string | undefined): UseStockAuditReturn {
     });
 
     if (auditError || !newAudit) {
-      toast('error', `Error al crear auditoria: ${auditError}`);
+      toast('error', `Error al crear auditoría: ${auditError}`);
       return;
     }
 
@@ -187,7 +187,7 @@ export function useStockAudit(orgId: string | undefined): UseStockAuditReturn {
 
     setCompleting(false);
     setPhase('email_modal');
-    toast('success', 'Auditoria completada exitosamente');
+    toast('success', 'Auditoría completada exitosamente');
   }, [audit, auditItems]);
 
   const sendEmail = useCallback(async (email: string) => {

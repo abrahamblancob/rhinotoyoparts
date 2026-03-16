@@ -107,7 +107,7 @@ export function AuditMapView({
   if (loading) {
     return (
       <div style={{ padding: 16, textAlign: 'center', color: '#8A8886', fontSize: 13 }}>
-        Cargando mapa del almacen...
+        Cargando mapa del almacén...
       </div>
     );
   }
@@ -141,7 +141,7 @@ export function AuditMapView({
     >
       <h3 style={{ fontSize: 15, fontWeight: 600, color: '#323130', marginBottom: 16, display: 'flex', alignItems: 'center', gap: 6 }}>
         <MapPin size={16} />
-        Mapa del Almacen — Auditoria de Stock
+        Mapa del Almacén — Auditoría de Stock
       </h3>
 
       <div style={{ display: 'grid', gridTemplateColumns: hasCenital ? '1fr 1fr' : '1fr', gap: 20 }}>
@@ -268,7 +268,7 @@ export function AuditMapView({
         </span>
         <span style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
           <div style={{ width: 14, height: 14, borderRadius: 3, backgroundColor: '#F3F2F1', border: '1px solid #E1DFDD' }} />
-          Vacio
+          Vacío
         </span>
         <span style={{ display: 'flex', alignItems: 'center', gap: 4, marginLeft: 8, borderLeft: '1px solid #E1DFDD', paddingLeft: 12 }}>
           <div style={{ width: 14, height: 14, borderRadius: 3, backgroundColor: '#F97316', border: '1px solid #EA580C' }} />

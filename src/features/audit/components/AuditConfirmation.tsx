@@ -38,7 +38,7 @@ export function AuditConfirmation({ items, onUpdateItem, onComplete, completing 
     switch (status) {
       case 'match': return { bg: '#ECFDF5', border: '#10B981', text: '#059669', label: 'Coincide', icon: <CheckCircle2 size={14} color="#10B981" /> };
       case 'discrepancy': return { bg: '#FEF2F2', border: '#EF4444', text: '#DC2626', label: 'Discrepancia', icon: <AlertTriangle size={14} color="#EF4444" /> };
-      case 'empty': return { bg: '#F8FAFC', border: '#94A3B8', text: '#64748B', label: 'Vacio', icon: <Package size={14} color="#94A3B8" /> };
+      case 'empty': return { bg: '#F8FAFC', border: '#94A3B8', text: '#64748B', label: 'Vacío', icon: <Package size={14} color="#94A3B8" /> };
       default: return { bg: '#FFFBEB', border: '#F59E0B', text: '#D97706', label: 'Pendiente', icon: <MapPin size={14} color="#F59E0B" /> };
     }
   };
@@ -46,7 +46,7 @@ export function AuditConfirmation({ items, onUpdateItem, onComplete, completing 
   return (
     <div>
       <h3 style={{ fontSize: 16, fontWeight: 700, color: '#1E293B', marginBottom: 16 }}>
-        Confirmacion de Auditoria
+        Confirmación de Auditoría
       </h3>
 
       {/* Summary bar */}
@@ -65,7 +65,7 @@ export function AuditConfirmation({ items, onUpdateItem, onComplete, completing 
         </span>
         {emptyCount > 0 && (
           <span style={{ fontSize: 13, color: '#94A3B8' }}>
-            Vacios: <strong>{emptyCount}</strong>
+            Vacíos: <strong>{emptyCount}</strong>
           </span>
         )}
       </div>
@@ -215,7 +215,7 @@ export function AuditConfirmation({ items, onUpdateItem, onComplete, completing 
           }}
         >
           <CheckCircle2 size={16} />
-          {completing ? 'Finalizando...' : 'Finalizar Auditoria'}
+          {completing ? 'Finalizando...' : 'Finalizar Auditoría'}
         </button>
         {!allAudited && (
           <p style={{ fontSize: 11, color: '#F59E0B', marginLeft: 12, alignSelf: 'center' }}>
