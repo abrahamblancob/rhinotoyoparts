@@ -838,14 +838,11 @@ export function WarehouseLayoutPage() {
       {activeWarehouse.width_m && activeWarehouse.length_m && (() => {
         const whW = activeWarehouse.width_m!;
         const whL = activeWarehouse.length_m!;
-        const gridW = Math.ceil(whW);
-        const gridH = Math.ceil(whL);
-        const maxViewW = 460;
-        const maxViewH = 320;
-        const cellW = maxViewW / gridW;
-        const cellH = maxViewH / gridH;
-        const viewW = maxViewW;
-        const viewH = maxViewH;
+        /* Fill available space per axis — schematic view, not a blueprint */
+        const viewW = 520;
+        const viewH = 420;
+        const cellW = viewW / whW;    /* px per meter */
+        const cellH = viewH / whL;
 
         const displayZones = (zones ?? []).filter(
           (z) => z.position_x != null && z.position_y != null && z.width != null && z.height != null,
