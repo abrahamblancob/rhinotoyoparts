@@ -24,8 +24,7 @@ import type {
   ReceivingStatus,
   ReceivingItemStatus,
 } from '@/types/warehouse.ts';
-import type { Product, Supplier } from '@/lib/database.types.ts';
-import { getAllActiveSuppliers } from '@/services/supplierService.ts';
+import type { Product } from '@/lib/database.types.ts';
 
 const STATUS_LABELS: Record<ReceivingStatus, string> = {
   pending: 'Pendiente',
@@ -406,6 +405,7 @@ export function ReceivingDetailPage() {
         open={showAddProduct}
         receivingOrderId={order.id}
         warehouseOrgId={order.warehouse?.org_id ?? order.org_id}
+        supplierId={order.supplier_id}
         existingItems={allItems}
         onClose={() => setShowAddProduct(false)}
         onAdded={() => {
@@ -429,12 +429,13 @@ interface AddReceivingProductModalProps {
   open: boolean;
   receivingOrderId: string;
   warehouseOrgId: string;
+  supplierId: string | null;
   existingItems: ReceivingOrderItem[];
   onClose: () => void;
   onAdded: () => void;
 }
 
-function AddReceivingProductModal({ open, receivingOrderId, warehouseOrgId, existingItems, onClose, onAdded }: AddReceivingProductModalProps) {
+function AddReceivingProductModal({ open, receivingOrderId, warehouseOrgId, supplierId, existingItems, onClose, onAdded }: AddReceivingProductModalProps) {
   const [searchTerm, setSearchTerm] = useState('');
   const [searchResults, setSearchResults] = useState<Product[]>([]);
   const [searching, setSearching] = useState(false);
@@ -444,10 +445,6 @@ function AddReceivingProductModal({ open, receivingOrderId, warehouseOrgId, exis
   const [error, setError] = useState<string | null>(null);
   const [initialProducts, setInitialProducts] = useState<Product[]>([]);
   const [initialLoading, setInitialLoading] = useState(false);
-
-  // Supplier filter
-  const [suppliers, setSuppliers] = useState<Supplier[]>([]);
-  const [selectedSupplierId, setSelectedSupplierId] = useState<string>('');
 
   const debounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const searchRef = useRef('');
@@ -471,15 +468,7 @@ function AddReceivingProductModal({ open, receivingOrderId, warehouseOrgId, exis
     return () => { if (debounceRef.current) clearTimeout(debounceRef.current); };
   }, []);
 
-  // Load suppliers when modal opens
-  useEffect(() => {
-    if (!open) return;
-    getAllActiveSuppliers().then(({ data }) => {
-      setSuppliers(data ?? []);
-    });
-  }, [open]);
-
-  // Load initial products when modal opens or supplier changes
+  // Load initial products when modal opens, filtered by supplier
   useEffect(() => {
     if (!open || !warehouseOrgId) return;
     setInitialLoading(true);
@@ -491,12 +480,12 @@ function AddReceivingProductModal({ open, receivingOrderId, warehouseOrgId, exis
       .gt('stock', 0)
       .order('name')
       .limit(50);
-    if (selectedSupplierId) q = q.eq('supplier_id', selectedSupplierId);
+    if (supplierId) q = q.eq('supplier_id', supplierId);
     q.then(({ data }) => {
       setInitialProducts((data as Product[]) ?? []);
       setInitialLoading(false);
     });
-  }, [open, warehouseOrgId, selectedSupplierId]);
+  }, [open, warehouseOrgId, supplierId]);
 
   // Reset on close
   useEffect(() => {
@@ -508,8 +497,6 @@ function AddReceivingProductModal({ open, receivingOrderId, warehouseOrgId, exis
       setExpectedQty(1);
       setError(null);
       setInitialProducts([]);
-      setSelectedSupplierId('');
-      setSuppliers([]);
     }
   }, [open]);
 
@@ -530,7 +517,7 @@ function AddReceivingProductModal({ open, receivingOrderId, warehouseOrgId, exis
         .gt('stock', 0)
         .or(`name.ilike.%${s}%,sku.ilike.%${s}%,oem_number.ilike.%${s}%,brand.ilike.%${s}%`)
         .limit(30);
-      if (selectedSupplierId) q = q.eq('supplier_id', selectedSupplierId);
+      if (supplierId) q = q.eq('supplier_id', supplierId);
       const { data, error: err } = await q;
       if (err) console.error('Product search error:', err);
       if (searchRef.current === query) {
@@ -538,7 +525,7 @@ function AddReceivingProductModal({ open, receivingOrderId, warehouseOrgId, exis
         setSearching(false);
       }
     }, 200);
-  }, [warehouseOrgId, selectedSupplierId]);
+  }, [warehouseOrgId, supplierId]);
 
   const handleSelectProduct = (product: Product) => {
     setSelectedProduct(product);
@@ -599,41 +586,6 @@ function AddReceivingProductModal({ open, receivingOrderId, warehouseOrgId, exis
     >
       <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
         {error && <p style={{ color: '#D3010A', fontSize: 13, margin: 0 }}>{error}</p>}
-
-        {/* Supplier filter */}
-        {suppliers.length > 0 && (
-          <div style={{
-            display: 'flex', alignItems: 'center', gap: 12,
-            padding: '12px 16px', backgroundColor: '#F8FAFC',
-            borderRadius: 10, border: '1px solid #E2E8F0',
-          }}>
-            <Truck size={18} style={{ color: '#6366F1', flexShrink: 0 }} />
-            <label style={{ fontSize: 13, fontWeight: 600, color: '#475569', whiteSpace: 'nowrap' }}>
-              Proveedor:
-            </label>
-            <select
-              value={selectedSupplierId}
-              onChange={(e) => {
-                setSelectedSupplierId(e.target.value);
-                setSelectedProduct(null);
-                setSearchTerm('');
-                setSearchResults([]);
-              }}
-              className="rh-select"
-              style={{ flex: 1, maxWidth: 320 }}
-            >
-              <option value="">Todos los proveedores</option>
-              {suppliers.map((s) => (
-                <option key={s.id} value={s.id}>{s.name}</option>
-              ))}
-            </select>
-            {selectedSupplierId && (
-              <span style={{ fontSize: 11, color: '#6366F1', fontWeight: 500 }}>
-                Mostrando solo productos de este proveedor
-              </span>
-            )}
-          </div>
-        )}
 
         {/* Selected product confirmation bar */}
         {selectedProduct && (

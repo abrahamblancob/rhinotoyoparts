@@ -234,6 +234,10 @@ function CreateReceivingModal({ open, onClose, onCreated }: CreateReceivingModal
       setError('Selecciona un almacen');
       return;
     }
+    if (!supplierId) {
+      setError('Selecciona un proveedor');
+      return;
+    }
     setSaving(true);
     setError(null);
 
@@ -271,7 +275,7 @@ function CreateReceivingModal({ open, onClose, onCreated }: CreateReceivingModal
           <button
             className="rh-btn rh-btn-primary"
             onClick={handleSubmit}
-            disabled={saving || !warehouseId}
+            disabled={saving || !warehouseId || !supplierId}
           >
             {saving ? 'Creando...' : 'Crear Recepcion'}
           </button>
@@ -300,7 +304,7 @@ function CreateReceivingModal({ open, onClose, onCreated }: CreateReceivingModal
         </div>
 
         <div>
-          <label className="rh-label">Proveedor</label>
+          <label className="rh-label">Proveedor *</label>
           <select
             value={supplierId}
             onChange={(e) => setSupplierId(e.target.value)}
