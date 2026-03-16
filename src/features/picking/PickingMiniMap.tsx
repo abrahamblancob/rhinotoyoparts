@@ -74,12 +74,10 @@ export function PickingMiniMap({ warehouseId, locationIds, pickedLocationIds }: 
   const hasCenital = warehouse && warehouse.width_m && warehouse.length_m;
   const whW = warehouse?.width_m ?? 10;
   const whL = warehouse?.length_m ?? 10;
-  const gridW = Math.ceil(whW);
-  const gridH = Math.ceil(whL);
-  const maxViewW = 380;
-  const maxViewH = 280;
-  const cellW = maxViewW / gridW;
-  const cellH = maxViewH / gridH;
+  const maxViewW = 520;
+  const maxViewH = 420;
+  const cellW = maxViewW / whW;   /* px per meter */
+  const cellH = maxViewH / whL;
 
   const displayZones = zones.filter(
     (z) => z.position_x != null && z.position_y != null && z.width != null && z.height != null,
@@ -133,7 +131,7 @@ export function PickingMiniMap({ warehouseId, locationIds, pickedLocationIds }: 
               </span>
             </h4>
             <div style={{ display: 'flex', justifyContent: 'center' }}>
-              <div style={{ position: 'relative', paddingBottom: 22, paddingRight: 44 }}>
+              <div style={{ position: 'relative', paddingBottom: 22, paddingRight: 48 }}>
                 <div
                   style={{
                     width: maxViewW,
@@ -172,20 +170,6 @@ export function PickingMiniMap({ warehouseId, locationIds, pickedLocationIds }: 
                           borderRadius: 3,
                         }}
                       >
-                        <span
-                          style={{
-                            position: 'absolute',
-                            top: 2,
-                            left: 3,
-                            fontSize: 9,
-                            color,
-                            fontWeight: 600,
-                            whiteSpace: 'nowrap',
-                            overflow: 'hidden',
-                          }}
-                        >
-                          {zone.name}
-                        </span>
                       </div>
                     );
                   })}
@@ -194,22 +178,22 @@ export function PickingMiniMap({ warehouseId, locationIds, pickedLocationIds }: 
                   {displayRacks.map((rack, rIdx) => {
                     const isTarget = targetRackIds.has(rack.id);
                     const baseColor = RACK_COLORS[rIdx % RACK_COLORS.length];
-                    const wCells = rack.orientation === 'horizontal'
-                      ? Math.ceil(rack.rack_depth_m ?? 1)
-                      : Math.ceil(rack.rack_width_m ?? 1);
-                    const dCells = rack.orientation === 'horizontal'
-                      ? Math.ceil(rack.rack_width_m ?? 1)
-                      : Math.ceil(rack.rack_depth_m ?? 1);
+                    const rWidthM = rack.orientation === 'horizontal'
+                      ? (rack.rack_depth_m ?? 1)
+                      : (rack.rack_width_m ?? 1);
+                    const rDepthM = rack.orientation === 'horizontal'
+                      ? (rack.rack_width_m ?? 1)
+                      : (rack.rack_depth_m ?? 1);
                     const rLeft = (rack.position_x ?? 0) * cellW;
                     const rTop = (rack.position_y ?? 0) * cellH;
-                    const rW = wCells * cellW - 2;
-                    const rH = dCells * cellH - 2;
+                    const rW = rWidthM * cellW - 2;
+                    const rH = rDepthM * cellH - 2;
                     if (rW <= 0 || rH <= 0) return null;
 
-                    // Target racks get orange pulsing border, non-target stay normal but dimmed
-                    const fillColor = isTarget ? '#F9731640' : baseColor + '20';
-                    const borderColor = isTarget ? '#F97316' : baseColor + '80';
-                    const borderWidth = isTarget ? 2.5 : 1;
+                    // Target racks get orange highlight, non-target use base color but dimmed
+                    const fillColor = isTarget ? '#F9731640' : baseColor + '35';
+                    const borderColor = isTarget ? '#F97316' : baseColor;
+                    const borderWidth = isTarget ? 2.5 : 1.5;
 
                     return (
                       <div
