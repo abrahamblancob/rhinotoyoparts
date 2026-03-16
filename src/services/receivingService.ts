@@ -90,6 +90,21 @@ export async function receiveItem(itemId: string, data: {
   );
 }
 
+export async function deleteReceivingOrder(orderId: string) {
+  // First delete all items, then the order itself
+  const itemsResult = await query<null>((sb) =>
+    sb.from('receiving_order_items').delete().eq('receiving_order_id', orderId)
+  );
+  if (itemsResult.error) return itemsResult;
+
+  return query<null>((sb) =>
+    sb.from('receiving_orders')
+      .delete()
+      .eq('id', orderId)
+      .neq('status', 'completed')
+  );
+}
+
 export async function completeReceiving(orderId: string, receivedBy: string) {
   return query<ReceivingOrder>((sb) =>
     sb.from('receiving_orders')

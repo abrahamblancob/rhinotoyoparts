@@ -75,7 +75,11 @@ export function ReceivingDetailPage() {
     qrItemId,
     setQrItemId,
     hasWritePermission,
+    showDeleteOrder,
+    setShowDeleteOrder,
+    deletingOrder,
     handleCompleteReceiving,
+    handleDeleteOrder,
     handleDeleteItem,
     handlePrintProductQR,
     reloadItems,
@@ -177,6 +181,14 @@ export function ReceivingDetailPage() {
                 {actionLoading ? 'Completando...' : 'Completar Recepcion'}
               </button>
             )}
+            <button
+              className="rh-btn"
+              onClick={() => setShowDeleteOrder(true)}
+              style={{ color: '#DC2626', borderColor: '#FECACA', marginLeft: 'auto' }}
+            >
+              <Trash2 size={16} style={{ marginRight: 4 }} />
+              Eliminar Recepcion
+            </button>
           </div>
         )}
       </div>
@@ -413,6 +425,73 @@ export function ReceivingDetailPage() {
           reloadItems();
         }}
       />
+
+      {/* Delete Order Confirmation */}
+      {showDeleteOrder && (
+        <div
+          style={{
+            position: 'fixed', inset: 0, backgroundColor: 'rgba(0,0,0,0.5)',
+            display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 1000,
+          }}
+          onClick={() => { if (!deletingOrder) setShowDeleteOrder(false); }}
+        >
+          <div
+            className="rh-card"
+            style={{ padding: 32, maxWidth: 440, width: '90%', textAlign: 'center' }}
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div style={{ fontSize: 48, marginBottom: 16 }}>⚠️</div>
+            <h3 style={{ fontSize: 18, fontWeight: 700, color: '#1E293B', marginBottom: 8 }}>
+              Eliminar Recepcion
+            </h3>
+            <p style={{ color: '#64748B', fontSize: 14, marginBottom: 8 }}>
+              ¿Estas seguro de que deseas eliminar esta recepcion y todos sus items?
+            </p>
+            <div style={{
+              backgroundColor: '#F8FAFC', borderRadius: 8, padding: 16, marginBottom: 16, textAlign: 'left',
+            }}>
+              <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 6 }}>
+                <span style={{ color: '#94A3B8', fontSize: 13 }}>Referencia:</span>
+                <span style={{ color: '#1E293B', fontWeight: 600, fontSize: 13 }}>
+                  {order.reference_number ?? 'Sin referencia'}
+                </span>
+              </div>
+              <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 6 }}>
+                <span style={{ color: '#94A3B8', fontSize: 13 }}>Proveedor:</span>
+                <span style={{ color: '#1E293B', fontWeight: 500, fontSize: 13 }}>
+                  {order.supplier_name ?? '-'}
+                </span>
+              </div>
+              <div style={{ display: 'flex', justifyContent: 'space-between' }}>
+                <span style={{ color: '#94A3B8', fontSize: 13 }}>Items:</span>
+                <span style={{ color: '#1E293B', fontWeight: 600, fontSize: 13 }}>
+                  {allItems.length}
+                </span>
+              </div>
+            </div>
+            <p style={{ color: '#F59E0B', fontSize: 13, marginBottom: 16, fontWeight: 500 }}>
+              Esta accion no se puede deshacer.
+            </p>
+            <div style={{ display: 'flex', gap: 12, justifyContent: 'center' }}>
+              <button
+                className="rh-btn rh-btn-ghost"
+                onClick={() => setShowDeleteOrder(false)}
+                disabled={deletingOrder}
+              >
+                Cancelar
+              </button>
+              <button
+                className="rh-btn"
+                style={{ backgroundColor: '#DC2626', color: 'white', opacity: deletingOrder ? 0.6 : 1 }}
+                onClick={handleDeleteOrder}
+                disabled={deletingOrder}
+              >
+                {deletingOrder ? 'Eliminando...' : 'Eliminar'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
 
       <style>{`
         @keyframes spin {

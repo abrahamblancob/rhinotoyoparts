@@ -17,6 +17,8 @@ export function useReceivingDetail() {
   const [confirmDeleteId, setConfirmDeleteId] = useState<string | null>(null);
   const [deletingId, setDeletingId] = useState<string | null>(null);
   const [qrItemId, setQrItemId] = useState<string | null>(null);
+  const [showDeleteOrder, setShowDeleteOrder] = useState(false);
+  const [deletingOrder, setDeletingOrder] = useState(false);
 
   const hasWritePermission = canWrite('receiving');
 
@@ -66,6 +68,16 @@ export function useReceivingDetail() {
     setConfirmDeleteId(null);
     if (!result.error) {
       reloadItems();
+    }
+  };
+
+  const handleDeleteOrder = async () => {
+    if (!receivingId) return;
+    setDeletingOrder(true);
+    const result = await receivingService.deleteReceivingOrder(receivingId);
+    setDeletingOrder(false);
+    if (!result.error) {
+      navigate('/hub/receiving');
     }
   };
 
@@ -128,8 +140,14 @@ export function useReceivingDetail() {
     // Permissions
     hasWritePermission,
 
+    // Delete order
+    showDeleteOrder,
+    setShowDeleteOrder,
+    deletingOrder,
+
     // Handlers
     handleCompleteReceiving,
+    handleDeleteOrder,
     handleDeleteItem,
     handlePrintProductQR,
 

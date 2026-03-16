@@ -12,7 +12,7 @@ import { StatsCard } from '@/components/hub/shared/StatsCard.tsx';
 import { EmptyState } from '@/components/hub/shared/EmptyState.tsx';
 import { Modal } from '@/components/hub/shared/Modal.tsx';
 import * as receivingService from '@/services/receivingService.ts';
-import * as supplierService from '@/services/supplierService.ts';
+import { getAllActiveSuppliers } from '@/services/supplierService.ts';
 import type { Supplier } from '@/lib/database.types.ts';
 import type { ReceivingOrder, ReceivingStatus } from '@/types/warehouse.ts';
 
@@ -218,15 +218,11 @@ function CreateReceivingModal({ open, onClose, onCreated }: CreateReceivingModal
   const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
-    const selectedWarehouse = (warehouses ?? []).find((w) => w.id === warehouseId);
-    if (selectedWarehouse) {
-      supplierService.getActiveSuppliers(selectedWarehouse.org_id).then(({ data }) => {
-        setSuppliers(data ?? []);
-      });
-    } else {
-      setSuppliers([]);
-    }
-  }, [warehouseId, warehouses]);
+    if (!open) return;
+    getAllActiveSuppliers().then(({ data }) => {
+      setSuppliers(data ?? []);
+    });
+  }, [open]);
 
   const handleSubmit = async () => {
     const selectedWarehouse = (warehouses ?? []).find((w) => w.id === warehouseId);
@@ -309,7 +305,6 @@ function CreateReceivingModal({ open, onClose, onCreated }: CreateReceivingModal
             value={supplierId}
             onChange={(e) => setSupplierId(e.target.value)}
             className="rh-input"
-            disabled={!warehouseId}
           >
             <option value="">Seleccionar proveedor...</option>
             {suppliers.map((s) => (
@@ -318,9 +313,6 @@ function CreateReceivingModal({ open, onClose, onCreated }: CreateReceivingModal
               </option>
             ))}
           </select>
-          {!warehouseId && (
-            <p style={{ fontSize: 11, color: '#94A3B8', marginTop: 4 }}>Selecciona un almacen primero</p>
-          )}
         </div>
 
         <div>
