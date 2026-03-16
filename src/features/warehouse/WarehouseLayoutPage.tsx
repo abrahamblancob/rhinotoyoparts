@@ -853,17 +853,15 @@ export function WarehouseLayoutPage() {
         const cellW = viewW / whW;    /* px per meter */
         const cellH = viewH / whL;
 
-        /* Compute content bounding box for the legend */
-        let contentMaxY = 0;
+        /* Compute rack-only bounding box for the legend (ignore zones — they
+           often cover the full warehouse and would hide the space-usage info) */
+        let racksMaxY = 0;
         for (const r of displayRacks) {
           const ry = r.position_y ?? 0;
           const rh = r.orientation === 'horizontal' ? (r.rack_width_m ?? 1) : (r.rack_depth_m ?? 1);
-          contentMaxY = Math.max(contentMaxY, ry + rh);
+          racksMaxY = Math.max(racksMaxY, ry + rh);
         }
-        for (const z of displayZones) {
-          contentMaxY = Math.max(contentMaxY, (z.position_y ?? 0) + (z.height ?? 0));
-        }
-        const usedPct = whL > 0 ? Math.round((contentMaxY / whL) * 100) : 100;
+        const usedPct = whL > 0 ? Math.round((racksMaxY / whL) * 100) : 100;
         const unusedPct = 100 - usedPct;
 
         return (
@@ -1026,7 +1024,7 @@ export function WarehouseLayoutPage() {
               {/* Legend */}
               {displayRacks.length > 0 && unusedPct > 20 && (
                 <p style={{ fontSize: 11, color: '#94A3B8', margin: '8px 0 0', textAlign: 'center' }}>
-                  {displayRacks.length} estantes posicionados en los primeros ~{Math.ceil(contentMaxY)}m de {whL}m
+                  {displayRacks.length} estantes posicionados en los primeros ~{Math.ceil(racksMaxY)}m de {whL}m
                   {' '}&mdash; {unusedPct}% del espacio sin usar
                 </p>
               )}
