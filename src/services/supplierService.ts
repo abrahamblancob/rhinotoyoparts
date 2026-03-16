@@ -29,6 +29,12 @@ export async function getActiveSuppliers(orgId: string) {
   );
 }
 
+export async function getAllActiveSuppliers() {
+  return query<Supplier[]>((sb) =>
+    sb.from('suppliers').select('id, name').eq('status', 'active').order('name')
+  );
+}
+
 export async function saveSupplier(payload: SupplierPayload & { org_id?: string }, editId?: string) {
   if (editId) {
     return query<Supplier>((sb) =>

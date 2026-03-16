@@ -3,7 +3,8 @@ import { useNavigate } from 'react-router-dom';
 import { useAuthStore } from '@/stores/authStore.ts';
 import { usePermissions } from '@/hooks/usePermissions.ts';
 import { supabase } from '@/lib/supabase.ts';
-import type { Organization } from '@/lib/database.types.ts';
+import type { Organization, Supplier } from '@/lib/database.types.ts';
+import { getAllActiveSuppliers } from '@/services/supplierService.ts';
 
 import type {
   WizardStep,
@@ -39,6 +40,10 @@ export function InventoryUploadPage() {
   const [targetOrgId, setTargetOrgId] = useState(organization?.id ?? '');
   const [availableOrgs, setAvailableOrgs] = useState<Organization[]>([]);
 
+  // Supplier selector
+  const [suppliers, setSuppliers] = useState<Supplier[]>([]);
+  const [selectedSupplierId, setSelectedSupplierId] = useState('');
+
   useEffect(() => {
     if (isPlatform) {
       supabase
@@ -58,6 +63,13 @@ export function InventoryUploadPage() {
       setTargetOrgId(organization?.id ?? '');
     }
   }, [isPlatform, organization]);
+
+  // Load active suppliers
+  useEffect(() => {
+    getAllActiveSuppliers().then(({ data }) => {
+      setSuppliers(data ?? []);
+    });
+  }, []);
 
   // Wizard state
   const [step, setStep] = useState<WizardStep>('file');
@@ -207,12 +219,13 @@ export function InventoryUploadPage() {
       totalStock,
       inventoryValue,
       lotId,
+      selectedSupplierId || null,
     );
 
     setUploadProgress(finalProgress);
     setUploadsRefreshKey((k) => k + 1);
     setStep('results');
-  }, [processingResult, targetOrgId, user, fileName]);
+  }, [processingResult, targetOrgId, user, fileName, selectedSupplierId]);
 
   // Navigate back to a specific step (preserving state)
   const handleGoToStep = useCallback(
@@ -251,6 +264,7 @@ export function InventoryUploadPage() {
     setProcessingResult(null);
     setUploadProgress(null);
     setFatalError('');
+    setSelectedSupplierId('');
   }, []);
 
   return (
@@ -303,6 +317,38 @@ export function InventoryUploadPage() {
           </select>
           <span style={{ fontSize: 12, color: '#B45309' }}>
             Los productos se asignarán a la organización seleccionada
+          </span>
+        </div>
+      )}
+
+      {/* Supplier selector */}
+      {suppliers.length > 0 && (
+        <div style={{
+          display: 'flex',
+          alignItems: 'center',
+          gap: 12,
+          padding: '12px 16px',
+          backgroundColor: '#F0F9FF',
+          border: '1px solid #7DD3FC',
+          borderRadius: 8,
+          marginBottom: 16,
+        }}>
+          <span style={{ fontSize: 13, fontWeight: 600, color: '#0C4A6E', whiteSpace: 'nowrap' }}>
+            🚚 Proveedor:
+          </span>
+          <select
+            value={selectedSupplierId}
+            onChange={(e) => setSelectedSupplierId(e.target.value)}
+            className="rh-select"
+            style={{ maxWidth: 300 }}
+          >
+            <option value="">— Sin proveedor —</option>
+            {suppliers.map((s) => (
+              <option key={s.id} value={s.id}>{s.name}</option>
+            ))}
+          </select>
+          <span style={{ fontSize: 12, color: '#0369A1' }}>
+            El proveedor se asociará al registro de carga
           </span>
         </div>
       )}

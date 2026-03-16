@@ -238,11 +238,13 @@ export async function logBulkUpload(
   totalStock?: number,
   inventoryValue?: number,
   lotId?: string | null,
+  supplierId?: string | null,
 ): Promise<void> {
   await supabase.from('bulk_uploads').insert({
     org_id: orgId,
     uploaded_by: userId,
     lot_id: lotId ?? null,
+    supplier_id: supplierId ?? null,
     file_name: fileName,
     total_rows: totalRows,
     success_rows: successRows,
@@ -327,7 +329,7 @@ export async function deleteLot(
 export async function fetchRecentUploads(orgId: string) {
   const { data, error } = await supabase
     .from('bulk_uploads')
-    .select('*, profiles:uploaded_by(full_name), inventory_lots:lot_id(lot_number)')
+    .select('*, profiles:uploaded_by(full_name), inventory_lots:lot_id(lot_number), supplier:suppliers!bulk_uploads_supplier_id_fkey(name)')
     .eq('org_id', orgId)
     .order('created_at', { ascending: false })
     .limit(10);

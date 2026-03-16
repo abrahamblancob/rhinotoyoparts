@@ -1476,7 +1476,7 @@ body {
 }
 
 .rh-sidebar-section-title {
-  font-size: 11px;
+  font-size: 13px;
   font-weight: 600;
   color: #5A5856;
   letter-spacing: 0.08em;
@@ -1490,7 +1490,7 @@ body {
   gap: 12px;
   padding: 10px 12px;
   border-radius: 8px;
-  font-size: 14px;
+  font-size: 17px;
   font-weight: 500;
   color: #8A8886;
   transition: color 0.2s ease, background-color 0.2s ease;
@@ -1515,7 +1515,7 @@ body {
 }
 
 .rh-sidebar-nav-icon {
-  font-size: 16px;
+  font-size: 19px;
   flex-shrink: 0;
 }
 

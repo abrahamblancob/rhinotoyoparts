@@ -15,6 +15,7 @@ interface BulkUploadRow {
   status: string;
   profiles: { full_name: string } | null;
   inventory_lots: { lot_number: string } | null;
+  supplier: { name: string } | null;
 }
 
 interface Props {
@@ -122,6 +123,7 @@ export function RecentUploadsTable({ orgId, refreshKey }: Props) {
                 <th>Subido por</th>
                 <th>Fecha</th>
                 <th className="text-right">Productos</th>
+                <th>Proveedor</th>
                 <th className="text-right">Stock</th>
                 <th className="text-right">Valor (USD)</th>
                 <th style={{ textAlign: 'center' }}>Estado</th>
@@ -146,6 +148,9 @@ export function RecentUploadsTable({ orgId, refreshKey }: Props) {
                   </td>
                   <td className="text-right cell-bold">
                     {u.total_rows.toLocaleString()}
+                  </td>
+                  <td className="cell-muted">
+                    {u.supplier?.name ?? '—'}
                   </td>
                   <td className="text-right cell-mono">
                     {(u.total_stock ?? 0).toLocaleString()}
