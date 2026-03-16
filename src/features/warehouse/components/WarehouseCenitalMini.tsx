@@ -39,10 +39,10 @@ interface ZoneInput {
   name?: string;
   code?: string;
   color: string;
-  x?: number;
-  y?: number;
-  width?: number;
-  height?: number;
+  x?: number | null;
+  y?: number | null;
+  width?: number | null;
+  height?: number | null;
   position_x?: number | null;
   position_y?: number | null;
 }
@@ -187,8 +187,6 @@ export function WarehouseCenitalMini({
     let cursorX = 0;
     for (const block of blocks) {
       const layout = computeBlockLayout(block);
-      blockPositions.set(block.aisleId, { x: cursorX, y: 0 } as { gridX: number; gridY: number });
-      // Fix: use gridX/gridY
       blockPositions.set(block.aisleId, { gridX: cursorX, gridY: 0 });
       cursorX += layout.widthCells;
     }

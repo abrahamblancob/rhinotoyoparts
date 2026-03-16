@@ -122,7 +122,7 @@ function computeBlockLayoutZ(block: AisleBlockZ): BlockLayoutZ {
 export function ZonePainter({
   warehouseWidth,
   warehouseLength,
-  placedRacks,
+  placedRacks: _placedRacks,
   racks,
   aisles,
   placedAisles,

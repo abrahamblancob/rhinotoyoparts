@@ -36,7 +36,7 @@ import { ConfirmDeleteModal } from '@/components/hub/shared/ConfirmDeleteModal.t
 import * as warehouseService from '@/services/warehouseService.ts';
 import { supabase } from '@/lib/supabase.ts';
 import type { Organization } from '@/lib/database.types.ts';
-import type { Warehouse, WarehouseAisle, WarehouseRack, WarehouseLocation, InventoryStock } from '@/types/warehouse.ts';
+import type { Warehouse, WarehouseRack, WarehouseLocation, InventoryStock } from '@/types/warehouse.ts';
 
 const ZONE_TYPE_LABELS: Record<string, string> = {
   storage: 'Almacenamiento',
@@ -114,9 +114,10 @@ export function WarehouseLayoutPage() {
     const map = new Map<string, WarehouseRack[]>();
     if (allRacks) {
       for (const rack of allRacks) {
-        const arr = map.get(rack.zone_id) || [];
+        const zoneKey = rack.zone_id ?? '';
+        const arr = map.get(zoneKey) || [];
         arr.push(rack);
-        map.set(rack.zone_id, arr);
+        map.set(zoneKey, arr);
       }
     }
     return map;
