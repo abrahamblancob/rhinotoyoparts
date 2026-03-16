@@ -88,6 +88,7 @@ export interface Product {
   min_stock: number;
   status: ProductStatus;
   image_url: string | null;
+  supplier_id: string | null;
   compatible_models: string[] | null;
   created_at: string;
   updated_at: string;
@@ -107,6 +108,22 @@ export interface Customer {
   notes: string | null;
   lat: number | null;
   lng: number | null;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface Supplier {
+  id: string;
+  org_id: string;
+  name: string;
+  contact_person: string | null;
+  email: string | null;
+  phone: string | null;
+  address: string | null;
+  city: string | null;
+  state: string | null;
+  notes: string | null;
+  status: 'active' | 'inactive';
   created_at: string;
   updated_at: string;
 }

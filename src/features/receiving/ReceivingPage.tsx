@@ -1,4 +1,4 @@
-import { useState, useCallback } from 'react';
+import { useState, useCallback, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import {
   Search,
@@ -12,6 +12,8 @@ import { StatsCard } from '@/components/hub/shared/StatsCard.tsx';
 import { EmptyState } from '@/components/hub/shared/EmptyState.tsx';
 import { Modal } from '@/components/hub/shared/Modal.tsx';
 import * as receivingService from '@/services/receivingService.ts';
+import * as supplierService from '@/services/supplierService.ts';
+import type { Supplier } from '@/lib/database.types.ts';
 import type { ReceivingOrder, ReceivingStatus } from '@/types/warehouse.ts';
 
 const STATUS_LABELS: Record<string, string> = {
@@ -209,10 +211,22 @@ interface CreateReceivingModalProps {
 function CreateReceivingModal({ open, onClose, onCreated }: CreateReceivingModalProps) {
   const { data: warehouses } = useWarehouses();
   const [warehouseId, setWarehouseId] = useState('');
-  const [supplierName, setSupplierName] = useState('');
+  const [suppliers, setSuppliers] = useState<Supplier[]>([]);
+  const [supplierId, setSupplierId] = useState('');
   const [referenceNumber, setReferenceNumber] = useState('');
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
+
+  useEffect(() => {
+    const selectedWarehouse = (warehouses ?? []).find((w) => w.id === warehouseId);
+    if (selectedWarehouse) {
+      supplierService.getActiveSuppliers(selectedWarehouse.org_id).then(({ data }) => {
+        setSuppliers(data ?? []);
+      });
+    } else {
+      setSuppliers([]);
+    }
+  }, [warehouseId, warehouses]);
 
   const handleSubmit = async () => {
     const selectedWarehouse = (warehouses ?? []).find((w) => w.id === warehouseId);
@@ -226,7 +240,8 @@ function CreateReceivingModal({ open, onClose, onCreated }: CreateReceivingModal
     const result = await receivingService.createReceivingOrder({
       warehouse_id: warehouseId,
       org_id: selectedWarehouse.org_id,
-      supplier_name: supplierName || undefined,
+      supplier_id: supplierId || undefined,
+      supplier_name: suppliers.find(s => s.id === supplierId)?.name || undefined,
       reference_number: referenceNumber || undefined,
     });
 
@@ -238,7 +253,7 @@ function CreateReceivingModal({ open, onClose, onCreated }: CreateReceivingModal
 
     setSaving(false);
     setWarehouseId('');
-    setSupplierName('');
+    setSupplierId('');
     setReferenceNumber('');
     onCreated();
   };
@@ -285,14 +300,23 @@ function CreateReceivingModal({ open, onClose, onCreated }: CreateReceivingModal
         </div>
 
         <div>
-          <label className="rh-label">Nombre del Proveedor</label>
-          <input
-            type="text"
-            value={supplierName}
-            onChange={(e) => setSupplierName(e.target.value)}
+          <label className="rh-label">Proveedor</label>
+          <select
+            value={supplierId}
+            onChange={(e) => setSupplierId(e.target.value)}
             className="rh-input"
-            placeholder="Nombre del proveedor"
-          />
+            disabled={!warehouseId}
+          >
+            <option value="">Seleccionar proveedor...</option>
+            {suppliers.map((s) => (
+              <option key={s.id} value={s.id}>
+                {s.name}
+              </option>
+            ))}
+          </select>
+          {!warehouseId && (
+            <p style={{ fontSize: 11, color: '#94A3B8', marginTop: 4 }}>Selecciona un almacen primero</p>
+          )}
         </div>
 
         <div>

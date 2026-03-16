@@ -217,6 +217,7 @@ export interface ReceivingOrder {
   id: string;
   warehouse_id: string;
   org_id: string;
+  supplier_id: string | null;
   supplier_name: string | null;
   reference_number: string | null;
   status: ReceivingStatus;
@@ -227,6 +228,7 @@ export interface ReceivingOrder {
   // Joined fields
   warehouse?: { name: string; org_id: string };
   receiver?: { full_name: string };
+  supplier?: { name: string };
 }
 
 export interface ReceivingOrderItem {

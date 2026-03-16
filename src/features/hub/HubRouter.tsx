@@ -29,6 +29,7 @@ const PackingDashboard = lazy(() => import('@/features/packing/PackingDashboard.
 const PackSessionDetail = lazy(() => import('@/features/packing/PackSessionDetail.tsx').then(m => ({ default: m.PackSessionDetail })));
 const ReceivingPage = lazy(() => import('@/features/receiving/ReceivingPage.tsx').then(m => ({ default: m.ReceivingPage })));
 const ReceivingDetailPage = lazy(() => import('@/features/receiving/ReceivingDetailPage.tsx').then(m => ({ default: m.ReceivingDetailPage })));
+const SuppliersPage = lazy(() => import('@/features/suppliers/SuppliersPage.tsx').then(m => ({ default: m.SuppliersPage })));
 const StockDashboard = lazy(() => import('@/features/stock/StockDashboard.tsx').then(m => ({ default: m.StockDashboard })));
 const StockMovements = lazy(() => import('@/features/stock/StockMovements.tsx').then(m => ({ default: m.StockMovements })));
 const StockAdjustment = lazy(() => import('@/features/stock/StockAdjustment.tsx').then(m => ({ default: m.StockAdjustment })));
@@ -87,6 +88,7 @@ export function HubRouter() {
                   <Route index element={<SmartIndex />} />
                   <Route path="organizations" element={<OrgListPage />} />
                   <Route path="users" element={<UsersPage />} />
+                  <Route path="suppliers" element={<SuppliersPage />} />
                   <Route path="inventory" element={<InventoryPage />} />
                   <Route path="inventory/upload" element={<InventoryUploadPage />} />
                   <Route path="catalog" element={<CatalogPage />} />

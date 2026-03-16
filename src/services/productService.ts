@@ -13,6 +13,7 @@ interface ProductPayload {
   stock: number;
   min_stock: number;
   status: string;
+  supplier_id: string | null;
 }
 
 export async function getProducts(opts?: { orgId?: string; isPlatform?: boolean; status?: string }) {

@@ -1,6 +1,8 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useCallback } from 'react';
 import { Modal } from '@/components/hub/shared/Modal.tsx';
-import type { Product } from '@/lib/database.types.ts';
+import { useAsyncData } from '@/hooks/useAsyncData.ts';
+import * as supplierService from '@/services/supplierService.ts';
+import type { Product, Supplier } from '@/lib/database.types.ts';
 import * as productService from '@/services/productService.ts';
 
 const EMPTY_FORM = {
@@ -14,6 +16,7 @@ const EMPTY_FORM = {
   stock: '',
   min_stock: '5',
   status: 'active' as const,
+  supplier_id: '',
 };
 
 type ProductForm = typeof EMPTY_FORM;
@@ -41,6 +44,7 @@ function productToForm(product: Product): ProductForm {
     stock: String(product.stock),
     min_stock: String(product.min_stock),
     status: product.status as 'active',
+    supplier_id: product.supplier_id ?? '',
   };
 }
 
@@ -59,6 +63,17 @@ export function ProductFormModal({
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
   const [success, setSuccess] = useState('');
+
+  const supplierFetcher = useCallback(
+    () => {
+      const resolvedOrgId = product?.org_id ?? orgId;
+      return resolvedOrgId
+        ? supplierService.getActiveSuppliers(resolvedOrgId)
+        : Promise.resolve({ data: [] as Supplier[], error: null });
+    },
+    [product?.org_id, orgId],
+  );
+  const { data: suppliers } = useAsyncData<Supplier[]>(supplierFetcher, [product?.org_id, orgId]);
 
   useEffect(() => {
     if (open) {
@@ -95,6 +110,7 @@ export function ProductFormModal({
       stock: parseInt(form.stock) || 0,
       min_stock: parseInt(form.min_stock) || 5,
       status: form.status,
+      supplier_id: form.supplier_id || null,
     };
 
     const result = await productService.saveProduct(productData, product?.id);
@@ -219,6 +235,20 @@ export function ProductFormModal({
                 className="rh-input"
                 placeholder="Toyota, Denso, KYB..."
               />
+            </div>
+
+            <div className="rh-field">
+              <label className="rh-label">Proveedor</label>
+              <select
+                value={form.supplier_id}
+                onChange={(e) => setForm({ ...form, supplier_id: e.target.value })}
+                className="rh-input"
+              >
+                <option value="">Sin proveedor</option>
+                {(suppliers ?? []).map((s) => (
+                  <option key={s.id} value={s.id}>{s.name}</option>
+                ))}
+              </select>
             </div>
 
             <div className="rh-field">

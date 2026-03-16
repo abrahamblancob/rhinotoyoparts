@@ -4,7 +4,7 @@ import type { ReceivingOrder, ReceivingOrderItem } from '@/types/warehouse.ts';
 export async function getReceivingOrders(opts?: { orgId?: string; isPlatform?: boolean; warehouseId?: string; status?: string }) {
   return query<ReceivingOrder[]>((sb) => {
     let q = sb.from('receiving_orders')
-      .select('*, warehouse:warehouses(name, org_id), receiver:profiles!receiving_orders_received_by_fkey(full_name)')
+      .select('*, warehouse:warehouses(name, org_id), receiver:profiles!receiving_orders_received_by_fkey(full_name), supplier:suppliers(name)')
       .order('created_at', { ascending: false });
     if (!opts?.isPlatform && opts?.orgId) q = q.eq('org_id', opts.orgId);
     if (opts?.warehouseId) q = q.eq('warehouse_id', opts.warehouseId);
@@ -16,7 +16,7 @@ export async function getReceivingOrders(opts?: { orgId?: string; isPlatform?: b
 export async function getReceivingOrder(id: string) {
   return query<ReceivingOrder>((sb) =>
     sb.from('receiving_orders')
-      .select('*, warehouse:warehouses(name, org_id), receiver:profiles!receiving_orders_received_by_fkey(full_name)')
+      .select('*, warehouse:warehouses(name, org_id), receiver:profiles!receiving_orders_received_by_fkey(full_name), supplier:suppliers(name)')
       .eq('id', id)
       .single()
   );
@@ -33,6 +33,7 @@ export async function getReceivingOrderItems(orderId: string) {
 export async function createReceivingOrder(data: {
   warehouse_id: string;
   org_id: string;
+  supplier_id?: string;
   supplier_name?: string;
   reference_number?: string;
   notes?: string;

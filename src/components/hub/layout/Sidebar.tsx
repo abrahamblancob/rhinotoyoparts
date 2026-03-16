@@ -23,6 +23,7 @@ const NAV_CONFIG: Record<OrgType, NavSection[]> = {
       title: 'PRINCIPAL',
       items: [
         { label: 'Dashboard', path: '/hub', icon: '📊', module: 'dashboard' },
+        { label: 'Proveedores', path: '/hub/suppliers', icon: '🏭', module: 'suppliers' },
         { label: 'Inventario', path: '/hub/inventory', icon: '📦', module: 'inventory' },
         { label: 'Órdenes de Compra', path: '/hub/orders', icon: '🛒', module: 'orders' },
         { label: 'Clientes', path: '/hub/customers', icon: '👤', module: 'customers' },
@@ -68,6 +69,7 @@ const NAV_CONFIG: Record<OrgType, NavSection[]> = {
       title: 'PRINCIPAL',
       items: [
         { label: 'Dashboard', path: '/hub', icon: '📊', module: 'dashboard' },
+        { label: 'Proveedores', path: '/hub/suppliers', icon: '🏭', module: 'suppliers' },
         { label: 'Inventario', path: '/hub/inventory', icon: '📦', module: 'inventory' },
         { label: 'Órdenes de Compra', path: '/hub/orders', icon: '🛒', module: 'orders' },
         { label: 'Clientes', path: '/hub/customers', icon: '👤', module: 'customers' },
@@ -113,6 +115,7 @@ const NAV_CONFIG: Record<OrgType, NavSection[]> = {
       title: 'PRINCIPAL',
       items: [
         { label: 'Dashboard', path: '/hub', icon: '📊', module: 'dashboard', hideForRoles: ['associate_editor', 'associate_dispatcher', 'warehouse_picker', 'warehouse_packer', 'warehouse_receiver'] },
+        { label: 'Proveedores', path: '/hub/suppliers', icon: '🏭', module: 'suppliers' },
         { label: 'Inventario', path: '/hub/inventory', icon: '📦', module: 'inventory' },
         { label: 'Órdenes de Compra', path: '/hub/orders', icon: '🛒', module: 'orders' },
         { label: 'Clientes', path: '/hub/customers', icon: '👤', module: 'customers' },
