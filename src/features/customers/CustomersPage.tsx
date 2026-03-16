@@ -1,13 +1,18 @@
 import { useEffect, useState, useCallback } from 'react';
 import { usePermissions } from '@/hooks/usePermissions.ts';
 import { useAuthStore } from '@/stores/authStore.ts';
+import { useOrgSelector } from '@/hooks/useOrgSelector.ts';
+import { StatsCard } from '@/components/hub/shared/StatsCard.tsx';
 import { EmptyState } from '@/components/hub/shared/EmptyState.tsx';
+import { OrgSelectorGrid } from '@/components/hub/shared/OrgSelectorGrid.tsx';
 import { Modal } from '@/components/hub/shared/Modal.tsx';
 import { ConfirmDeleteModal } from '@/components/hub/shared/ConfirmDeleteModal.tsx';
 import GooglePlacesAutocomplete from '@/components/GooglePlacesAutocomplete.tsx';
 import type { Customer } from '@/lib/database.types.ts';
 import * as customerService from '@/services/customerService.ts';
 import { getOrgNameMap } from '@/services/orgService.ts';
+import { getOrgCustomerSummaries } from '@/services/dashboardService.ts';
+import type { OrgCustomerSummary } from '@/services/dashboardService.ts';
 
 const emptyForm = { name: '', rif: '', email: '', phone: '', whatsapp: '', address: '', city: '', state: '', notes: '', lat: null as number | null, lng: null as number | null };
 
@@ -23,6 +28,9 @@ export function CustomersPage() {
   const { canWrite, isPlatformOwner } = usePermissions();
   const organization = useAuthStore((s) => s.organization);
 
+  const { summaries, selectedOrgId, selectedOrg, loading: loadingSummaries, setSelectedOrgId, showSelector } =
+    useOrgSelector<OrgCustomerSummary>(getOrgCustomerSummaries, isPlatformOwner);
+
   const [form, setForm] = useState({ ...emptyForm });
   const [saveLoading, setSaveLoading] = useState(false);
   const [saveError, setSaveError] = useState('');
@@ -32,24 +40,27 @@ export function CustomersPage() {
 
   const isEditMode = Boolean(editCustomer);
 
+  const orgId = isPlatformOwner ? selectedOrgId ?? undefined : organization?.id;
+
   // ── Load customers ──
   const loadCustomers = useCallback(async () => {
+    if (showSelector) return;
     setLoading(true);
     const result = await customerService.getCustomers({
-      orgId: organization?.id,
-      isPlatform: isPlatformOwner,
+      orgId,
+      isPlatform: false,
     });
     const list = result.data ?? [];
     setCustomers(list);
     setLoading(false);
 
-    // Load org names for Super Admin
-    if (isPlatformOwner && list.length > 0) {
+    // Load org names for Super Admin (only when no org selected)
+    if (isPlatformOwner && !selectedOrgId && list.length > 0) {
       const uniqueOrgIds = [...new Set(list.map((c) => c.org_id))];
       const map = await getOrgNameMap(uniqueOrgIds);
       setOrgNames(map);
     }
-  }, [isPlatformOwner, organization]);
+  }, [isPlatformOwner, organization, orgId, showSelector, selectedOrgId]);
 
   useEffect(() => { loadCustomers(); }, [loadCustomers]);
 
@@ -163,10 +174,46 @@ export function CustomersPage() {
     setSaveError('');
   };
 
+  if (showSelector) {
+    const totalCustomers = summaries.reduce((s, o) => s + o.customerCount, 0);
+    const totalWithEmail = summaries.reduce((s, o) => s + o.withEmail, 0);
+    const totalWithPhone = summaries.reduce((s, o) => s + o.withPhone, 0);
+
+    return (
+      <OrgSelectorGrid<OrgCustomerSummary>
+        summaries={summaries}
+        loading={loadingSummaries}
+        onSelect={setSelectedOrgId}
+        pageTitle="Clientes"
+        pageSubtitle="Selecciona una organización para ver sus clientes"
+        globalStats={[
+          { title: 'Total Clientes', value: totalCustomers, icon: '👤', color: '#6366F1' },
+          { title: 'Con Email', value: totalWithEmail, icon: '📧', color: '#10B981' },
+          { title: 'Con Teléfono', value: totalWithPhone, icon: '📱', color: '#3B82F6' },
+          { title: 'Organizaciones', value: summaries.length, icon: '🏢', color: '#8B5CF6' },
+        ]}
+        statFields={[
+          { key: 'customerCount', label: 'Clientes', color: '#6366F1' },
+          { key: 'withEmail', label: 'Con Email', color: '#10B981' },
+          { key: 'withPhone', label: 'Con Teléfono', color: '#3B82F6' },
+        ]}
+      />
+    );
+  }
+
   return (
     <div>
       <div className="rh-page-header">
-        <h1 className="rh-page-title">Clientes</h1>
+        <div>
+          {isPlatformOwner && selectedOrg && (
+            <button onClick={() => setSelectedOrgId(null)} className="rh-btn rh-btn-ghost" style={{ fontSize: 13, marginBottom: 4, padding: '2px 0' }}>
+              ← Todas las organizaciones
+            </button>
+          )}
+          <h1 className="rh-page-title">
+            Clientes{isPlatformOwner && selectedOrg ? ` — ${selectedOrg.name}` : ''}
+          </h1>
+        </div>
         <div className="rh-page-actions">
           <input
             type="text"

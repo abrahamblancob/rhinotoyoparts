@@ -188,3 +188,61 @@ export async function getOrgReturnSummaries(): Promise<OrgReturnSummary[]> {
     }),
   );
 }
+
+/* ── Customers ── */
+
+export interface OrgCustomerSummary {
+  id: string;
+  name: string;
+  type: string;
+  customerCount: number;
+  withEmail: number;
+  withPhone: number;
+}
+
+export async function getOrgCustomerSummaries(): Promise<OrgCustomerSummary[]> {
+  const orgs = await fetchActiveOrgs();
+  if (orgs.length === 0) return [];
+
+  return Promise.all(
+    orgs.map(async (org) => {
+      const [totalRes, emailRes, phoneRes] = await Promise.all([
+        supabase.from('customers').select('id', { count: 'exact', head: true }).eq('org_id', org.id),
+        supabase.from('customers').select('id', { count: 'exact', head: true }).eq('org_id', org.id).not('email', 'is', null),
+        supabase.from('customers').select('id', { count: 'exact', head: true }).eq('org_id', org.id).not('phone', 'is', null),
+      ]);
+      return { id: org.id, name: org.name, type: org.type as string, customerCount: totalRes.count ?? 0, withEmail: emailRes.count ?? 0, withPhone: phoneRes.count ?? 0 };
+    }),
+  );
+}
+
+/* ── Stock by Location ── */
+
+export interface OrgStockSummary {
+  id: string;
+  name: string;
+  type: string;
+  productCount: number;
+  totalUnits: number;
+  lowStockCount: number;
+  warehouseCount: number;
+}
+
+export async function getOrgStockSummaries(): Promise<OrgStockSummary[]> {
+  const orgs = await fetchActiveOrgs();
+  if (orgs.length === 0) return [];
+
+  return Promise.all(
+    orgs.map(async (org) => {
+      const [stockRes, lowRes, whRes] = await Promise.all([
+        supabase.from('inventory_stock').select('product_id, quantity').eq('org_id', org.id),
+        supabase.from('inventory_stock').select('id', { count: 'exact', head: true }).eq('org_id', org.id).lte('quantity', 5).gt('quantity', 0),
+        supabase.from('warehouses').select('id', { count: 'exact', head: true }).eq('org_id', org.id),
+      ]);
+      const rows = stockRes.data ?? [];
+      const uniqueProducts = new Set(rows.map((r: { product_id: string }) => r.product_id)).size;
+      const totalUnits = rows.reduce((s, r: { quantity: number }) => s + (r.quantity ?? 0), 0);
+      return { id: org.id, name: org.name, type: org.type as string, productCount: uniqueProducts, totalUnits, lowStockCount: lowRes.count ?? 0, warehouseCount: whRes.count ?? 0 };
+    }),
+  );
+}

@@ -9,10 +9,14 @@ import {
 import { useAuthStore } from '@/stores/authStore.ts';
 import { usePermissions } from '@/hooks/usePermissions.ts';
 import { useAsyncData } from '@/hooks/useAsyncData.ts';
+import { useOrgSelector } from '@/hooks/useOrgSelector.ts';
 import { useWarehouses, useWarehouseStats } from '@/hooks/useWarehouse.ts';
 import { StatsCard } from '@/components/hub/shared/StatsCard.tsx';
 import { EmptyState } from '@/components/hub/shared/EmptyState.tsx';
+import { OrgSelectorGrid } from '@/components/hub/shared/OrgSelectorGrid.tsx';
 import * as warehouseService from '@/services/warehouseService.ts';
+import { getOrgStockSummaries } from '@/services/dashboardService.ts';
+import type { OrgStockSummary } from '@/services/dashboardService.ts';
 import { supabase } from '@/lib/supabase.ts';
 import type { InventoryStock } from '@/types/warehouse.ts';
 
@@ -100,33 +104,50 @@ export function StockDashboard() {
   const [showTable, setShowTable] = useState(false);
   const [showUnlocated, setShowUnlocated] = useState(false);
   const navigate = useNavigate();
-  usePermissions();
+  const { isPlatform } = usePermissions();
   const organization = useAuthStore((s) => s.organization);
-  const { data: warehouses } = useWarehouses();
+
+  const { summaries, selectedOrgId, selectedOrg, loading: loadingSummaries, setSelectedOrgId, showSelector } =
+    useOrgSelector<OrgStockSummary>(getOrgStockSummaries, isPlatform);
+
+  const orgId = isPlatform ? selectedOrgId ?? undefined : organization?.id;
+
+  const { data: defaultWarehouses } = useWarehouses();
+
+  // When platform user selects an org, fetch that org's warehouses
+  const whFetcher = useCallback(
+    () => orgId ? warehouseService.getWarehouses({ orgId, isPlatform: false }) : Promise.resolve({ data: [] as never[], error: null }),
+    [orgId],
+  );
+  const { data: orgWarehouses } = useAsyncData(whFetcher, [orgId]);
+  const warehouses = isPlatform && selectedOrgId ? orgWarehouses : defaultWarehouses;
 
   const fetcher = useCallback(
     () => {
-      if (!organization?.id) return Promise.resolve({ data: [] as InventoryStock[], error: null });
+      if (!orgId) return Promise.resolve({ data: [] as InventoryStock[], error: null });
       if (warehouseFilter !== 'all') return warehouseService.getStockByWarehouse(warehouseFilter);
-      return warehouseService.getStockByOrg(organization.id);
+      return warehouseService.getStockByOrg(orgId);
     },
-    [organization?.id, warehouseFilter],
+    [orgId, warehouseFilter],
   );
 
-  const { data: stockItems, loading, reload } = useAsyncData<InventoryStock[]>(fetcher, [organization?.id, warehouseFilter]);
+  const { data: stockItems, loading, reload } = useAsyncData<InventoryStock[]>(fetcher, [orgId, warehouseFilter]);
 
   // Warehouse stats (only when specific warehouse selected)
   const { stats } = useWarehouseStats(warehouseFilter !== 'all' ? warehouseFilter : undefined);
 
   // Realtime subscription
   useEffect(() => {
-    if (!organization?.id) return;
+    if (!orgId) return;
     const whIds = (warehouses ?? []).map((w) => w.id);
     const channels = whIds.map((whId) => warehouseService.subscribeToStock(whId, reload));
     return () => { channels.forEach((ch) => supabase.removeChannel(ch)); };
-  }, [organization?.id, warehouses, reload]);
+  }, [orgId, warehouses, reload]);
 
-  const items = stockItems ?? [];
+  // Reset warehouse filter when org changes
+  useEffect(() => { setWarehouseFilter('all'); }, [orgId]);
+
+  const items = showSelector ? [] : (stockItems ?? []);
 
   // ── Filters ──
   let filtered = search.trim()
@@ -169,12 +190,48 @@ export function StockDashboard() {
     ? warehouses?.find((w) => w.id === warehouseFilter)?.name ?? 'Almacén'
     : null;
 
+  if (showSelector) {
+    const totalProducts = summaries.reduce((s, o) => s + o.productCount, 0);
+    const totalUnitsAll = summaries.reduce((s, o) => s + o.totalUnits, 0);
+    const totalLow = summaries.reduce((s, o) => s + o.lowStockCount, 0);
+    const totalWarehouses = summaries.reduce((s, o) => s + o.warehouseCount, 0);
+
+    return (
+      <OrgSelectorGrid<OrgStockSummary>
+        summaries={summaries}
+        loading={loadingSummaries}
+        onSelect={setSelectedOrgId}
+        pageTitle="Stock por Ubicación"
+        pageSubtitle="Selecciona una organización para ver su inventario"
+        globalStats={[
+          { title: 'Productos', value: totalProducts, icon: '📦', color: '#6366F1' },
+          { title: 'Unidades Totales', value: totalUnitsAll.toLocaleString(), icon: '📊', color: '#10B981' },
+          { title: 'Alertas Stock Bajo', value: totalLow, icon: '⚠️', color: '#D3010A' },
+          { title: 'Almacenes', value: totalWarehouses, icon: '🏭', color: '#8B5CF6' },
+        ]}
+        statFields={[
+          { key: 'productCount', label: 'Productos', color: '#6366F1' },
+          { key: 'totalUnits', label: 'Unidades', color: '#10B981' },
+          { key: 'lowStockCount', label: 'Stock Bajo', color: '#D3010A', highlight: true },
+          { key: 'warehouseCount', label: 'Almacenes', color: '#8B5CF6' },
+        ]}
+      />
+    );
+  }
+
   return (
     <div>
       {/* ── Header + warehouse filter ── */}
       <div className="rh-page-header" style={{ marginBottom: 24 }}>
         <div>
-          <h1 className="rh-page-title">Stock de Inventario</h1>
+          {isPlatform && selectedOrg && (
+            <button onClick={() => setSelectedOrgId(null)} className="rh-btn rh-btn-ghost" style={{ fontSize: 13, marginBottom: 4, padding: '2px 0' }}>
+              ← Todas las organizaciones
+            </button>
+          )}
+          <h1 className="rh-page-title">
+            Stock de Inventario{isPlatform && selectedOrg ? ` — ${selectedOrg.name}` : ''}
+          </h1>
           <p style={{ color: '#8A8886', fontSize: 14, marginTop: 4 }}>
             {selectedWarehouseName
               ? `Dashboard de stock — ${selectedWarehouseName}`
