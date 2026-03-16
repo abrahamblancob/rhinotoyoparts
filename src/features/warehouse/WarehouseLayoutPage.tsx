@@ -951,16 +951,16 @@ export function WarehouseLayoutPage() {
                     {/* Racks */}
                     {displayRacks.map((rack, rIdx) => {
                       const color = RACK_COLORS[rIdx % RACK_COLORS.length];
-                      const wCells = rack.orientation === 'horizontal'
-                        ? Math.ceil(rack.rack_depth_m ?? 1)
-                        : Math.ceil(rack.rack_width_m ?? 1);
-                      const dCells = rack.orientation === 'horizontal'
-                        ? Math.ceil(rack.rack_width_m ?? 1)
-                        : Math.ceil(rack.rack_depth_m ?? 1);
+                      const rWidthM = rack.orientation === 'horizontal'
+                        ? (rack.rack_depth_m ?? 1)
+                        : (rack.rack_width_m ?? 1);
+                      const rDepthM = rack.orientation === 'horizontal'
+                        ? (rack.rack_width_m ?? 1)
+                        : (rack.rack_depth_m ?? 1);
                       const rLeft = (rack.position_x ?? 0) * cellW;
                       const rTop = (rack.position_y ?? 0) * cellH;
-                      const rW = wCells * cellW - 2;
-                      const rH = dCells * cellH - 2;
+                      const rW = rWidthM * cellW - 2;
+                      const rH = rDepthM * cellH - 2;
                       if (rW <= 0 || rH <= 0) return null;
                       return (
                         <div
