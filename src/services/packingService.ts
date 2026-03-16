@@ -94,12 +94,15 @@ export async function completePackSession(sessionId: string, data: {
   if (result.data) {
     const orderId = result.data.order_id;
     try {
-      await supabase.rpc('change_order_status', {
+      const { error: transitionError } = await supabase.rpc('change_order_status', {
         p_order_id: orderId,
         p_new_status: 'packed',
         p_notes: 'Packing completado',
         p_metadata: {},
       });
+      if (transitionError) {
+        console.error('Auto-transition to packed failed:', transitionError.message);
+      }
     } catch (err) {
       console.error('Auto-transition to packed failed:', err);
     }

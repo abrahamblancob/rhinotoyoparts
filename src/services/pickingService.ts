@@ -161,12 +161,15 @@ export async function completePickList(pickListId: string) {
   if (result.data) {
     const orderId = result.data.order_id;
     try {
-      await supabase.rpc('change_order_status', {
+      const { error: transitionError } = await supabase.rpc('change_order_status', {
         p_order_id: orderId,
         p_new_status: 'picked',
         p_notes: 'Picking completado',
         p_metadata: {},
       });
+      if (transitionError) {
+        console.error('Auto-transition to picked failed:', transitionError.message);
+      }
     } catch (err) {
       console.error('Auto-transition to picked failed:', err);
     }

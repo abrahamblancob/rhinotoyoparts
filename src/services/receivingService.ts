@@ -1,4 +1,4 @@
-import { query, supabase } from './base.ts';
+import { query } from './base.ts';
 import type { ReceivingOrder, ReceivingOrderItem } from '@/types/warehouse.ts';
 
 export async function getReceivingOrders(opts?: { orgId?: string; isPlatform?: boolean; warehouseId?: string; status?: string }) {
@@ -58,16 +58,12 @@ export async function addReceivingItem(data: {
 }
 
 export async function deleteReceivingItem(itemId: string) {
-  const { error } = await supabase
-    .from('receiving_order_items')
-    .delete()
-    .eq('id', itemId)
-    .eq('status', 'pending');
-
-  if (error) {
-    return { data: null, error: error.message };
-  }
-  return { data: null, error: null };
+  return query<null>((sb) =>
+    sb.from('receiving_order_items')
+      .delete()
+      .eq('id', itemId)
+      .eq('status', 'pending')
+  );
 }
 
 export async function receiveItem(itemId: string, data: {
@@ -79,21 +75,18 @@ export async function receiveItem(itemId: string, data: {
   lot_number?: string;
   status: 'received' | 'partial' | 'damaged';
 }) {
-  const { error } = await supabase.rpc('receive_item_to_warehouse', {
-    p_item_id: itemId,
-    p_product_id: data.product_id,
-    p_received_quantity: data.received_quantity,
-    p_location_id: data.assigned_location_id ?? null,
-    p_warehouse_id: data.warehouse_id,
-    p_org_id: data.org_id,
-    p_lot_number: data.lot_number ?? null,
-    p_status: data.status,
-  });
-
-  if (error) {
-    return { data: null, error: error.message };
-  }
-  return { data: null, error: null };
+  return query<null>((sb) =>
+    sb.rpc('receive_item_to_warehouse', {
+      p_item_id: itemId,
+      p_product_id: data.product_id,
+      p_received_quantity: data.received_quantity,
+      p_location_id: data.assigned_location_id ?? null,
+      p_warehouse_id: data.warehouse_id,
+      p_org_id: data.org_id,
+      p_lot_number: data.lot_number ?? null,
+      p_status: data.status,
+    })
+  );
 }
 
 export async function completeReceiving(orderId: string, receivedBy: string) {

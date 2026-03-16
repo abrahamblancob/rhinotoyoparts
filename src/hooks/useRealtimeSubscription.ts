@@ -1,4 +1,4 @@
-import { useEffect } from 'react';
+import { useEffect, useRef } from 'react';
 import { supabase } from '@/lib/supabase.ts';
 
 export function useRealtimeSubscription(
@@ -7,6 +7,9 @@ export function useRealtimeSubscription(
   filter: string | undefined,
   onUpdate: () => void,
 ) {
+  const onUpdateRef = useRef(onUpdate);
+  onUpdateRef.current = onUpdate;
+
   useEffect(() => {
     const channel = supabase.channel(channelName)
       .on('postgres_changes', {
@@ -14,9 +17,9 @@ export function useRealtimeSubscription(
         schema: 'public',
         table,
         filter,
-      }, onUpdate)
+      }, () => onUpdateRef.current())
       .subscribe();
 
     return () => { supabase.removeChannel(channel); };
-  }, [channelName, table, filter, onUpdate]);
+  }, [channelName, table, filter]);
 }
