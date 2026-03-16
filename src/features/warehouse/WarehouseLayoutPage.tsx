@@ -847,44 +847,24 @@ export function WarehouseLayoutPage() {
           (r) => r.position_x != null && r.position_y != null,
         );
 
-        /* ── Auto-zoom: compute bounding box of all content ── */
-        let minX = 0, minY = 0, maxX = whW, maxY = whL;
-        if (displayRacks.length > 0 || displayZones.length > 0) {
-          minX = Infinity; minY = Infinity; maxX = -Infinity; maxY = -Infinity;
-          for (const r of displayRacks) {
-            const rx = r.position_x ?? 0;
-            const ry = r.position_y ?? 0;
-            const rw = r.orientation === 'horizontal' ? (r.rack_depth_m ?? 1) : (r.rack_width_m ?? 1);
-            const rh = r.orientation === 'horizontal' ? (r.rack_width_m ?? 1) : (r.rack_depth_m ?? 1);
-            minX = Math.min(minX, rx);
-            minY = Math.min(minY, ry);
-            maxX = Math.max(maxX, rx + rw);
-            maxY = Math.max(maxY, ry + rh);
-          }
-          for (const z of displayZones) {
-            minX = Math.min(minX, z.position_x ?? 0);
-            minY = Math.min(minY, z.position_y ?? 0);
-            maxX = Math.max(maxX, (z.position_x ?? 0) + (z.width ?? 0));
-            maxY = Math.max(maxY, (z.position_y ?? 0) + (z.height ?? 0));
-          }
-          /* Add 1m padding around content, clamped to warehouse bounds */
-          const pad = 1;
-          minX = Math.max(0, minX - pad);
-          minY = Math.max(0, minY - pad);
-          maxX = Math.min(whW, maxX + pad);
-          maxY = Math.min(whL, maxY + pad);
-        }
-        const spanX = maxX - minX;
-        const spanY = maxY - minY;
+        /* Simple full-warehouse scaling */
+        const viewW = 520;
+        const viewH = 420;
+        const cellW = viewW / whW;    /* px per meter */
+        const cellH = viewH / whL;
 
-        /* Size the canvas to fit the content area */
-        const canvasW = 520;
-        const canvasH = 420;
-        const uniformScale = Math.min(canvasW / spanX, canvasH / spanY);
-        const viewW = Math.round(spanX * uniformScale);
-        const viewH = Math.round(spanY * uniformScale);
-        const cellW = uniformScale;   /* px per meter */
-        const cellH = uniformScale;
+        /* Compute content bounding box for the legend */
+        let contentMaxY = 0;
+        for (const r of displayRacks) {
+          const ry = r.position_y ?? 0;
+          const rh = r.orientation === 'horizontal' ? (r.rack_width_m ?? 1) : (r.rack_depth_m ?? 1);
+          contentMaxY = Math.max(contentMaxY, ry + rh);
+        }
+        for (const z of displayZones) {
+          contentMaxY = Math.max(contentMaxY, (z.position_y ?? 0) + (z.height ?? 0));
+        }
+        const usedPct = whL > 0 ? Math.round((contentMaxY / whL) * 100) : 100;
+        const unusedPct = 100 - usedPct;
 
         return (
           <div
@@ -941,8 +921,8 @@ export function WarehouseLayoutPage() {
                   >
                     {/* Zones */}
                     {displayZones.map((zone) => {
-                      const zLeft = ((zone.position_x ?? 0) - minX) * cellW;
-                      const zTop = ((zone.position_y ?? 0) - minY) * cellH;
+                      const zLeft = (zone.position_x ?? 0) * cellW;
+                      const zTop = (zone.position_y ?? 0) * cellH;
                       const zW = Math.min((zone.width ?? 0) * cellW, viewW - zLeft);
                       const zH = Math.min((zone.height ?? 0) * cellH, viewH - zTop);
                       if (zW <= 0 || zH <= 0) return null;
@@ -961,20 +941,6 @@ export function WarehouseLayoutPage() {
                             borderRadius: 3,
                           }}
                         >
-                          <span
-                            style={{
-                              position: 'absolute',
-                              top: 2,
-                              left: 3,
-                              fontSize: 9,
-                              color,
-                              fontWeight: 600,
-                              whiteSpace: 'nowrap',
-                              overflow: 'hidden',
-                            }}
-                          >
-                            {zone.name}
-                          </span>
                         </div>
                       );
                     })}
@@ -988,8 +954,8 @@ export function WarehouseLayoutPage() {
                       const rDepthM = rack.orientation === 'horizontal'
                         ? (rack.rack_width_m ?? 1)
                         : (rack.rack_depth_m ?? 1);
-                      const rLeft = ((rack.position_x ?? 0) - minX) * cellW;
-                      const rTop = ((rack.position_y ?? 0) - minY) * cellH;
+                      const rLeft = (rack.position_x ?? 0) * cellW;
+                      const rTop = (rack.position_y ?? 0) * cellH;
                       const rW = rWidthM * cellW - 2;
                       const rH = rDepthM * cellH - 2;
                       if (rW <= 0 || rH <= 0) return null;
@@ -1057,6 +1023,13 @@ export function WarehouseLayoutPage() {
                   </span>
                 </div>
               </div>
+              {/* Legend */}
+              {displayRacks.length > 0 && unusedPct > 20 && (
+                <p style={{ fontSize: 11, color: '#94A3B8', margin: '8px 0 0', textAlign: 'center' }}>
+                  {displayRacks.length} estantes posicionados en los primeros ~{Math.ceil(contentMaxY)}m de {whL}m
+                  {' '}&mdash; {unusedPct}% del espacio sin usar
+                </p>
+              )}
             </div>
 
             {/* ── Side / Lateral view ── */}
