@@ -418,7 +418,6 @@ export function ReceivingDetailPage() {
         open={showAddProduct}
         receivingOrderId={order.id}
         warehouseOrgId={order.warehouse?.org_id ?? order.org_id}
-        supplierId={order.supplier_id}
         existingItems={allItems}
         onClose={() => setShowAddProduct(false)}
         onAdded={() => {
@@ -509,13 +508,12 @@ interface AddReceivingProductModalProps {
   open: boolean;
   receivingOrderId: string;
   warehouseOrgId: string;
-  supplierId: string | null;
   existingItems: ReceivingOrderItem[];
   onClose: () => void;
   onAdded: () => void;
 }
 
-function AddReceivingProductModal({ open, receivingOrderId, warehouseOrgId, supplierId, existingItems, onClose, onAdded }: AddReceivingProductModalProps) {
+function AddReceivingProductModal({ open, receivingOrderId, warehouseOrgId, existingItems, onClose, onAdded }: AddReceivingProductModalProps) {
   const [searchTerm, setSearchTerm] = useState('');
   const [searchResults, setSearchResults] = useState<Product[]>([]);
   const [searching, setSearching] = useState(false);
@@ -535,37 +533,26 @@ function AddReceivingProductModal({ open, receivingOrderId, warehouseOrgId, supp
     [existingItems]
   );
 
-  // Stock already committed in this order, by product
-  const committedByProduct = useMemo(() => {
-    const map = new Map<string, number>();
-    for (const item of existingItems) {
-      map.set(item.product_id, (map.get(item.product_id) ?? 0) + item.expected_quantity);
-    }
-    return map;
-  }, [existingItems]);
-
   useEffect(() => {
     return () => { if (debounceRef.current) clearTimeout(debounceRef.current); };
   }, []);
 
-  // Load initial products when modal opens, filtered by supplier
+  // Load initial products when modal opens (all active products in org)
   useEffect(() => {
     if (!open || !warehouseOrgId) return;
     setInitialLoading(true);
-    let q = supabase
+    const q = supabase
       .from('products')
       .select('*')
       .eq('org_id', warehouseOrgId)
       .eq('status', 'active')
-      .gt('stock', 0)
       .order('name')
       .limit(50);
-    if (supplierId) q = q.eq('supplier_id', supplierId);
     q.then(({ data }) => {
       setInitialProducts((data as Product[]) ?? []);
       setInitialLoading(false);
     });
-  }, [open, warehouseOrgId, supplierId]);
+  }, [open, warehouseOrgId]);
 
   // Reset on close
   useEffect(() => {
@@ -589,15 +576,13 @@ function AddReceivingProductModal({ open, receivingOrderId, warehouseOrgId, supp
     debounceRef.current = setTimeout(async () => {
       if (searchRef.current !== query) return;
       const s = query.trim().toLowerCase();
-      let q = supabase
+      const q = supabase
         .from('products')
         .select('*')
         .eq('org_id', warehouseOrgId)
         .eq('status', 'active')
-        .gt('stock', 0)
         .or(`name.ilike.%${s}%,sku.ilike.%${s}%,oem_number.ilike.%${s}%,brand.ilike.%${s}%`)
         .limit(30);
-      if (supplierId) q = q.eq('supplier_id', supplierId);
       const { data, error: err } = await q;
       if (err) console.error('Product search error:', err);
       if (searchRef.current === query) {
@@ -605,7 +590,7 @@ function AddReceivingProductModal({ open, receivingOrderId, warehouseOrgId, supp
         setSearching(false);
       }
     }, 200);
-  }, [warehouseOrgId, supplierId]);
+  }, [warehouseOrgId]);
 
   const handleSelectProduct = (product: Product) => {
     setSelectedProduct(product);
@@ -615,12 +600,6 @@ function AddReceivingProductModal({ open, receivingOrderId, warehouseOrgId, supp
   const handleSubmit = async () => {
     if (!selectedProduct) return;
     if (expectedQty <= 0) { setError('La cantidad debe ser mayor a 0'); return; }
-    const alreadyCommitted = committedByProduct.get(selectedProduct.id) ?? 0;
-    const availableStock = selectedProduct.stock - alreadyCommitted;
-    if (expectedQty > availableStock) {
-      setError(`Stock insuficiente. Disponible: ${availableStock}${alreadyCommitted > 0 ? ` (${alreadyCommitted} ya comprometidas en esta orden)` : ''}`);
-      return;
-    }
 
     setSaving(true);
     setError(null);
@@ -677,7 +656,7 @@ function AddReceivingProductModal({ open, receivingOrderId, warehouseOrgId, supp
             <div style={{ flex: 1, minWidth: 0 }}>
               <p style={{ fontSize: 14, fontWeight: 600, color: '#1E293B', margin: 0 }}>{selectedProduct.name}</p>
               <p style={{ fontSize: 12, color: '#64748B', margin: '2px 0 0' }}>
-                SKU: {selectedProduct.sku}{selectedProduct.brand ? ` | ${selectedProduct.brand}` : ''} | Stock disponible: {selectedProduct.stock - (committedByProduct.get(selectedProduct.id) ?? 0)}
+                SKU: {selectedProduct.sku}{selectedProduct.brand ? ` | ${selectedProduct.brand}` : ''} | Stock actual: {selectedProduct.stock}
               </p>
             </div>
             <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexShrink: 0 }}>
@@ -685,7 +664,6 @@ function AddReceivingProductModal({ open, receivingOrderId, warehouseOrgId, supp
               <input
                 type="number"
                 min={1}
-                max={selectedProduct.stock - (committedByProduct.get(selectedProduct.id) ?? 0)}
                 value={expectedQty}
                 onChange={(e) => setExpectedQty(Math.max(1, parseInt(e.target.value) || 1))}
                 className="rh-input"
@@ -737,8 +715,7 @@ function AddReceivingProductModal({ open, receivingOrderId, warehouseOrgId, supp
             }}>
               {displayProducts.map((p) => {
                 const isSelected = selectedProduct?.id === p.id;
-                const adjustedStock = p.stock - (committedByProduct.get(p.id) ?? 0);
-                const stockColor = adjustedStock > 10 ? '#10B981' : adjustedStock > 0 ? '#F59E0B' : '#D3010A';
+                const stockColor = p.stock > 10 ? '#10B981' : p.stock > 0 ? '#F59E0B' : '#94A3B8';
                 return (
                   <div
                     key={p.id}
@@ -822,7 +799,7 @@ function AddReceivingProductModal({ open, receivingOrderId, warehouseOrgId, supp
                         backgroundColor: stockColor + '15', padding: '2px 8px',
                         borderRadius: 10,
                       }}>
-                        {adjustedStock} en stock
+                        {p.stock} en stock
                       </span>
                       {p.price > 0 && (
                         <span style={{ fontSize: 12, fontWeight: 600, color: '#1E293B' }}>
