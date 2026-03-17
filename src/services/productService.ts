@@ -61,6 +61,32 @@ export async function searchProducts(orgId: string, search: string) {
   );
 }
 
+/** Search products for receiving — tries org_id filter first, falls back to no org filter */
+export async function searchProductsForReceiving(orgId: string, search?: string, limit = 50) {
+  const s = search?.trim().toLowerCase();
+
+  // Try with org_id first
+  const primary = await query<Product[]>((sb) => {
+    let q = sb.from('products').select('*').eq('org_id', orgId).eq('status', 'active');
+    if (s && s.length >= 2) {
+      q = q.or(`name.ilike.%${s}%,sku.ilike.%${s}%,oem_number.ilike.%${s}%,brand.ilike.%${s}%`);
+    }
+    return q.order('name').limit(limit);
+  });
+
+  if (primary.data && primary.data.length > 0) return primary;
+
+  // Fallback: no org filter, rely on RLS
+  console.warn('[Receiving] No products for org_id:', orgId, '- falling back to RLS-only');
+  return query<Product[]>((sb) => {
+    let q = sb.from('products').select('*').eq('status', 'active');
+    if (s && s.length >= 2) {
+      q = q.or(`name.ilike.%${s}%,sku.ilike.%${s}%,oem_number.ilike.%${s}%,brand.ilike.%${s}%`);
+    }
+    return q.order('name').limit(limit);
+  });
+}
+
 export async function getProductsByIds(ids: string[]) {
   if (ids.length === 0) return { data: [] as Product[], error: null };
   return query<Product[]>((sb) =>
