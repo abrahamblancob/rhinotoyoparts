@@ -541,17 +541,34 @@ function AddReceivingProductModal({ open, receivingOrderId, warehouseOrgId, exis
   useEffect(() => {
     if (!open || !warehouseOrgId) return;
     setInitialLoading(true);
-    const q = supabase
-      .from('products')
-      .select('*')
-      .eq('org_id', warehouseOrgId)
-      .eq('status', 'active')
-      .order('name')
-      .limit(50);
-    q.then(({ data }) => {
-      setInitialProducts((data as Product[]) ?? []);
+    (async () => {
+      // Try with org_id filter first
+      const { data, error: err } = await supabase
+        .from('products')
+        .select('*')
+        .eq('org_id', warehouseOrgId)
+        .eq('status', 'active')
+        .order('name')
+        .limit(50);
+      if (err) console.error('[Receiving] Initial load error:', err, 'org_id:', warehouseOrgId);
+      const results = (data as Product[]) ?? [];
+
+      if (results.length === 0) {
+        // Fallback: search without org_id filter (RLS still protects access)
+        console.warn('[Receiving] No products found for org_id:', warehouseOrgId, '- trying without org filter');
+        const { data: fallbackData, error: fallbackErr } = await supabase
+          .from('products')
+          .select('*')
+          .eq('status', 'active')
+          .order('name')
+          .limit(50);
+        if (fallbackErr) console.error('[Receiving] Fallback load error:', fallbackErr);
+        setInitialProducts((fallbackData as Product[]) ?? []);
+      } else {
+        setInitialProducts(results);
+      }
       setInitialLoading(false);
-    });
+    })();
   }, [open, warehouseOrgId]);
 
   // Reset on close
@@ -576,17 +593,33 @@ function AddReceivingProductModal({ open, receivingOrderId, warehouseOrgId, exis
     debounceRef.current = setTimeout(async () => {
       if (searchRef.current !== query) return;
       const s = query.trim().toLowerCase();
-      const q = supabase
+      // Try with org_id filter first
+      let q = supabase
         .from('products')
         .select('*')
         .eq('org_id', warehouseOrgId)
         .eq('status', 'active')
         .or(`name.ilike.%${s}%,sku.ilike.%${s}%,oem_number.ilike.%${s}%,brand.ilike.%${s}%`)
         .limit(30);
-      const { data, error: err } = await q;
-      if (err) console.error('Product search error:', err);
+      let { data, error: err } = await q;
+      if (err) console.error('[Receiving] Search error:', err, 'org_id:', warehouseOrgId);
+      let results = (data as Product[]) ?? [];
+
+      // Fallback: if no results, search without org_id filter (RLS still protects)
+      if (results.length === 0) {
+        console.warn('[Receiving] No results for org_id:', warehouseOrgId, 'query:', s, '- trying without org filter');
+        const fallback = await supabase
+          .from('products')
+          .select('*')
+          .eq('status', 'active')
+          .or(`name.ilike.%${s}%,sku.ilike.%${s}%,oem_number.ilike.%${s}%,brand.ilike.%${s}%`)
+          .limit(30);
+        if (fallback.error) console.error('[Receiving] Fallback search error:', fallback.error);
+        results = (fallback.data as Product[]) ?? [];
+      }
+
       if (searchRef.current === query) {
-        setSearchResults((data as Product[]) ?? []);
+        setSearchResults(results);
         setSearching(false);
       }
     }, 200);
