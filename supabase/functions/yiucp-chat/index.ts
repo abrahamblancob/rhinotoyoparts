@@ -416,7 +416,8 @@ async function resumen_actividad(db: SupabaseAdmin, args: { org_id: string; incl
     return counts
   }
 
-  return {
+  const resumen = {
+    _instruccion: 'ESTOS SON LOS DATOS EXACTOS DE LA BASE DE DATOS. Reporta SOLO estos números, NO inventes ni modifiques ningún valor.',
     periodo: { desde, hasta: args.fecha_hasta ?? new Date().toISOString().split('T')[0] },
     organizaciones: orgNames ?? [],
     ordenes: { total: orders.data?.length ?? 0, por_status: countByStatus(orders.data), monto_total: orders.data?.reduce((s, o) => s + (Number(o.total) || 0), 0) ?? 0 },
@@ -426,6 +427,9 @@ async function resumen_actividad(db: SupabaseAdmin, args: { org_id: string; incl
     auditorias: { total: audits.data?.length ?? 0, por_status: countByStatus(audits.data) },
     devoluciones: { total: returns.data?.length ?? 0, por_status: countByStatus(returns.data) },
   }
+
+  console.log('📊 resumen_actividad result:', JSON.stringify(resumen))
+  return resumen
 }
 
 // ──────────────────────────────────────────────
@@ -459,7 +463,7 @@ async function callGeminiWithTools(
         contents: messages,
         tools: TOOLS,
         generationConfig: {
-          temperature: 0.3,
+          temperature: 0,
           maxOutputTokens: 4096,
         },
       }),
@@ -508,7 +512,15 @@ INSTRUCCIONES:
 - Para preguntas amplias como "qué pasó hoy" o "resumen de actividad", usa la función resumen_actividad.
 - Presenta los resultados de forma clara con tablas markdown cuando haya datos tabulares.
 - Usa negritas para destacar valores importantes.
-- NO inventes datos. Solo reporta lo que las funciones retornan.
+
+REGLA CRÍTICA ANTI-ALUCINACIÓN:
+- NUNCA inventes, modifiques, redondees o extrapoles datos. Solo reporta EXACTAMENTE los números y valores que las funciones retornan.
+- Cada función retorna un campo "total" con el conteo exacto. USA ese número, no cuentes manualmente.
+- Si una función retorna total: 0 o una lista vacía, di que no hay datos. NUNCA inventes registros que no existen.
+- Si una función retorna un error, reporta el error. NO intentes adivinar los datos.
+- NO agregues datos que no estén explícitamente en la respuesta de la función.
+- Si el usuario pregunta algo que no puedes verificar con las funciones disponibles, di que no tienes esa información.
+
 - Si no hay datos, dilo de forma amigable.
 - NO uses emojis excesivos, máximo 1-2 relevantes.
 - La fecha de hoy es ${new Date().toISOString().split('T')[0]}.`
@@ -661,6 +673,7 @@ Deno.serve(async (req) => {
       const functionResponses: GeminiPart[] = []
       for (const fc of functionCalls) {
         const result = await executeFunction(fc.functionCall.name, fc.functionCall.args, supabaseAdmin, allowedOrgIds)
+        console.log(`📦 Function ${fc.functionCall.name} result:`, JSON.stringify(result).substring(0, 2000))
         functionResponses.push({
           functionResponse: {
             name: fc.functionCall.name,

@@ -169,24 +169,23 @@ export function YiucpPage() {
                 marginBottom: 4,
                 animation: 'yiucpFadeIn 0.6s ease-out 0.3s both',
               }}>
-                <span style={{ color: '#D3010A' }}>Hola, {firstName}</span>
+                Hola, <span style={{ color: '#D3010A' }}>{firstName}</span>
               </h1>
               <p style={{
-                fontSize: 20,
+                fontSize: 18,
                 fontWeight: 500,
                 color: '#64748B',
                 marginBottom: 8,
                 animation: 'yiucpFadeIn 0.6s ease-out 0.5s both',
               }}>
-                ¿En qué puedo ayudarte hoy?
+                Soy <span style={{ color: '#D3010A', fontWeight: 600 }}>Yiucp</span>, tu asistente informativo de Rhino Hub
               </p>
               <p style={{
                 fontSize: 13,
                 color: '#94A3B8',
                 animation: 'yiucpFadeIn 0.6s ease-out 0.7s both',
               }}>
-                Soy Yiucp, tu asistente inteligente de Rhino Toyo Parts.
-                Puedo consultar datos de órdenes, inventario, almacén y más.
+                Puedo consultar datos de órdenes, inventario, almacén y más. ¿En qué puedo ayudarte?
               </p>
             </div>
 
