@@ -31,9 +31,9 @@ export function LocationDetailModal({ open, location, warehouseId, orgId, onClos
   const [assignQuantity, setAssignQuantity] = useState(1);
   const [selectedProduct, setSelectedProduct] = useState<InventoryStock | null>(null);
   const [removing, setRemoving] = useState(false);
-  const [confirmRemove, setConfirmRemove] = useState(false);
+  const [removingStockId, setRemovingStockId] = useState<string | null>(null);
   const [showQR, setShowQR] = useState(false);
-  const [showProductQR, setShowProductQR] = useState(false);
+  const [showProductQR, setShowProductQR] = useState<string | null>(null);
   const [error, setError] = useState('');
 
   // Cleanup ref for cancel handler
@@ -46,7 +46,7 @@ export function LocationDetailModal({ open, location, warehouseId, orgId, onClos
   );
   const { data: allStock, reload: reloadStock } = useAsyncData<InventoryStock[]>(stockFetcher, [warehouseId]);
 
-  const locationStock = allStock?.find((s) => s.location_id === location.id) ?? null;
+  const locationStocks = allStock?.filter((s) => s.location_id === location.id) ?? [];
 
   // Client-side search within warehouse inventory_stock (not aggregator catalog)
   const handleProductSearch = useCallback((query: string) => {
@@ -148,16 +148,15 @@ export function LocationDetailModal({ open, location, warehouseId, orgId, onClos
     setError('');
   };
 
-  const handleRemoveProduct = async () => {
-    if (!locationStock) return;
+  const handleRemoveProduct = async (stock: InventoryStock) => {
     setRemoving(true);
     setError('');
 
     const result = await warehouseService.removeProductFromLocation(
-      locationStock.id,
+      stock.id,
       location.id,
-      locationStock.product_id,
-      locationStock.quantity,
+      stock.product_id,
+      stock.quantity,
     );
     if (result.error) {
       setError(result.error);
@@ -169,11 +168,11 @@ export function LocationDetailModal({ open, location, warehouseId, orgId, onClos
       action: 'remove_stock',
       entityType: 'location',
       entityId: location.id,
-      description: `Removió stock de ubicación ${location.code}`,
+      description: `Removió ${stock.product?.name ?? 'producto'} de ubicación ${location.code}`,
     });
 
     setRemoving(false);
-    setConfirmRemove(false);
+    setRemovingStockId(null);
     reloadStock();
   };
 
@@ -213,10 +212,9 @@ export function LocationDetailModal({ open, location, warehouseId, orgId, onClos
     setTimeout(() => { printWindow.print(); }, 300);
   };
 
-  const handlePrintProductQR = () => {
-    if (!locationStock) return;
-    const sku = locationStock.product?.sku ?? '—';
-    const name = locationStock.product?.name ?? 'Producto';
+  const handlePrintProductQR = (stock: InventoryStock) => {
+    const sku = stock.product?.sku ?? '—';
+    const name = stock.product?.name ?? 'Producto';
     const printWindow = window.open('', '_blank', 'width=400,height=550');
     if (!printWindow) return;
     printWindow.document.write(`
@@ -382,7 +380,7 @@ export function LocationDetailModal({ open, location, warehouseId, orgId, onClos
       </div>
 
       {/* Stock Info */}
-      {locationStock ? (
+      {locationStocks.length > 0 ? (
         <div
           className="rh-card"
           style={{ padding: 16, marginBottom: 16, border: '1px solid #E2E8F0' }}
@@ -390,160 +388,136 @@ export function LocationDetailModal({ open, location, warehouseId, orgId, onClos
           <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 12 }}>
             <Package size={18} style={{ color: '#10B981' }} />
             <h4 style={{ fontSize: 14, fontWeight: 700, color: '#1E293B', margin: 0, flex: 1 }}>
-              Producto en Ubicacion
+              {locationStocks.length === 1 ? 'Producto en Ubicación' : `${locationStocks.length} Productos en Ubicación`}
             </h4>
+            <span style={{ fontSize: 12, color: '#64748B', fontWeight: 600 }}>
+              Total: {locationStocks.reduce((sum, s) => sum + s.quantity, 0)} uds
+            </span>
           </div>
 
-          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12 }}>
-            <div>
-              <p style={{ fontSize: 11, color: '#94A3B8', margin: 0 }}>Producto</p>
-              <p style={{ fontSize: 14, fontWeight: 600, color: '#1E293B', margin: '2px 0 0' }}>
-                {locationStock.product?.name ?? 'Sin nombre'}
-              </p>
-            </div>
-            <div>
-              <p style={{ fontSize: 11, color: '#94A3B8', margin: 0 }}>SKU</p>
-              <p style={{ fontSize: 14, fontWeight: 500, color: '#475569', margin: '2px 0 0', fontFamily: 'monospace' }}>
-                {locationStock.product?.sku ?? '—'}
-              </p>
-            </div>
-            <div>
-              <p style={{ fontSize: 11, color: '#94A3B8', margin: 0 }}>Cantidad</p>
-              <p style={{ fontSize: 20, fontWeight: 700, color: '#10B981', margin: '2px 0 0' }}>
-                {locationStock.quantity}
-              </p>
-            </div>
-            <div>
-              <p style={{ fontSize: 11, color: '#94A3B8', margin: 0 }}>Reservado</p>
-              <p style={{ fontSize: 20, fontWeight: 700, color: '#F59E0B', margin: '2px 0 0' }}>
-                {locationStock.reserved_quantity}
-              </p>
-            </div>
-            {locationStock.lot_number && (
-              <div>
-                <p style={{ fontSize: 11, color: '#94A3B8', margin: 0 }}>Lote</p>
-                <p style={{ fontSize: 13, fontWeight: 500, color: '#475569', margin: '2px 0 0' }}>
-                  {locationStock.lot_number}
-                </p>
-              </div>
-            )}
-          </div>
-
-          {/* Product QR Section */}
-          <div
-            style={{
-              marginTop: 14, padding: 10,
-              backgroundColor: '#F0FDF4', borderRadius: 8,
-              border: '1px solid #BBF7D0',
-            }}
-          >
-            <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
-              <QrCode size={16} style={{ color: '#16A34A', flexShrink: 0 }} />
-              <div style={{ flex: 1 }}>
-                <p style={{ fontSize: 12, fontWeight: 600, color: '#166534', margin: 0 }}>
-                  QR del Producto
-                </p>
-                <p style={{ fontSize: 11, color: '#15803D', margin: '1px 0 0', fontFamily: 'monospace' }}>
-                  {locationStock.product?.sku ?? '—'}
-                </p>
-              </div>
-              <button
-                onClick={() => setShowProductQR(!showProductQR)}
-                className="rh-btn rh-btn-ghost"
-                style={{ padding: '4px 8px', display: 'flex', alignItems: 'center', gap: 4, fontSize: 11 }}
-              >
-                <Eye size={12} />
-                {showProductQR ? 'Ocultar' : 'Ver QR'}
-              </button>
-              <button
-                onClick={handlePrintProductQR}
-                className="rh-btn rh-btn-ghost"
-                style={{ padding: '4px 8px', display: 'flex', alignItems: 'center', gap: 4, fontSize: 11 }}
-              >
-                <Printer size={12} />
-                Imprimir
-              </button>
-            </div>
-
-            {showProductQR && (
-              <div style={{
-                display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 6,
-                marginTop: 10, paddingTop: 10, borderTop: '1px solid #BBF7D0',
-              }}>
-                <div style={{
-                  padding: 14, backgroundColor: '#fff', borderRadius: 10,
-                  border: '1px solid #E2E8F0', display: 'inline-block',
-                }}>
-                  <QRCodeSVG
-                    id="qr-product-svg"
-                    value={locationStock.product?.sku ?? locationStock.product_id}
-                    size={140}
-                    level="M"
-                    includeMargin={false}
-                  />
+          <div style={{ maxHeight: 340, overflowY: 'auto', display: 'flex', flexDirection: 'column', gap: 10 }}>
+            {locationStocks.map((stock) => (
+              <div key={stock.id} style={{ padding: 12, backgroundColor: '#F8FAFC', borderRadius: 8, border: '1px solid #E2E8F0' }}>
+                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 8 }}>
+                  <div>
+                    <p style={{ fontSize: 11, color: '#94A3B8', margin: 0 }}>Producto</p>
+                    <p style={{ fontSize: 13, fontWeight: 600, color: '#1E293B', margin: '2px 0 0' }}>
+                      {stock.product?.name ?? 'Sin nombre'}
+                    </p>
+                  </div>
+                  <div>
+                    <p style={{ fontSize: 11, color: '#94A3B8', margin: 0 }}>SKU</p>
+                    <p style={{ fontSize: 13, fontWeight: 500, color: '#475569', margin: '2px 0 0', fontFamily: 'monospace' }}>
+                      {stock.product?.sku ?? '—'}
+                    </p>
+                  </div>
+                  <div>
+                    <p style={{ fontSize: 11, color: '#94A3B8', margin: 0 }}>Cantidad</p>
+                    <p style={{ fontSize: 18, fontWeight: 700, color: '#10B981', margin: '2px 0 0' }}>
+                      {stock.quantity}
+                    </p>
+                  </div>
+                  <div>
+                    <p style={{ fontSize: 11, color: '#94A3B8', margin: 0 }}>Reservado</p>
+                    <p style={{ fontSize: 18, fontWeight: 700, color: '#F59E0B', margin: '2px 0 0' }}>
+                      {stock.reserved_quantity}
+                    </p>
+                  </div>
+                  {stock.lot_number && (
+                    <div>
+                      <p style={{ fontSize: 11, color: '#94A3B8', margin: 0 }}>Lote</p>
+                      <p style={{ fontSize: 12, fontWeight: 500, color: '#475569', margin: '2px 0 0' }}>
+                        {stock.lot_number}
+                      </p>
+                    </div>
+                  )}
                 </div>
-                <p style={{ fontSize: 13, fontWeight: 700, color: '#1E293B', margin: 0, fontFamily: 'monospace' }}>
-                  {locationStock.product?.sku ?? '—'}
-                </p>
-                <p style={{ fontSize: 11, color: '#64748B', margin: 0, textAlign: 'center', maxWidth: 220 }}>
-                  {locationStock.product?.name ?? ''}
-                </p>
-              </div>
-            )}
-          </div>
 
-          {/* Remove Product */}
-          {!confirmRemove ? (
-            <button
-              onClick={() => setConfirmRemove(true)}
-              style={{
-                display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 6,
-                width: '100%', marginTop: 14, padding: '8px 0',
-                fontSize: 13, fontWeight: 600, color: '#DC2626',
-                background: 'none', border: '1px solid #FECACA', borderRadius: 8,
-                cursor: 'pointer', transition: 'all 0.15s',
-              }}
-              onMouseEnter={(e) => { e.currentTarget.style.backgroundColor = '#FEF2F2'; }}
-              onMouseLeave={(e) => { e.currentTarget.style.backgroundColor = 'transparent'; }}
-            >
-              <Trash2 size={14} />
-              Quitar producto de esta ubicacion
-            </button>
-          ) : (
-            <div style={{
-              marginTop: 14, padding: 12, borderRadius: 8,
-              backgroundColor: '#FEF2F2', border: '1px solid #FECACA',
-            }}>
-              <p style={{ fontSize: 13, fontWeight: 600, color: '#991B1B', margin: '0 0 8px' }}>
-                ¿Seguro que deseas quitar este producto?
-              </p>
-              <p style={{ fontSize: 12, color: '#B91C1C', margin: '0 0 12px' }}>
-                Se eliminara el registro de stock de esta ubicacion. Esta accion no se puede deshacer.
-              </p>
-              <div style={{ display: 'flex', gap: 8 }}>
-                <button
-                  onClick={handleRemoveProduct}
-                  disabled={removing}
-                  style={{
-                    flex: 1, padding: '8px 0', fontSize: 13, fontWeight: 600,
-                    color: '#fff', backgroundColor: '#DC2626', border: 'none',
-                    borderRadius: 6, cursor: removing ? 'not-allowed' : 'pointer',
-                    opacity: removing ? 0.7 : 1,
-                  }}
-                >
-                  {removing ? 'Quitando...' : 'Si, quitar producto'}
-                </button>
-                <button
-                  onClick={() => setConfirmRemove(false)}
-                  disabled={removing}
-                  className="rh-btn rh-btn-ghost"
-                  style={{ fontSize: 13 }}
-                >
-                  Cancelar
-                </button>
+                {/* Actions row */}
+                <div style={{ display: 'flex', gap: 6, marginTop: 10, borderTop: '1px solid #E2E8F0', paddingTop: 8 }}>
+                  <button
+                    onClick={() => setShowProductQR(showProductQR === stock.id ? null : stock.id)}
+                    className="rh-btn rh-btn-ghost"
+                    style={{ padding: '4px 8px', display: 'flex', alignItems: 'center', gap: 4, fontSize: 11 }}
+                  >
+                    <QrCode size={12} />
+                    {showProductQR === stock.id ? 'Ocultar QR' : 'QR'}
+                  </button>
+                  <button
+                    onClick={() => handlePrintProductQR(stock)}
+                    className="rh-btn rh-btn-ghost"
+                    style={{ padding: '4px 8px', display: 'flex', alignItems: 'center', gap: 4, fontSize: 11 }}
+                  >
+                    <Printer size={12} />
+                    Imprimir
+                  </button>
+                  <div style={{ flex: 1 }} />
+                  {removingStockId === stock.id ? (
+                    <div style={{ display: 'flex', gap: 4, alignItems: 'center' }}>
+                      <span style={{ fontSize: 11, color: '#991B1B', fontWeight: 600 }}>¿Seguro?</span>
+                      <button
+                        onClick={() => handleRemoveProduct(stock)}
+                        disabled={removing}
+                        style={{
+                          padding: '4px 10px', fontSize: 11, fontWeight: 600,
+                          color: '#fff', backgroundColor: '#DC2626', border: 'none',
+                          borderRadius: 4, cursor: removing ? 'not-allowed' : 'pointer',
+                          opacity: removing ? 0.7 : 1,
+                        }}
+                      >
+                        {removing ? '...' : 'Sí'}
+                      </button>
+                      <button
+                        onClick={() => setRemovingStockId(null)}
+                        disabled={removing}
+                        className="rh-btn rh-btn-ghost"
+                        style={{ padding: '4px 8px', fontSize: 11 }}
+                      >
+                        No
+                      </button>
+                    </div>
+                  ) : (
+                    <button
+                      onClick={() => setRemovingStockId(stock.id)}
+                      style={{
+                        display: 'flex', alignItems: 'center', gap: 4,
+                        padding: '4px 8px', fontSize: 11, fontWeight: 600, color: '#DC2626',
+                        background: 'none', border: '1px solid #FECACA', borderRadius: 4,
+                        cursor: 'pointer',
+                      }}
+                    >
+                      <Trash2 size={12} />
+                      Quitar
+                    </button>
+                  )}
+                </div>
+
+                {/* Product QR (toggled per product) */}
+                {showProductQR === stock.id && (
+                  <div style={{
+                    display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 6,
+                    marginTop: 10, paddingTop: 10, borderTop: '1px solid #E2E8F0',
+                  }}>
+                    <div style={{
+                      padding: 14, backgroundColor: '#fff', borderRadius: 10,
+                      border: '1px solid #E2E8F0', display: 'inline-block',
+                    }}>
+                      <QRCodeSVG
+                        id="qr-product-svg"
+                        value={stock.product?.sku ?? stock.product_id}
+                        size={120}
+                        level="M"
+                        includeMargin={false}
+                      />
+                    </div>
+                    <p style={{ fontSize: 12, fontWeight: 700, color: '#1E293B', margin: 0, fontFamily: 'monospace' }}>
+                      {stock.product?.sku ?? '—'}
+                    </p>
+                  </div>
+                )}
               </div>
-            </div>
-          )}
+            ))}
+          </div>
         </div>
       ) : (
         <div
@@ -557,10 +531,10 @@ export function LocationDetailModal({ open, location, warehouseId, orgId, onClos
         >
           <Package size={32} style={{ color: '#CBD5E1', margin: '0 auto 8px' }} />
           <p style={{ fontSize: 14, fontWeight: 600, color: '#94A3B8', margin: 0 }}>
-            Ubicacion vacia
+            Ubicación vacía
           </p>
           <p style={{ fontSize: 12, color: '#CBD5E1', margin: '4px 0 0' }}>
-            No hay producto asignado a esta ubicacion
+            No hay productos asignados a esta ubicación
           </p>
         </div>
       )}

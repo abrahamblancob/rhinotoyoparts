@@ -26,8 +26,8 @@ interface OccupancyData {
   mode: 'occupancy';
   /** All locations belonging to this rack */
   locations: WarehouseLocation[];
-  /** Map of location_id → InventoryStock (warehouse-wide is fine) */
-  stockByLocation: Map<string, InventoryStock>;
+  /** Map of location_id → InventoryStock[] (multiple products per location) */
+  stockByLocation: Map<string, InventoryStock[]>;
 }
 
 interface PickingData {
@@ -138,25 +138,23 @@ export function RackMiniGrid({
         border = '#CBD5E1';
         title = `${location.code} | Inactiva`;
       } else {
-        const stock = data.stockByLocation.get(location.id) ?? null;
-        const qty = stock?.quantity ?? 0;
+        const stocks = data.stockByLocation.get(location.id) ?? [];
+        const qty = stocks.reduce((sum, s) => sum + s.quantity, 0);
+        const reserved = stocks.reduce((sum, s) => sum + s.reserved_quantity, 0);
 
         if (qty > 0) {
           // Has stock → darker tone of rack color
-          const reserved = stock?.reserved_quantity ?? 0;
           if (reserved >= qty) {
-            // Fully reserved → even darker
             bg = darkenHex(color, 0.15);
             border = darkenHex(color, 0.3);
           } else {
-            // Partial or with stock
             bg = hexToRgba(color, 0.7);
             border = darkenHex(color, 0.1);
           }
-          const productName = stock?.product?.name ?? '';
-          title = `${location.code} | Cant: ${qty}${reserved > 0 ? ` (Res: ${reserved})` : ''}${productName ? ` | ${productName}` : ''}`;
+          const skuCount = stocks.length;
+          const productNames = stocks.map((s) => s.product?.name ?? s.product?.sku ?? '?').join(', ');
+          title = `${location.code} | ${skuCount} SKU${skuCount > 1 ? 's' : ''} | Cant: ${qty}${reserved > 0 ? ` (Res: ${reserved})` : ''} | ${productNames}`;
         } else {
-          // Empty → light tint of rack color
           bg = hexToRgba(color, 0.15);
           border = hexToRgba(color, 0.3);
           title = `${location.code} | Vacio`;

@@ -3,7 +3,7 @@ import { getOccupancyColor, getOccupancyBorderColor } from './locationColors.ts'
 
 interface LocationCellProps {
   location: WarehouseLocation;
-  stock?: InventoryStock | null;
+  stocks?: InventoryStock[];
   onClick: (location: WarehouseLocation) => void;
 }
 
@@ -16,10 +16,22 @@ function abbreviateCode(code: string): string {
   return code.length > 8 ? code.slice(-8) : code;
 }
 
-export function LocationCell({ location, stock, onClick }: LocationCellProps) {
-  const bgColor = getOccupancyColor(location, stock);
-  const borderColor = getOccupancyBorderColor(location, stock);
-  const hasStock = stock && stock.quantity > 0;
+export function LocationCell({ location, stocks = [], onClick }: LocationCellProps) {
+  const bgColor = getOccupancyColor(location, stocks);
+  const borderColor = getOccupancyBorderColor(location, stocks);
+  const totalQty = stocks.reduce((sum, s) => sum + s.quantity, 0);
+  const totalReserved = stocks.reduce((sum, s) => sum + s.reserved_quantity, 0);
+  const productCount = stocks.length;
+  const hasStock = totalQty > 0;
+
+  const tooltipLines = [location.code];
+  if (hasStock) {
+    for (const s of stocks) {
+      tooltipLines.push(`${s.product?.sku ?? '?'}: ${s.quantity} uds`);
+    }
+  } else {
+    tooltipLines.push('Vacío');
+  }
 
   return (
     <div
@@ -51,7 +63,7 @@ export function LocationCell({ location, stock, onClick }: LocationCellProps) {
         e.currentTarget.style.transform = 'scale(1)';
         e.currentTarget.style.boxShadow = 'none';
       }}
-      title={`${location.code}${hasStock ? ` | Cant: ${stock.quantity}` : ' | Vacio'}`}
+      title={tooltipLines.join('\n')}
     >
       <span
         style={{
@@ -67,21 +79,39 @@ export function LocationCell({ location, stock, onClick }: LocationCellProps) {
       </span>
 
       {hasStock && (
-        <span
-          style={{
-            fontSize: 11,
-            fontWeight: 700,
-            color: '#FFFFFF',
-            backgroundColor: stock.reserved_quantity >= stock.quantity ? '#EF4444' : '#F59E0B',
-            borderRadius: 10,
-            padding: '1px 6px',
-            lineHeight: 1.4,
-            minWidth: 20,
-            textAlign: 'center',
-          }}
-        >
-          {stock.quantity}
-        </span>
+        <div style={{ display: 'flex', gap: 3, alignItems: 'center' }}>
+          <span
+            style={{
+              fontSize: 11,
+              fontWeight: 700,
+              color: '#FFFFFF',
+              backgroundColor: totalReserved >= totalQty ? '#EF4444' : '#F59E0B',
+              borderRadius: 10,
+              padding: '1px 6px',
+              lineHeight: 1.4,
+              minWidth: 20,
+              textAlign: 'center',
+            }}
+          >
+            {totalQty}
+          </span>
+          {productCount > 1 && (
+            <span
+              style={{
+                fontSize: 9,
+                fontWeight: 700,
+                color: '#FFFFFF',
+                backgroundColor: '#6366F1',
+                borderRadius: 8,
+                padding: '0px 4px',
+                lineHeight: 1.4,
+                textAlign: 'center',
+              }}
+            >
+              {productCount}
+            </span>
+          )}
+        </div>
       )}
 
       {!location.is_active && (

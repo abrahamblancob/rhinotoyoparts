@@ -26,12 +26,16 @@ export function RackDetailView({ rack, warehouseId, orgId, onBack, onStockChange
 
   const [selectedLocation, setSelectedLocation] = useState<WarehouseLocation | null>(null);
 
-  // Build a map of location_id -> stock (skip unassigned stock)
+  // Build a map of location_id -> stocks[] (multiple products per location)
   const stockByLocation = useMemo(() => {
-    const map = new Map<string, InventoryStock>();
+    const map = new Map<string, InventoryStock[]>();
     if (allStock) {
       for (const s of allStock) {
-        if (s.location_id) map.set(s.location_id, s);
+        if (s.location_id) {
+          const arr = map.get(s.location_id) ?? [];
+          arr.push(s);
+          map.set(s.location_id, arr);
+        }
       }
     }
     return map;
@@ -204,7 +208,7 @@ export function RackDetailView({ rack, warehouseId, orgId, onBack, onStockChange
                       <div key={location.id} style={{ flex: 1, minWidth: 72 }}>
                         <LocationCell
                           location={location}
-                          stock={stockByLocation.get(location.id) ?? null}
+                          stocks={stockByLocation.get(location.id) ?? []}
                           onClick={setSelectedLocation}
                         />
                       </div>

@@ -43,8 +43,9 @@ export function OrdersPage() {
       isDispatcher,
       assignedTo: profile?.id,
       status: statusFilter,
+      includeChildren: isPlatform && !!selectedOrgId,
     });
-    setOrders((result.data ?? []) as (Order & { customers: { name: string } | null })[]);
+    setOrders((result.data ?? []) as (Order & { customers: { name: string } | null; organizations: { name: string; type: string } | null })[]);
     setLoading(false);
   };
 
@@ -74,12 +75,12 @@ export function OrdersPage() {
         loading={loadingSummaries}
         onSelect={setSelectedOrgId}
         pageTitle="Órdenes de Compra"
-        pageSubtitle="Selecciona una organización para ver sus órdenes"
+        pageSubtitle="Selecciona un agregador para ver sus órdenes"
         globalStats={[
           { title: 'Total Órdenes', value: totalOrders.toLocaleString(), icon: '🛒', color: '#6366F1' },
           { title: 'Ingresos Totales', value: `$${totalRevAll.toFixed(2)}`, icon: '💰', color: '#10B981' },
           { title: 'Pendientes', value: totalPending, icon: '⏳', color: '#F59E0B' },
-          { title: 'Organizaciones', value: summaries.length, icon: '🏢', color: '#8B5CF6' },
+          { title: 'Agregadores', value: summaries.length, icon: '🏢', color: '#8B5CF6' },
         ]}
         statFields={[
           { key: 'orderCount', label: 'Órdenes', color: '#6366F1' },
@@ -101,7 +102,7 @@ export function OrdersPage() {
               className="rh-btn rh-btn-ghost"
               style={{ fontSize: 13, marginBottom: 4, padding: '2px 0' }}
             >
-              ← Todas las organizaciones
+              ← Todos los agregadores
             </button>
           )}
           <h1 className="rh-page-title">
@@ -146,6 +147,7 @@ export function OrdersPage() {
             <thead>
               <tr>
                 <th>Orden #</th>
+                {isPlatform && selectedOrg && <th>Asociado</th>}
                 <th>Cliente</th>
                 <th
                   style={{ cursor: 'pointer', userSelect: 'none' }}
@@ -160,10 +162,25 @@ export function OrdersPage() {
             </thead>
             <tbody>
               {sortedOrders.map((order) => {
-                const customerName = (order as unknown as { customers: { name: string } | null }).customers?.name;
+                const casted = order as unknown as { customers: { name: string } | null; organizations: { name: string; type: string } | null };
+                const customerName = casted.customers?.name;
+                const orgName = casted.organizations?.name;
+                const orgType = casted.organizations?.type;
+                const isAssociate = orgType === 'associate';
                 return (
                   <tr key={order.id} className="cursor-pointer" onClick={() => navigate(`/hub/orders/${order.id}`)}>
                     <td className="cell-primary cell-mono">{order.order_number}</td>
+                    {isPlatform && selectedOrg && (
+                      <td>
+                        {isAssociate ? (
+                          <span style={{ fontSize: 12, background: '#EDE9FE', color: '#7C3AED', padding: '2px 8px', borderRadius: 10 }}>
+                            {orgName}
+                          </span>
+                        ) : (
+                          <span style={{ fontSize: 12, color: '#9CA3AF' }}>Directa</span>
+                        )}
+                      </td>
+                    )}
                     <td>{customerName ?? '-'}</td>
                     <td className="cell-muted">
                       {new Date(order.created_at).toLocaleDateString('es-VE')}

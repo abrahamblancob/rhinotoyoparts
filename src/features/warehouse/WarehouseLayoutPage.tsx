@@ -137,10 +137,14 @@ export function WarehouseLayoutPage() {
   }, [allLocations]);
 
   const stockByLocation = useMemo(() => {
-    const map = new Map<string, InventoryStock>();
+    const map = new Map<string, InventoryStock[]>();
     if (allStock) {
       for (const s of allStock) {
-        if (s.location_id) map.set(s.location_id, s);
+        if (s.location_id) {
+          const arr = map.get(s.location_id) ?? [];
+          arr.push(s);
+          map.set(s.location_id, arr);
+        }
       }
     }
     return map;

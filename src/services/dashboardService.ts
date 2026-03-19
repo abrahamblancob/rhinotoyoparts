@@ -124,17 +124,41 @@ export interface OrgOrderSummary {
   revenue: number;
 }
 
-export function getOrgOrderSummaries(): Promise<OrgOrderSummary[]> {
-  return buildOrgSummaries<OrgOrderSummary>(async (org) => {
-    const [totalRes, pendingRes, inProgressRes, revenueRes] = await Promise.all([
-      supabase.from('orders').select('id', { count: 'exact', head: true }).eq('org_id', org.id),
-      supabase.from('orders').select('id', { count: 'exact', head: true }).eq('org_id', org.id).in('status', [...PENDING_ORDER_STATUSES]),
-      supabase.from('orders').select('id', { count: 'exact', head: true }).eq('org_id', org.id).in('status', [...IN_PROGRESS_ORDER_STATUSES]),
-      supabase.from('orders').select('total').eq('org_id', org.id),
-    ]);
-    const revenue = (revenueRes.data ?? []).reduce((s, o) => s + Number((o as { total: number }).total ?? 0), 0);
-    return { orderCount: totalRes.count ?? 0, pendingOrders: pendingRes.count ?? 0, inProgressOrders: inProgressRes.count ?? 0, revenue };
-  });
+export async function getOrgOrderSummaries(): Promise<OrgOrderSummary[]> {
+  // Only fetch aggregators for the grid
+  const { data: aggregators } = await supabase
+    .from('organizations')
+    .select('id, name, type')
+    .eq('type', 'aggregator')
+    .eq('status', 'active')
+    .order('name');
+
+  const aggs = (aggregators as ActiveOrg[] | null) ?? [];
+  if (aggs.length === 0) return [];
+
+  return Promise.all(
+    aggs.map(async (org) => {
+      // Get child org IDs for this aggregator
+      const { data: hierarchy } = await supabase
+        .from('org_hierarchy').select('child_id').eq('parent_id', org.id);
+      const childIds = (hierarchy ?? []).map((h: { child_id: string }) => h.child_id);
+      const allOrgIds = [org.id, ...childIds];
+
+      const [totalRes, pendingRes, inProgressRes, revenueRes] = await Promise.all([
+        supabase.from('orders').select('id', { count: 'exact', head: true }).in('org_id', allOrgIds),
+        supabase.from('orders').select('id', { count: 'exact', head: true }).in('org_id', allOrgIds).in('status', [...PENDING_ORDER_STATUSES]),
+        supabase.from('orders').select('id', { count: 'exact', head: true }).in('org_id', allOrgIds).in('status', [...IN_PROGRESS_ORDER_STATUSES]),
+        supabase.from('orders').select('total').in('org_id', allOrgIds),
+      ]);
+      const revenue = (revenueRes.data ?? []).reduce((s, o) => s + Number((o as { total: number }).total ?? 0), 0);
+
+      return {
+        id: org.id, name: org.name, type: org.type,
+        orderCount: totalRes.count ?? 0, pendingOrders: pendingRes.count ?? 0,
+        inProgressOrders: inProgressRes.count ?? 0, revenue,
+      };
+    }),
+  );
 }
 
 /* ── Picking ── */

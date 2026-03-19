@@ -124,21 +124,38 @@ export function useStockAudit(orgId: string | undefined): UseStockAuditReturn {
     const { data: allLocs } = await warehouseService.getLocations(selectedWarehouse.id);
     const locsMap = new Map((allLocs ?? []).map((l: { id: string; rack_id: string; code: string }) => [l.id, l]));
 
-    const stockByLocation = new Map(
-      (expectedStock ?? []).map((s) => [s.location_id, s])
-    );
+    // Group expected stock by location (multiple products per location possible)
+    const stockByLocation = new Map<string, typeof expectedStock>();
+    for (const s of expectedStock ?? []) {
+      if (!s.location_id) continue;
+      const arr = stockByLocation.get(s.location_id) ?? [];
+      arr.push(s);
+      stockByLocation.set(s.location_id, arr);
+    }
 
-    const itemsToCreate = locationIdsArr.map((locId) => {
+    // Create one audit item per product per location (flatMap handles multi-product)
+    const itemsToCreate = locationIdsArr.flatMap((locId) => {
       const loc = locsMap.get(locId) as { id: string; rack_id: string; code: string } | undefined;
-      const stock = stockByLocation.get(locId);
-      return {
+      const stocks = stockByLocation.get(locId) ?? [];
+      if (stocks.length === 0) {
+        // Empty location — still create one audit item
+        return [{
+          location_id: locId,
+          rack_id: loc?.rack_id ?? '',
+          product_id: null as string | null,
+          product_name: null as string | null,
+          product_sku: null as string | null,
+          expected_quantity: 0,
+        }];
+      }
+      return stocks.map((stock) => ({
         location_id: locId,
         rack_id: loc?.rack_id ?? '',
-        product_id: stock?.product_id ?? null,
-        product_name: stock?.product?.name ?? null,
-        product_sku: stock?.product?.sku ?? null,
-        expected_quantity: stock?.quantity ?? 0,
-      };
+        product_id: (stock.product_id ?? null) as string | null,
+        product_name: (stock.product?.name ?? null) as string | null,
+        product_sku: (stock.product?.sku ?? null) as string | null,
+        expected_quantity: stock.quantity ?? 0,
+      }));
     });
 
     const { data: createdItems, error: itemsError } = await stockAuditService.createAuditItems(newAudit.id, itemsToCreate);
