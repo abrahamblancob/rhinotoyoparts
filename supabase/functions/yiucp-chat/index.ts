@@ -149,6 +149,32 @@ const TOOLS = [
           required: ['org_id'],
         },
       },
+      {
+        name: 'buscar_usuario',
+        description: 'Busca usuarios/empleados por nombre dentro de las organizaciones permitidas. Retorna id, nombre completo, email, estado activo, último login y organización.',
+        parameters: {
+          type: 'OBJECT',
+          properties: {
+            nombre: { type: 'STRING', description: 'Nombre parcial o completo del usuario a buscar' },
+          },
+          required: ['nombre'],
+        },
+      },
+      {
+        name: 'obtener_actividad_usuario',
+        description: 'Obtiene el historial de actividad (audit log) de un usuario específico. Incluye acción realizada, tipo de entidad, descripción y fecha. Usar buscar_usuario primero para obtener el user_id.',
+        parameters: {
+          type: 'OBJECT',
+          properties: {
+            user_id: { type: 'STRING', description: 'ID del usuario (UUID, obtener con buscar_usuario primero)' },
+            fecha_desde: { type: 'STRING', description: 'Fecha inicio YYYY-MM-DD. Si no se especifica, usa hoy' },
+            fecha_hasta: { type: 'STRING', description: 'Fecha fin YYYY-MM-DD. Si no se especifica, usa hoy' },
+            accion: { type: 'STRING', description: 'Filtrar por tipo de acción: login, logout, create, update, delete, status_change, assign, cancel, complete, pick_item, verify_item, receive_item, upload' },
+            tipo_entidad: { type: 'STRING', description: 'Filtrar por tipo de entidad: session, order, product, bulk_upload, customer, warehouse, picking, packing, receiving, returns, audits' },
+          },
+          required: ['user_id'],
+        },
+      },
     ],
   },
 ]
@@ -432,6 +458,77 @@ async function resumen_actividad(db: SupabaseAdmin, args: { org_id: string; incl
   return resumen
 }
 
+async function buscar_usuario(
+  db: SupabaseAdmin,
+  args: { nombre: string },
+  scopeIds: string[],
+) {
+  const { data, error } = await db
+    .from('profiles')
+    .select('id, full_name, email, is_active, last_login, org:organizations(name)')
+    .in('org_id', scopeIds)
+    .ilike('full_name', `%${args.nombre}%`)
+    .order('full_name')
+    .limit(20)
+
+  if (error) return { error: error.message }
+  if (!data?.length) return { resultado: 'No se encontraron usuarios con ese nombre en tus organizaciones.' }
+  return { usuarios: data, total: data.length }
+}
+
+async function obtener_actividad_usuario(
+  db: SupabaseAdmin,
+  args: { user_id: string; fecha_desde?: string; fecha_hasta?: string; accion?: string; tipo_entidad?: string },
+  scopeIds: string[],
+) {
+  // Verify the user belongs to an allowed org
+  const { data: userProfile, error: profileError } = await db
+    .from('profiles')
+    .select('id, full_name, org_id')
+    .eq('id', args.user_id)
+    .in('org_id', scopeIds)
+    .single()
+
+  if (profileError || !userProfile) {
+    return { error: 'Usuario no encontrado o no tienes acceso a su organización.' }
+  }
+
+  // Default date range: today
+  const desde = args.fecha_desde ?? new Date().toISOString().split('T')[0]
+  const hasta = (args.fecha_hasta ?? new Date().toISOString().split('T')[0]) + 'T23:59:59'
+
+  let q = db
+    .from('audit_logs')
+    .select('action, entity_type, entity_id, description, metadata, created_at')
+    .eq('user_id', args.user_id)
+    .gte('created_at', desde)
+    .lte('created_at', hasta)
+    .order('created_at', { ascending: false })
+    .limit(100)
+
+  if (args.accion) q = q.eq('action', args.accion)
+  if (args.tipo_entidad) q = q.eq('entity_type', args.tipo_entidad)
+
+  const { data, error } = await q
+  if (error) return { error: error.message }
+
+  // Build summary of actions by type
+  const resumen_acciones: Record<string, number> = {}
+  for (const log of data ?? []) {
+    const key = `${log.action}:${log.entity_type}`
+    resumen_acciones[key] = (resumen_acciones[key] ?? 0) + 1
+  }
+
+  return {
+    _instruccion: 'ESTOS SON LOS DATOS EXACTOS DE LA BASE DE DATOS. Reporta SOLO estos números y actividades, NO inventes ni modifiques ningún valor.',
+    usuario: userProfile.full_name,
+    periodo: { desde, hasta: args.fecha_hasta ?? new Date().toISOString().split('T')[0] },
+    actividades: data ?? [],
+    total: data?.length ?? 0,
+    resumen_acciones,
+  }
+}
+
 // ──────────────────────────────────────────────
 // Gemini API with Function Calling
 // ──────────────────────────────────────────────
@@ -509,6 +606,7 @@ ${scopeInfo}
 INSTRUCCIONES:
 - Usa las funciones disponibles para consultar datos. SIEMPRE llama funciones antes de responder preguntas sobre datos.
 - Si el usuario pregunta por una organización por nombre, PRIMERO usa buscar_organizacion para obtener su ID, y luego usa ese ID en las demás funciones.
+- Si el usuario pregunta por la actividad de una persona específica (ej: "¿qué hizo Ramón hoy?"), PRIMERO usa buscar_usuario para encontrar al usuario por nombre, y luego usa obtener_actividad_usuario con su ID para ver su actividad.
 - Para preguntas amplias como "qué pasó hoy" o "resumen de actividad", usa la función resumen_actividad.
 - Presenta los resultados de forma clara con tablas markdown cuando haya datos tabulares.
 - Usa negritas para destacar valores importantes.
@@ -561,6 +659,10 @@ async function executeFunction(
       return obtener_clientes(db, args as { org_id?: string; nombre?: string }, scopeIds)
     case 'resumen_actividad':
       return resumen_actividad(db, args as { org_id: string; incluir_asociados?: boolean; fecha_desde?: string; fecha_hasta?: string })
+    case 'buscar_usuario':
+      return buscar_usuario(db, args as { nombre: string }, scopeIds)
+    case 'obtener_actividad_usuario':
+      return obtener_actividad_usuario(db, args as { user_id: string; fecha_desde?: string; fecha_hasta?: string; accion?: string; tipo_entidad?: string }, scopeIds)
     default:
       return { error: `Función desconocida: ${name}` }
   }
