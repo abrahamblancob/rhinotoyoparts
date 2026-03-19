@@ -462,17 +462,23 @@ async function buscar_usuario(
   db: SupabaseAdmin,
   args: { nombre: string },
   scopeIds: string[],
+  isPlatform = false,
 ) {
-  const { data, error } = await db
+  let q = db
     .from('profiles')
     .select('id, full_name, email, is_active, last_login, org:organizations(name)')
-    .in('org_id', scopeIds)
     .ilike('full_name', `%${args.nombre}%`)
     .order('full_name')
     .limit(20)
 
+  // Platform users can see all users; others are scoped to their orgs
+  if (!isPlatform) {
+    q = q.in('org_id', scopeIds)
+  }
+
+  const { data, error } = await q
   if (error) return { error: error.message }
-  if (!data?.length) return { resultado: 'No se encontraron usuarios con ese nombre en tus organizaciones.' }
+  if (!data?.length) return { resultado: 'No se encontraron usuarios con ese nombre.' }
   return { usuarios: data, total: data.length }
 }
 
@@ -480,14 +486,19 @@ async function obtener_actividad_usuario(
   db: SupabaseAdmin,
   args: { user_id: string; fecha_desde?: string; fecha_hasta?: string; accion?: string; tipo_entidad?: string },
   scopeIds: string[],
+  isPlatform = false,
 ) {
-  // Verify the user belongs to an allowed org
-  const { data: userProfile, error: profileError } = await db
+  // Verify the user exists (and belongs to allowed org for non-platform)
+  let profileQuery = db
     .from('profiles')
     .select('id, full_name, org_id')
     .eq('id', args.user_id)
-    .in('org_id', scopeIds)
-    .single()
+
+  if (!isPlatform) {
+    profileQuery = profileQuery.in('org_id', scopeIds)
+  }
+
+  const { data: userProfile, error: profileError } = await profileQuery.single()
 
   if (profileError || !userProfile) {
     return { error: 'Usuario no encontrado o no tienes acceso a su organización.' }
@@ -633,6 +644,7 @@ async function executeFunction(
   args: Record<string, unknown>,
   db: SupabaseAdmin,
   scopeIds: string[],
+  isPlatform = false,
 ): Promise<unknown> {
   console.log(`🔧 Executing function: ${name}`, JSON.stringify(args))
 
@@ -660,9 +672,9 @@ async function executeFunction(
     case 'resumen_actividad':
       return resumen_actividad(db, args as { org_id: string; incluir_asociados?: boolean; fecha_desde?: string; fecha_hasta?: string })
     case 'buscar_usuario':
-      return buscar_usuario(db, args as { nombre: string }, scopeIds)
+      return buscar_usuario(db, args as { nombre: string }, scopeIds, isPlatform)
     case 'obtener_actividad_usuario':
-      return obtener_actividad_usuario(db, args as { user_id: string; fecha_desde?: string; fecha_hasta?: string; accion?: string; tipo_entidad?: string }, scopeIds)
+      return obtener_actividad_usuario(db, args as { user_id: string; fecha_desde?: string; fecha_hasta?: string; accion?: string; tipo_entidad?: string }, scopeIds, isPlatform)
     default:
       return { error: `Función desconocida: ${name}` }
   }
@@ -774,7 +786,7 @@ Deno.serve(async (req) => {
       // Execute all function calls and add results
       const functionResponses: GeminiPart[] = []
       for (const fc of functionCalls) {
-        const result = await executeFunction(fc.functionCall.name, fc.functionCall.args, supabaseAdmin, allowedOrgIds)
+        const result = await executeFunction(fc.functionCall.name, fc.functionCall.args, supabaseAdmin, allowedOrgIds, orgType === 'platform')
         console.log(`📦 Function ${fc.functionCall.name} result:`, JSON.stringify(result).substring(0, 2000))
         functionResponses.push({
           functionResponse: {
