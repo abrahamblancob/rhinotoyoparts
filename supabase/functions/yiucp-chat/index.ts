@@ -1,95 +1,451 @@
 // Supabase Edge Function: yiucp-chat
-// AI assistant that generates SQL from natural language, executes it, and formats results.
-// Uses Gemini API. Never exposes raw SQL to untrusted clients.
+// AI assistant using Gemini Function Calling for safe, structured data queries.
+// No raw SQL generation — all queries go through predefined safe functions.
 
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2'
 import { getCorsHeaders } from '../_shared/cors.ts'
 
-const DB_SCHEMA = `
-Tables available (PostgreSQL):
+// ──────────────────────────────────────────────
+// Tool definitions for Gemini Function Calling
+// ──────────────────────────────────────────────
 
-organizations(id uuid PK, name text, type text ['platform','aggregator','associate'], rif text, email text, phone text, status text, created_at timestamptz)
-org_hierarchy(id uuid PK, parent_id uuid FK→organizations, child_id uuid FK→organizations) -- parent=aggregator, child=associate
-
-orders(id uuid PK, org_id uuid FK→organizations, customer_id uuid FK→customers, order_number text, status text ['draft','pending','confirmed','picking','picked','packing','packed','assigned','shipped','in_transit','delivered','cancelled'], subtotal numeric, tax numeric, discount numeric, total numeric, source varchar, created_at timestamptz, updated_at timestamptz, shipped_at timestamptz, delivered_at timestamptz, cancelled_at timestamptz, warehouse_id uuid, stock_reserved boolean)
-
-products(id uuid PK, org_id uuid FK→organizations, sku text, name text, brand text, oem_number text, price numeric, cost numeric, stock int, min_stock int, status text ['active','inactive','out_of_stock'], created_at timestamptz, updated_at timestamptz)
-
-customers(id uuid PK, org_id uuid FK→organizations, name text, rif text, email text, phone text, city text, state text, created_at timestamptz)
-
-pick_lists(id uuid PK, order_id uuid FK→orders, warehouse_id uuid, org_id uuid FK→organizations, assigned_to uuid, status varchar ['pending','assigned','in_progress','completed','expired','cancelled'], total_items int, picked_items int, started_at timestamptz, completed_at timestamptz, created_at timestamptz)
-
-pack_sessions(id uuid PK, order_id uuid FK→orders, pick_list_id uuid FK→pick_lists, warehouse_id uuid, org_id uuid FK→organizations, packed_by uuid, status varchar ['pending','in_progress','verified','labelled','completed'], total_items int, verified_items int, package_weight_kg numeric, package_count int, started_at timestamptz, completed_at timestamptz, created_at timestamptz)
-
-receiving_orders(id uuid PK, warehouse_id uuid, org_id uuid FK→organizations, supplier_name varchar, reference_number varchar, status varchar ['pending','in_progress','completed'], received_by uuid, created_at timestamptz, completed_at timestamptz)
-receiving_order_items(id uuid PK, receiving_order_id uuid FK→receiving_orders, product_id uuid FK→products, expected_quantity int, received_quantity int, assigned_location_id uuid, lot_number varchar, status varchar)
-
-inventory_stock(id uuid PK, product_id uuid FK→products, location_id uuid FK→warehouse_locations, warehouse_id uuid FK→warehouses, org_id uuid FK→organizations, quantity int, reserved_quantity int, lot_number varchar, source text, updated_at timestamptz)
-
-warehouses(id uuid PK, org_id uuid FK→organizations, name varchar, code varchar, is_active boolean, created_at timestamptz)
-warehouse_locations(id uuid PK, rack_id uuid, warehouse_id uuid FK→warehouses, code varchar, level int, position int, is_occupied boolean, is_active boolean)
-
-stock_audits(id uuid PK, org_id uuid FK→organizations, warehouse_id uuid FK→warehouses, audited_by uuid, audit_type text, status text, location_count int, match_count int, discrepancy_count int, created_at timestamptz, completed_at timestamptz)
-stock_audit_items(id uuid PK, audit_id uuid FK→stock_audits, location_id uuid, product_id uuid, product_name text, product_sku text, expected_quantity numeric, actual_quantity numeric, status text)
-
-return_orders(id uuid PK, org_id uuid FK→organizations, warehouse_id uuid, order_id uuid FK→orders, order_number text, package_count int, status text, created_at timestamptz, completed_at timestamptz)
-`
-
-const WAREHOUSE_TABLES = [
-  'warehouses', 'warehouse_locations', 'inventory_stock',
-  'receiving_orders', 'receiving_order_items', 'stock_audits',
-  'stock_audit_items', 'pick_lists', 'pack_sessions',
+const TOOLS = [
+  {
+    functionDeclarations: [
+      {
+        name: 'buscar_organizacion',
+        description: 'Busca organizaciones por nombre. Retorna id, nombre, tipo (platform/aggregator/associate), y sus asociados si es un agregador.',
+        parameters: {
+          type: 'OBJECT',
+          properties: {
+            nombre: { type: 'STRING', description: 'Nombre parcial o completo de la organización a buscar' },
+          },
+          required: ['nombre'],
+        },
+      },
+      {
+        name: 'obtener_ordenes',
+        description: 'Obtiene órdenes de compra con filtros opcionales. Incluye número de orden, status, total, cliente y organización.',
+        parameters: {
+          type: 'OBJECT',
+          properties: {
+            org_id: { type: 'STRING', description: 'ID de la organización (usar buscar_organizacion primero para obtenerlo)' },
+            status: { type: 'STRING', description: 'Filtrar por status: draft, pending, confirmed, picking, picked, packing, packed, assigned, shipped, in_transit, delivered, cancelled' },
+            fecha_desde: { type: 'STRING', description: 'Fecha inicio en formato YYYY-MM-DD. Si no se especifica, usa últimos 7 días' },
+            fecha_hasta: { type: 'STRING', description: 'Fecha fin en formato YYYY-MM-DD. Si no se especifica, usa hoy' },
+          },
+        },
+      },
+      {
+        name: 'obtener_recepciones',
+        description: 'Obtiene órdenes de recepción de mercancía en almacén. Incluye proveedor, referencia, status y cantidad de items.',
+        parameters: {
+          type: 'OBJECT',
+          properties: {
+            org_id: { type: 'STRING', description: 'ID de la organización' },
+            status: { type: 'STRING', description: 'Filtrar por status: pending, in_progress, completed' },
+            fecha_desde: { type: 'STRING', description: 'Fecha inicio YYYY-MM-DD' },
+            fecha_hasta: { type: 'STRING', description: 'Fecha fin YYYY-MM-DD' },
+          },
+        },
+      },
+      {
+        name: 'obtener_picking',
+        description: 'Obtiene listas de picking (preparación de pedidos). Incluye orden asociada, status, items totales y pickeados.',
+        parameters: {
+          type: 'OBJECT',
+          properties: {
+            org_id: { type: 'STRING', description: 'ID de la organización' },
+            status: { type: 'STRING', description: 'Filtrar por status: pending, assigned, in_progress, completed, expired, cancelled' },
+            fecha_desde: { type: 'STRING', description: 'Fecha inicio YYYY-MM-DD' },
+            fecha_hasta: { type: 'STRING', description: 'Fecha fin YYYY-MM-DD' },
+          },
+        },
+      },
+      {
+        name: 'obtener_packing',
+        description: 'Obtiene sesiones de packing (empaque). Incluye orden asociada, status, items verificados, peso y paquetes.',
+        parameters: {
+          type: 'OBJECT',
+          properties: {
+            org_id: { type: 'STRING', description: 'ID de la organización' },
+            status: { type: 'STRING', description: 'Filtrar por status: pending, in_progress, verified, labelled, completed' },
+            fecha_desde: { type: 'STRING', description: 'Fecha inicio YYYY-MM-DD' },
+            fecha_hasta: { type: 'STRING', description: 'Fecha fin YYYY-MM-DD' },
+          },
+        },
+      },
+      {
+        name: 'obtener_stock',
+        description: 'Obtiene el inventario/stock actual por ubicación. Incluye producto, ubicación, cantidad, cantidad reservada.',
+        parameters: {
+          type: 'OBJECT',
+          properties: {
+            org_id: { type: 'STRING', description: 'ID de la organización' },
+            producto: { type: 'STRING', description: 'Nombre parcial del producto para filtrar' },
+            solo_bajo_stock: { type: 'BOOLEAN', description: 'Si es true, solo muestra productos con stock menor al mínimo' },
+          },
+        },
+      },
+      {
+        name: 'obtener_auditorias',
+        description: 'Obtiene auditorías de stock realizadas. Incluye tipo, status, ubicaciones auditadas, coincidencias y discrepancias.',
+        parameters: {
+          type: 'OBJECT',
+          properties: {
+            org_id: { type: 'STRING', description: 'ID de la organización' },
+            fecha_desde: { type: 'STRING', description: 'Fecha inicio YYYY-MM-DD' },
+            fecha_hasta: { type: 'STRING', description: 'Fecha fin YYYY-MM-DD' },
+          },
+        },
+      },
+      {
+        name: 'obtener_devoluciones',
+        description: 'Obtiene devoluciones de órdenes. Incluye orden original, cantidad de paquetes, status.',
+        parameters: {
+          type: 'OBJECT',
+          properties: {
+            org_id: { type: 'STRING', description: 'ID de la organización' },
+            status: { type: 'STRING', description: 'Filtrar por status' },
+            fecha_desde: { type: 'STRING', description: 'Fecha inicio YYYY-MM-DD' },
+            fecha_hasta: { type: 'STRING', description: 'Fecha fin YYYY-MM-DD' },
+          },
+        },
+      },
+      {
+        name: 'obtener_productos',
+        description: 'Obtiene productos del inventario. Incluye SKU, nombre, marca, precio, costo, stock actual, stock mínimo y status.',
+        parameters: {
+          type: 'OBJECT',
+          properties: {
+            org_id: { type: 'STRING', description: 'ID de la organización' },
+            nombre: { type: 'STRING', description: 'Nombre parcial del producto' },
+            status: { type: 'STRING', description: 'Filtrar por status: active, inactive, out_of_stock' },
+          },
+        },
+      },
+      {
+        name: 'obtener_clientes',
+        description: 'Obtiene clientes de una organización. Incluye nombre, RIF, email, teléfono, ciudad, estado.',
+        parameters: {
+          type: 'OBJECT',
+          properties: {
+            org_id: { type: 'STRING', description: 'ID de la organización' },
+            nombre: { type: 'STRING', description: 'Nombre parcial del cliente' },
+          },
+        },
+      },
+      {
+        name: 'resumen_actividad',
+        description: 'Genera un resumen completo de actividad de una organización y sus asociados en un período. Incluye conteos de órdenes, recepciones, picking, packing, auditorías y devoluciones por status.',
+        parameters: {
+          type: 'OBJECT',
+          properties: {
+            org_id: { type: 'STRING', description: 'ID de la organización (usar buscar_organizacion primero)' },
+            incluir_asociados: { type: 'BOOLEAN', description: 'Si es true, incluye datos de organizaciones asociadas (hijos en la jerarquía)' },
+            fecha_desde: { type: 'STRING', description: 'Fecha inicio YYYY-MM-DD' },
+            fecha_hasta: { type: 'STRING', description: 'Fecha fin YYYY-MM-DD' },
+          },
+          required: ['org_id'],
+        },
+      },
+    ],
+  },
 ]
 
-function buildSystemPrompt(orgType: string, roles: string[], allowedOrgIds: string[]): string {
-  const isWarehouseManager = roles.includes('warehouse_manager') && orgType !== 'platform'
-  const isPlatform = orgType === 'platform'
+// ──────────────────────────────────────────────
+// Function implementations (safe Supabase queries)
+// ──────────────────────────────────────────────
 
-  let scopeRules: string
-  if (isPlatform) {
-    scopeRules = 'Tienes acceso a TODOS los datos. No necesitas filtrar por org_id a menos que el usuario pregunte por una organización específica.'
-  } else if (isWarehouseManager) {
-    scopeRules = `DEBES filtrar SIEMPRE con org_id = '${allowedOrgIds[0]}'. Solo puedes consultar tablas relacionadas con almacén: ${WAREHOUSE_TABLES.join(', ')}. NO consultes orders, customers, ni products directamente excepto como JOIN.`
-  } else {
-    scopeRules = `DEBES filtrar SIEMPRE con org_id IN (${allowedOrgIds.map(id => `'${id}'`).join(', ')}). Estos son los IDs de tu organización y sus asociados.`
+type SupabaseAdmin = ReturnType<typeof createClient>
+
+async function buscar_organizacion(db: SupabaseAdmin, args: { nombre: string }) {
+  const { data: orgs } = await db
+    .from('organizations')
+    .select('id, name, type, rif, status')
+    .ilike('name', `%${args.nombre}%`)
+    .limit(10)
+
+  if (!orgs?.length) return { resultado: 'No se encontraron organizaciones con ese nombre.' }
+
+  // For each aggregator, also fetch its associates
+  const results = []
+  for (const org of orgs) {
+    const entry: Record<string, unknown> = { ...org }
+    if (org.type === 'aggregator') {
+      const { data: children } = await db
+        .from('org_hierarchy')
+        .select('child:child_id(id, name, type, status)')
+        .eq('parent_id', org.id)
+      entry.asociados = children?.map((c: { child: unknown }) => c.child) ?? []
+    }
+    results.push(entry)
   }
 
-  return `Eres Yiucp, el asistente de inteligencia artificial de Rhino Toyo Parts, una plataforma de gestión de almacén y venta de repuestos automotrices Toyota en Venezuela.
-
-Responde siempre en español. Genera UNA SOLA consulta SQL PostgreSQL SELECT para responder la pregunta del usuario.
-
-${DB_SCHEMA}
-
-REGLAS DE ACCESO:
-${scopeRules}
-
-REGLAS SQL:
-- Solo genera SELECT. NUNCA uses INSERT, UPDATE, DELETE, DROP, ALTER, TRUNCATE, CREATE o GRANT.
-- Siempre incluye LIMIT 100 al final.
-- Usa JOINs cuando necesites nombres de organizaciones, productos, clientes, etc.
-- Para fechas "hoy" usa CURRENT_DATE, para "esta semana" usa date_trunc('week', CURRENT_DATE).
-- Los status de órdenes son: draft, pending, confirmed, picking, picked, packing, packed, assigned, shipped, in_transit, delivered, cancelled.
-- Usa COUNT, SUM, AVG para resúmenes. Usa alias claros en español.
-- Cuando busques por nombre de organización, producto, cliente o proveedor, SIEMPRE usa ILIKE con wildcards: name ILIKE '%palabra%'. Nunca uses igualdad exacta (=) para nombres.
-- Si el usuario no especifica fecha, consulta los últimos 7 días por defecto.
-
-Responde SOLO con JSON válido:
-{ "sql": "SELECT ...", "explanation": "Breve explicación de lo que hace la consulta" }`
+  return { organizaciones: results }
 }
 
-function buildFormatPrompt(): string {
-  return `Eres Yiucp, el asistente de inteligencia artificial de Rhino Toyo Parts.
-Formatea los resultados de la consulta SQL como una respuesta clara y útil en español.
-- Usa tablas markdown para datos tabulares.
-- Incluye totales o resúmenes cuando aplique.
-- Si el resultado está vacío, dilo de forma amigable.
-- Sé conciso pero completo.
-- Usa negritas para destacar valores importantes.
-- NO incluyas el SQL en tu respuesta.
-- NO uses emojis excesivos, máximo 1-2 relevantes al inicio.`
+async function obtener_ordenes(db: SupabaseAdmin, args: { org_id?: string; status?: string; fecha_desde?: string; fecha_hasta?: string }, scopeIds: string[]) {
+  const ids = args.org_id ? [args.org_id] : scopeIds
+  let q = db
+    .from('orders')
+    .select('order_number, status, total, source, created_at, customer:customers(name), org:organizations(name)')
+    .in('org_id', ids)
+    .order('created_at', { ascending: false })
+    .limit(50)
+
+  if (args.status) q = q.eq('status', args.status)
+  if (args.fecha_desde) q = q.gte('created_at', args.fecha_desde)
+  else q = q.gte('created_at', new Date(Date.now() - 7 * 86400000).toISOString().split('T')[0])
+  if (args.fecha_hasta) q = q.lte('created_at', args.fecha_hasta + 'T23:59:59')
+
+  const { data, error } = await q
+  if (error) return { error: error.message }
+  return { ordenes: data ?? [], total: data?.length ?? 0 }
 }
 
-async function callGemini(systemPrompt: string, userMessage: string): Promise<string> {
+async function obtener_recepciones(db: SupabaseAdmin, args: { org_id?: string; status?: string; fecha_desde?: string; fecha_hasta?: string }, scopeIds: string[]) {
+  const ids = args.org_id ? [args.org_id] : scopeIds
+  let q = db
+    .from('receiving_orders')
+    .select('id, supplier_name, reference_number, status, created_at, completed_at, org:organizations(name)')
+    .in('org_id', ids)
+    .order('created_at', { ascending: false })
+    .limit(50)
+
+  if (args.status) q = q.eq('status', args.status)
+  if (args.fecha_desde) q = q.gte('created_at', args.fecha_desde)
+  else q = q.gte('created_at', new Date(Date.now() - 7 * 86400000).toISOString().split('T')[0])
+  if (args.fecha_hasta) q = q.lte('created_at', args.fecha_hasta + 'T23:59:59')
+
+  const { data, error } = await q
+  if (error) return { error: error.message }
+
+  // Fetch item counts for each receiving order
+  if (data?.length) {
+    for (const ro of data) {
+      const { data: items } = await db
+        .from('receiving_order_items')
+        .select('expected_quantity, received_quantity, status')
+        .eq('receiving_order_id', ro.id)
+      ;(ro as Record<string, unknown>).items_count = items?.length ?? 0
+      ;(ro as Record<string, unknown>).total_expected = items?.reduce((s: number, i: { expected_quantity: number }) => s + (i.expected_quantity ?? 0), 0) ?? 0
+      ;(ro as Record<string, unknown>).total_received = items?.reduce((s: number, i: { received_quantity: number }) => s + (i.received_quantity ?? 0), 0) ?? 0
+    }
+  }
+
+  return { recepciones: data ?? [], total: data?.length ?? 0 }
+}
+
+async function obtener_picking(db: SupabaseAdmin, args: { org_id?: string; status?: string; fecha_desde?: string; fecha_hasta?: string }, scopeIds: string[]) {
+  const ids = args.org_id ? [args.org_id] : scopeIds
+  let q = db
+    .from('pick_lists')
+    .select('id, status, total_items, picked_items, started_at, completed_at, created_at, order:orders(order_number), org:organizations(name)')
+    .in('org_id', ids)
+    .order('created_at', { ascending: false })
+    .limit(50)
+
+  if (args.status) q = q.eq('status', args.status)
+  if (args.fecha_desde) q = q.gte('created_at', args.fecha_desde)
+  else q = q.gte('created_at', new Date(Date.now() - 7 * 86400000).toISOString().split('T')[0])
+  if (args.fecha_hasta) q = q.lte('created_at', args.fecha_hasta + 'T23:59:59')
+
+  const { data, error } = await q
+  if (error) return { error: error.message }
+  return { pick_lists: data ?? [], total: data?.length ?? 0 }
+}
+
+async function obtener_packing(db: SupabaseAdmin, args: { org_id?: string; status?: string; fecha_desde?: string; fecha_hasta?: string }, scopeIds: string[]) {
+  const ids = args.org_id ? [args.org_id] : scopeIds
+  let q = db
+    .from('pack_sessions')
+    .select('id, status, total_items, verified_items, package_weight_kg, package_count, started_at, completed_at, created_at, order:orders(order_number), org:organizations(name)')
+    .in('org_id', ids)
+    .order('created_at', { ascending: false })
+    .limit(50)
+
+  if (args.status) q = q.eq('status', args.status)
+  if (args.fecha_desde) q = q.gte('created_at', args.fecha_desde)
+  else q = q.gte('created_at', new Date(Date.now() - 7 * 86400000).toISOString().split('T')[0])
+  if (args.fecha_hasta) q = q.lte('created_at', args.fecha_hasta + 'T23:59:59')
+
+  const { data, error } = await q
+  if (error) return { error: error.message }
+  return { pack_sessions: data ?? [], total: data?.length ?? 0 }
+}
+
+async function obtener_stock(db: SupabaseAdmin, args: { org_id?: string; producto?: string; solo_bajo_stock?: boolean }, scopeIds: string[]) {
+  const ids = args.org_id ? [args.org_id] : scopeIds
+  let q = db
+    .from('inventory_stock')
+    .select('quantity, reserved_quantity, lot_number, product:products(name, sku, stock, min_stock), location:warehouse_locations(code), org:organizations(name)')
+    .in('org_id', ids)
+    .gt('quantity', 0)
+    .order('quantity', { ascending: false })
+    .limit(100)
+
+  const { data, error } = await q
+  if (error) return { error: error.message }
+
+  let results = data ?? []
+
+  if (args.producto) {
+    const search = args.producto.toLowerCase()
+    results = results.filter((r: { product: { name: string } | null }) =>
+      r.product?.name?.toLowerCase().includes(search)
+    )
+  }
+
+  if (args.solo_bajo_stock) {
+    results = results.filter((r: { product: { stock: number; min_stock: number } | null }) =>
+      r.product && r.product.stock <= r.product.min_stock
+    )
+  }
+
+  return { stock: results, total_items: results.length }
+}
+
+async function obtener_auditorias(db: SupabaseAdmin, args: { org_id?: string; fecha_desde?: string; fecha_hasta?: string }, scopeIds: string[]) {
+  const ids = args.org_id ? [args.org_id] : scopeIds
+  let q = db
+    .from('stock_audits')
+    .select('id, audit_type, status, location_count, match_count, discrepancy_count, created_at, completed_at, org:organizations(name)')
+    .in('org_id', ids)
+    .order('created_at', { ascending: false })
+    .limit(20)
+
+  if (args.fecha_desde) q = q.gte('created_at', args.fecha_desde)
+  if (args.fecha_hasta) q = q.lte('created_at', args.fecha_hasta + 'T23:59:59')
+
+  const { data, error } = await q
+  if (error) return { error: error.message }
+  return { auditorias: data ?? [], total: data?.length ?? 0 }
+}
+
+async function obtener_devoluciones(db: SupabaseAdmin, args: { org_id?: string; status?: string; fecha_desde?: string; fecha_hasta?: string }, scopeIds: string[]) {
+  const ids = args.org_id ? [args.org_id] : scopeIds
+  let q = db
+    .from('return_orders')
+    .select('id, order_number, package_count, status, created_at, completed_at, org:organizations(name)')
+    .in('org_id', ids)
+    .order('created_at', { ascending: false })
+    .limit(50)
+
+  if (args.status) q = q.eq('status', args.status)
+  if (args.fecha_desde) q = q.gte('created_at', args.fecha_desde)
+  else q = q.gte('created_at', new Date(Date.now() - 7 * 86400000).toISOString().split('T')[0])
+  if (args.fecha_hasta) q = q.lte('created_at', args.fecha_hasta + 'T23:59:59')
+
+  const { data, error } = await q
+  if (error) return { error: error.message }
+  return { devoluciones: data ?? [], total: data?.length ?? 0 }
+}
+
+async function obtener_productos(db: SupabaseAdmin, args: { org_id?: string; nombre?: string; status?: string }, scopeIds: string[]) {
+  const ids = args.org_id ? [args.org_id] : scopeIds
+  let q = db
+    .from('products')
+    .select('sku, name, brand, oem_number, price, cost, stock, min_stock, status, org:organizations(name)')
+    .in('org_id', ids)
+    .order('name')
+    .limit(50)
+
+  if (args.nombre) q = q.ilike('name', `%${args.nombre}%`)
+  if (args.status) q = q.eq('status', args.status)
+
+  const { data, error } = await q
+  if (error) return { error: error.message }
+  return { productos: data ?? [], total: data?.length ?? 0 }
+}
+
+async function obtener_clientes(db: SupabaseAdmin, args: { org_id?: string; nombre?: string }, scopeIds: string[]) {
+  const ids = args.org_id ? [args.org_id] : scopeIds
+  let q = db
+    .from('customers')
+    .select('name, rif, email, phone, city, state, org:organizations(name)')
+    .in('org_id', ids)
+    .order('name')
+    .limit(50)
+
+  if (args.nombre) q = q.ilike('name', `%${args.nombre}%`)
+
+  const { data, error } = await q
+  if (error) return { error: error.message }
+  return { clientes: data ?? [], total: data?.length ?? 0 }
+}
+
+async function resumen_actividad(db: SupabaseAdmin, args: { org_id: string; incluir_asociados?: boolean; fecha_desde?: string; fecha_hasta?: string }) {
+  // Resolve scope
+  const orgIds = [args.org_id]
+  if (args.incluir_asociados) {
+    const { data: children } = await db
+      .from('org_hierarchy')
+      .select('child_id')
+      .eq('parent_id', args.org_id)
+    if (children) {
+      orgIds.push(...children.map((c: { child_id: string }) => c.child_id))
+    }
+  }
+
+  const desde = args.fecha_desde ?? new Date(Date.now() - 7 * 86400000).toISOString().split('T')[0]
+  const hasta = (args.fecha_hasta ?? new Date().toISOString().split('T')[0]) + 'T23:59:59'
+
+  // Get org names
+  const { data: orgNames } = await db
+    .from('organizations')
+    .select('id, name, type')
+    .in('id', orgIds)
+
+  // Parallel queries for all modules
+  const [orders, receiving, picking, packing, audits, returns] = await Promise.all([
+    db.from('orders').select('status, org_id, total, created_at').in('org_id', orgIds).gte('created_at', desde).lte('created_at', hasta),
+    db.from('receiving_orders').select('status, org_id, created_at').in('org_id', orgIds).gte('created_at', desde).lte('created_at', hasta),
+    db.from('pick_lists').select('status, org_id, total_items, picked_items, created_at').in('org_id', orgIds).gte('created_at', desde).lte('created_at', hasta),
+    db.from('pack_sessions').select('status, org_id, total_items, verified_items, created_at').in('org_id', orgIds).gte('created_at', desde).lte('created_at', hasta),
+    db.from('stock_audits').select('status, org_id, location_count, match_count, discrepancy_count, created_at').in('org_id', orgIds).gte('created_at', desde).lte('created_at', hasta),
+    db.from('return_orders').select('status, org_id, created_at').in('org_id', orgIds).gte('created_at', desde).lte('created_at', hasta),
+  ])
+
+  // Build summary by status
+  const countByStatus = (data: { status: string }[] | null) => {
+    const counts: Record<string, number> = {}
+    for (const item of data ?? []) {
+      counts[item.status] = (counts[item.status] ?? 0) + 1
+    }
+    return counts
+  }
+
+  return {
+    periodo: { desde, hasta: args.fecha_hasta ?? new Date().toISOString().split('T')[0] },
+    organizaciones: orgNames ?? [],
+    ordenes: { total: orders.data?.length ?? 0, por_status: countByStatus(orders.data), monto_total: orders.data?.reduce((s, o) => s + (Number(o.total) || 0), 0) ?? 0 },
+    recepciones: { total: receiving.data?.length ?? 0, por_status: countByStatus(receiving.data) },
+    picking: { total: picking.data?.length ?? 0, por_status: countByStatus(picking.data) },
+    packing: { total: packing.data?.length ?? 0, por_status: countByStatus(packing.data) },
+    auditorias: { total: audits.data?.length ?? 0, por_status: countByStatus(audits.data) },
+    devoluciones: { total: returns.data?.length ?? 0, por_status: countByStatus(returns.data) },
+  }
+}
+
+// ──────────────────────────────────────────────
+// Gemini API with Function Calling
+// ──────────────────────────────────────────────
+
+interface GeminiMessage {
+  role: 'user' | 'model' | 'function'
+  parts: GeminiPart[]
+}
+
+type GeminiPart =
+  | { text: string }
+  | { functionCall: { name: string; args: Record<string, unknown> } }
+  | { functionResponse: { name: string; response: { result: unknown } } }
+
+async function callGeminiWithTools(
+  systemPrompt: string,
+  messages: GeminiMessage[],
+): Promise<{ parts: GeminiPart[]; text: string }> {
   const apiKey = Deno.env.get('GEMINI_API_KEY')
   if (!apiKey) throw new Error('GEMINI_API_KEY not configured')
 
@@ -100,13 +456,14 @@ async function callGemini(systemPrompt: string, userMessage: string): Promise<st
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
         systemInstruction: { parts: [{ text: systemPrompt }] },
-        contents: [{ parts: [{ text: userMessage }] }],
+        contents: messages,
+        tools: TOOLS,
         generationConfig: {
-          temperature: 0.2,
+          temperature: 0.3,
           maxOutputTokens: 4096,
         },
       }),
-    }
+    },
   )
 
   if (!response.ok) {
@@ -116,80 +473,90 @@ async function callGemini(systemPrompt: string, userMessage: string): Promise<st
   }
 
   const data = await response.json()
-  const parts = data.candidates?.[0]?.content?.parts || []
+  const parts: GeminiPart[] = data.candidates?.[0]?.content?.parts ?? []
 
-  let textContent = ''
+  // Extract text (skip thoughts)
+  let text = ''
   for (const part of parts) {
-    if (part.text && !part.thought) {
-      textContent += part.text
-    }
+    if ('text' in part) text += part.text
   }
-  if (!textContent) {
-    for (const part of parts) {
-      if (part.text) textContent += part.text
-    }
-  }
-  if (!textContent) throw new Error('Gemini returned no content')
 
-  return textContent.trim()
+  return { parts, text: text.trim() }
 }
 
-function validateSQL(sql: string, _isPlatform: boolean): string | null {
-  // Strip SQL comments (-- line comments and /* block comments */)
-  const cleaned = sql
-    .replace(/--[^\n]*/g, '')
-    .replace(/\/\*[\s\S]*?\*\//g, '')
-    .trim()
-  const normalized = cleaned.toLowerCase()
+function buildSystemPrompt(orgType: string, allowedOrgIds: string[]): string {
+  const isPlatform = orgType === 'platform'
 
-  // Allow SELECT and WITH ... SELECT (CTEs)
-  if (!normalized.startsWith('select') && !normalized.startsWith('with')) {
-    return 'Solo se permiten consultas SELECT'
+  let scopeInfo: string
+  if (isPlatform) {
+    scopeInfo = 'El usuario es un administrador de plataforma con acceso a TODAS las organizaciones.'
+  } else if (orgType === 'aggregator') {
+    scopeInfo = `El usuario es un administrador de agregador. Sus org_ids permitidos son: ${allowedOrgIds.join(', ')}.`
+  } else {
+    scopeInfo = `El usuario es un gerente de almacén. Su org_id es: ${allowedOrgIds[0]}.`
   }
 
-  // Block dangerous DML/DDL statements — check as statement keywords (followed by space or table name)
-  const dangerousStatements = [
-    /\binsert\s+into\b/i,
-    /\bupdate\s+\w+\s+set\b/i,
-    /\bdelete\s+from\b/i,
-    /\bdrop\s+(table|function|index|view|schema|database)\b/i,
-    /\balter\s+(table|function|column)\b/i,
-    /\btruncate\b/i,
-    /\bcreate\s+(table|function|index|view|schema|role|database)\b/i,
-    /\bgrant\b/i,
-    /\brevoke\b/i,
-  ]
-  for (const regex of dangerousStatements) {
-    if (regex.test(cleaned)) {
-      const match = cleaned.match(regex)?.[0] ?? ''
-      return `Operación no permitida: ${match.toUpperCase()}`
-    }
-  }
+  return `Eres Yiucp, el asistente de inteligencia artificial de Rhino Toyo Parts, una plataforma de gestión de almacén y venta de repuestos automotrices Toyota en Venezuela.
 
-  if (cleaned.includes(';')) {
-    return 'No se permiten múltiples sentencias'
-  }
+Responde siempre en español. Eres amigable, conciso y profesional.
 
-  return null
+${scopeInfo}
+
+INSTRUCCIONES:
+- Usa las funciones disponibles para consultar datos. SIEMPRE llama funciones antes de responder preguntas sobre datos.
+- Si el usuario pregunta por una organización por nombre, PRIMERO usa buscar_organizacion para obtener su ID, y luego usa ese ID en las demás funciones.
+- Para preguntas amplias como "qué pasó hoy" o "resumen de actividad", usa la función resumen_actividad.
+- Presenta los resultados de forma clara con tablas markdown cuando haya datos tabulares.
+- Usa negritas para destacar valores importantes.
+- NO inventes datos. Solo reporta lo que las funciones retornan.
+- Si no hay datos, dilo de forma amigable.
+- NO uses emojis excesivos, máximo 1-2 relevantes.
+- La fecha de hoy es ${new Date().toISOString().split('T')[0]}.`
 }
 
-function extractJSON(text: string): { sql: string; explanation: string } {
-  let jsonText = text.trim()
-  if (jsonText.startsWith('```')) {
-    jsonText = jsonText.replace(/^```(?:json)?\s*/, '').replace(/\s*```$/, '')
+// ──────────────────────────────────────────────
+// Function dispatcher
+// ──────────────────────────────────────────────
+
+async function executeFunction(
+  name: string,
+  args: Record<string, unknown>,
+  db: SupabaseAdmin,
+  scopeIds: string[],
+): Promise<unknown> {
+  console.log(`🔧 Executing function: ${name}`, JSON.stringify(args))
+
+  switch (name) {
+    case 'buscar_organizacion':
+      return buscar_organizacion(db, args as { nombre: string })
+    case 'obtener_ordenes':
+      return obtener_ordenes(db, args as { org_id?: string; status?: string; fecha_desde?: string; fecha_hasta?: string }, scopeIds)
+    case 'obtener_recepciones':
+      return obtener_recepciones(db, args as { org_id?: string; status?: string; fecha_desde?: string; fecha_hasta?: string }, scopeIds)
+    case 'obtener_picking':
+      return obtener_picking(db, args as { org_id?: string; status?: string; fecha_desde?: string; fecha_hasta?: string }, scopeIds)
+    case 'obtener_packing':
+      return obtener_packing(db, args as { org_id?: string; status?: string; fecha_desde?: string; fecha_hasta?: string }, scopeIds)
+    case 'obtener_stock':
+      return obtener_stock(db, args as { org_id?: string; producto?: string; solo_bajo_stock?: boolean }, scopeIds)
+    case 'obtener_auditorias':
+      return obtener_auditorias(db, args as { org_id?: string; fecha_desde?: string; fecha_hasta?: string }, scopeIds)
+    case 'obtener_devoluciones':
+      return obtener_devoluciones(db, args as { org_id?: string; status?: string; fecha_desde?: string; fecha_hasta?: string }, scopeIds)
+    case 'obtener_productos':
+      return obtener_productos(db, args as { org_id?: string; nombre?: string; status?: string }, scopeIds)
+    case 'obtener_clientes':
+      return obtener_clientes(db, args as { org_id?: string; nombre?: string }, scopeIds)
+    case 'resumen_actividad':
+      return resumen_actividad(db, args as { org_id: string; incluir_asociados?: boolean; fecha_desde?: string; fecha_hasta?: string })
+    default:
+      return { error: `Función desconocida: ${name}` }
   }
-  if (!jsonText.startsWith('{')) {
-    const first = jsonText.indexOf('{')
-    const last = jsonText.lastIndexOf('}')
-    if (first !== -1 && last > first) {
-      jsonText = jsonText.substring(first, last + 1)
-    }
-  }
-  jsonText = jsonText.replace(/,\s*([\]}])/g, '$1')
-  return JSON.parse(jsonText)
 }
 
-// ---------- Main Handler ----------
+// ──────────────────────────────────────────────
+// Main Handler
+// ──────────────────────────────────────────────
 
 Deno.serve(async (req) => {
   const corsHeaders = getCorsHeaders(req)
@@ -249,9 +616,7 @@ Deno.serve(async (req) => {
     })
 
     // Resolve org scope
-    const isPlatform = orgType === 'platform'
     let allowedOrgIds: string[] = orgId ? [orgId] : []
-
     if (orgType === 'aggregator' && orgId) {
       const { data: children } = await supabaseAdmin
         .from('org_hierarchy')
@@ -262,83 +627,53 @@ Deno.serve(async (req) => {
       }
     }
 
-    // Build system prompt and call Gemini for SQL
-    const systemPrompt = buildSystemPrompt(orgType, roles ?? [], allowedOrgIds)
+    // Build system prompt
+    const systemPrompt = buildSystemPrompt(orgType, allowedOrgIds)
 
     console.log('🤖 Yiucp query:', query)
 
-    let sqlResponse: { sql: string; explanation: string }
-    try {
-      const geminiResult = await callGemini(systemPrompt, query)
-      sqlResponse = extractJSON(geminiResult)
-    } catch (e) {
-      console.error('Gemini SQL generation error:', e)
-      return jsonResponse({ answer: 'No pude procesar tu consulta. Intenta reformularla con más detalle.' })
-    }
+    // Conversation loop with function calling
+    const messages: GeminiMessage[] = [
+      { role: 'user', parts: [{ text: query }] },
+    ]
 
-    // Strip trailing semicolons (Gemini often adds them)
-    sqlResponse.sql = sqlResponse.sql.replace(/;\s*$/, '').trim()
+    let finalAnswer = ''
+    const MAX_TURNS = 6 // Prevent infinite loops
 
-    console.log('📝 Generated SQL:', sqlResponse.sql)
+    for (let turn = 0; turn < MAX_TURNS; turn++) {
+      const response = await callGeminiWithTools(systemPrompt, messages)
 
-    // Validate SQL
-    const validationError = validateSQL(sqlResponse.sql, isPlatform)
-    if (validationError) {
-      console.error('SQL validation failed:', validationError)
-      return jsonResponse({ answer: `No puedo ejecutar esa consulta: ${validationError}. Intenta con otra pregunta.` })
-    }
+      // Check for function calls
+      const functionCalls = response.parts.filter(
+        (p): p is { functionCall: { name: string; args: Record<string, unknown> } } => 'functionCall' in p,
+      )
 
-    // Ensure LIMIT exists
-    let finalSQL = sqlResponse.sql.trim()
-    if (!/\blimit\b/i.test(finalSQL)) {
-      finalSQL += ' LIMIT 100'
-    }
-
-    // Execute SQL
-    let queryResults: unknown
-    try {
-      const { data, error } = await supabaseAdmin.rpc('execute_readonly_query', { query_text: finalSQL })
-      if (error) throw error
-      queryResults = data
-    } catch (sqlError) {
-      console.error('SQL execution error:', sqlError)
-
-      // Retry once: feed error back to Gemini
-      try {
-        const retryPrompt = `La consulta SQL anterior falló con este error: ${sqlError}.
-La consulta era: ${finalSQL}
-Genera una consulta SQL corregida. Responde SOLO con JSON: { "sql": "...", "explanation": "..." }`
-
-        const retryResult = await callGemini(systemPrompt, retryPrompt)
-        const retrySQL = extractJSON(retryResult)
-
-        let retrySQLText = retrySQL.sql.trim()
-        if (!/\blimit\b/i.test(retrySQLText)) retrySQLText += ' LIMIT 100'
-
-        const retryValidation = validateSQL(retrySQLText, isPlatform)
-        if (retryValidation) throw new Error(retryValidation)
-
-        const { data, error } = await supabaseAdmin.rpc('execute_readonly_query', { query_text: retrySQLText })
-        if (error) throw error
-        queryResults = data
-        finalSQL = retrySQLText
-        console.log('✅ Retry succeeded with SQL:', retrySQLText)
-      } catch (retryError) {
-        console.error('Retry also failed:', retryError)
-        return jsonResponse({ answer: 'No pude obtener los datos solicitados. Intenta reformular tu pregunta de otra manera.' })
+      if (functionCalls.length === 0) {
+        // No more function calls — Gemini has the final answer
+        finalAnswer = response.text
+        break
       }
+
+      // Add model's response (with function calls) to conversation
+      messages.push({ role: 'model', parts: response.parts })
+
+      // Execute all function calls and add results
+      const functionResponses: GeminiPart[] = []
+      for (const fc of functionCalls) {
+        const result = await executeFunction(fc.functionCall.name, fc.functionCall.args, supabaseAdmin, allowedOrgIds)
+        functionResponses.push({
+          functionResponse: {
+            name: fc.functionCall.name,
+            response: { result },
+          },
+        })
+      }
+
+      messages.push({ role: 'function', parts: functionResponses })
     }
 
-    // Format results with Gemini
-    let formattedAnswer: string
-    try {
-      const formatPrompt = buildFormatPrompt()
-      const resultsStr = JSON.stringify(queryResults)
-      const formatMessage = `Pregunta del usuario: "${query}"\n\nResultados de la consulta (JSON):\n${resultsStr.substring(0, 8000)}`
-      formattedAnswer = await callGemini(formatPrompt, formatMessage)
-    } catch (e) {
-      console.error('Gemini format error:', e)
-      formattedAnswer = `Resultados obtenidos:\n\`\`\`json\n${JSON.stringify(queryResults, null, 2).substring(0, 2000)}\n\`\`\``
+    if (!finalAnswer) {
+      finalAnswer = 'No pude completar la consulta. Intenta reformular tu pregunta.'
     }
 
     // Log conversation (fire and forget)
@@ -346,13 +681,13 @@ Genera una consulta SQL corregida. Responde SOLO con JSON: { "sql": "...", "expl
       user_id: user.id,
       org_id: orgId || null,
       query,
-      sql_generated: finalSQL,
-      response: formattedAnswer.substring(0, 5000),
+      sql_generated: 'function_calling',
+      response: finalAnswer.substring(0, 5000),
     }).then(() => {})
 
     console.log('✅ Yiucp response sent')
 
-    return jsonResponse({ answer: formattedAnswer })
+    return jsonResponse({ answer: finalAnswer })
 
   } catch (error) {
     console.error('❌ Error in yiucp-chat:', error)
