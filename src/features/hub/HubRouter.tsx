@@ -8,6 +8,7 @@ import { usePermissions } from '@/hooks/usePermissions.ts';
 
 const DashboardPage = lazy(() => import('@/features/dashboard/DashboardPage.tsx').then(m => ({ default: m.DashboardPage })));
 const OrgListPage = lazy(() => import('@/features/organizations/OrgListPage.tsx').then(m => ({ default: m.OrgListPage })));
+const AssociatesListPage = lazy(() => import('@/features/organizations/AssociatesListPage.tsx').then(m => ({ default: m.AssociatesListPage })));
 const UsersPage = lazy(() => import('@/features/users/UsersPage.tsx').then(m => ({ default: m.UsersPage })));
 const InventoryPage = lazy(() => import('@/features/inventory/InventoryPage.tsx').then(m => ({ default: m.InventoryPage })));
 const InventoryUploadPage = lazy(() => import('@/features/inventory/InventoryUploadPage.tsx').then(m => ({ default: m.InventoryUploadPage })));
@@ -88,6 +89,7 @@ export function HubRouter() {
                 <Routes>
                   <Route index element={<SmartIndex />} />
                   <Route path="organizations" element={<OrgListPage />} />
+                  <Route path="associates" element={<AssociatesListPage />} />
                   <Route path="users" element={<UsersPage />} />
                   <Route path="users/:userId" element={<UserActivityPage />} />
                   <Route path="suppliers" element={<SuppliersPage />} />

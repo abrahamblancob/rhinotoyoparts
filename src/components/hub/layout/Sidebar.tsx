@@ -45,6 +45,7 @@ const NAV_CONFIG: Record<OrgType, NavSection[]> = {
       title: 'ADMINISTRACIÓN',
       items: [
         { label: 'Agregadores', path: '/hub/organizations', icon: '🏢', module: 'organizations' },
+        { label: 'Asociados', path: '/hub/associates', icon: '🏪', module: 'organizations' },
         { label: 'Usuarios', path: '/hub/users', icon: '👥', module: 'users' },
       ],
     },
