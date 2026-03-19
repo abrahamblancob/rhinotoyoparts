@@ -458,16 +458,22 @@ async function resumen_actividad(db: SupabaseAdmin, args: { org_id: string; incl
   return resumen
 }
 
+// Strip diacritics/accents so "Ramón" matches "Ramon" in DB
+function stripAccents(str: string): string {
+  return str.normalize('NFD').replace(/[\u0300-\u036f]/g, '')
+}
+
 async function buscar_usuario(
   db: SupabaseAdmin,
   args: { nombre: string },
   scopeIds: string[],
   isPlatform = false,
 ) {
+  const searchName = stripAccents(args.nombre)
   let q = db
     .from('profiles')
     .select('id, full_name, email, is_active, last_login, org:organizations(name)')
-    .ilike('full_name', `%${args.nombre}%`)
+    .ilike('full_name', `%${searchName}%`)
     .order('full_name')
     .limit(20)
 
