@@ -523,20 +523,57 @@ async function obtener_actividad_usuario(
   const { data, error } = await q
   if (error) return { error: error.message }
 
-  // Build summary of actions by type
-  const resumen_acciones: Record<string, number> = {}
-  for (const log of data ?? []) {
-    const key = `${log.action}:${log.entity_type}`
-    resumen_acciones[key] = (resumen_acciones[key] ?? 0) + 1
+  const logs = data ?? []
+
+  // Group by module (entity_type) with action counts and descriptions
+  const ACTION_LABELS: Record<string, string> = {
+    login: 'Inicio de sesión', logout: 'Cierre de sesión',
+    create: 'Creó', update: 'Actualizó', delete: 'Eliminó',
+    status_change: 'Cambió estado', assign: 'Asignó',
+    cancel: 'Canceló', complete: 'Completó', claim: 'Reclamó',
+    start: 'Inició', pick_item: 'Pickeó ítem', verify_item: 'Verificó ítem',
+    add_photo: 'Agregó foto', receive_item: 'Recibió ítem',
+    upload: 'Cargó archivo', send_email: 'Envió email',
+    assign_stock: 'Asignó stock', remove_stock: 'Removió stock',
+  }
+  const MODULE_LABELS: Record<string, string> = {
+    session: 'Sesión', user: 'Usuarios', order: 'Pedidos',
+    product: 'Inventario', bulk_upload: 'Cargas masivas',
+    organization: 'Organizaciones', customer: 'Clientes',
+    warehouse: 'Almacenes', location: 'Ubicaciones',
+    pick_list: 'Picking', pack_session: 'Packing',
+    receiving_order: 'Recepción', return: 'Devoluciones',
+    stock_audit: 'Auditoría', supplier: 'Proveedores',
   }
 
+  // Build grouped summary by module
+  const porModulo: Record<string, { total: number; acciones: Record<string, number>; descripciones: string[] }> = {}
+  for (const log of logs) {
+    const modLabel = MODULE_LABELS[log.entity_type] ?? log.entity_type
+    if (!porModulo[modLabel]) {
+      porModulo[modLabel] = { total: 0, acciones: {}, descripciones: [] }
+    }
+    porModulo[modLabel].total++
+    const actionLabel = ACTION_LABELS[log.action] ?? log.action
+    porModulo[modLabel].acciones[actionLabel] = (porModulo[modLabel].acciones[actionLabel] ?? 0) + 1
+    // Keep up to 5 descriptions per module for context
+    if (log.description && porModulo[modLabel].descripciones.length < 5) {
+      porModulo[modLabel].descripciones.push(log.description)
+    }
+  }
+
+  // First and last activity timestamps
+  const primeraActividad = logs.length ? logs[logs.length - 1].created_at : null
+  const ultimaActividad = logs.length ? logs[0].created_at : null
+
   return {
-    _instruccion: 'ESTOS SON LOS DATOS EXACTOS DE LA BASE DE DATOS. Reporta SOLO estos números y actividades, NO inventes ni modifiques ningún valor.',
+    _instruccion: 'ESTOS SON LOS DATOS EXACTOS. Presenta un RESUMEN organizado por módulo, NO listes cada actividad individual. Usa los datos de porModulo para mostrar qué hizo el usuario en cada área.',
     usuario: userProfile.full_name,
     periodo: { desde, hasta: args.fecha_hasta ?? new Date().toISOString().split('T')[0] },
-    actividades: data ?? [],
-    total: data?.length ?? 0,
-    resumen_acciones,
+    total_actividades: logs.length,
+    primera_actividad: primeraActividad,
+    ultima_actividad: ultimaActividad,
+    por_modulo: porModulo,
   }
 }
 
@@ -618,6 +655,7 @@ INSTRUCCIONES:
 - Usa las funciones disponibles para consultar datos. SIEMPRE llama funciones antes de responder preguntas sobre datos.
 - Si el usuario pregunta por una organización por nombre, PRIMERO usa buscar_organizacion para obtener su ID, y luego usa ese ID en las demás funciones.
 - Si el usuario pregunta por la actividad de una persona específica (ej: "¿qué hizo Ramón hoy?"), PRIMERO usa buscar_usuario para encontrar al usuario por nombre, y luego usa obtener_actividad_usuario con su ID para ver su actividad.
+- Cuando presentes actividad de usuario, muestra un RESUMEN organizado por módulo (ej: "Pedidos: 5 acciones - creó 3, actualizó 2"), NO listes cada actividad individual en una tabla larga. Incluye horario de primera y última actividad.
 - Para preguntas amplias como "qué pasó hoy" o "resumen de actividad", usa la función resumen_actividad.
 - Presenta los resultados de forma clara con tablas markdown cuando haya datos tabulares.
 - Usa negritas para destacar valores importantes.
