@@ -1,15 +1,27 @@
 import { query, supabase, resolveAggregatorOrgIds, applyOrgScope } from './base.ts';
 import type { PackSession, PackSessionItem } from '@/types/warehouse.ts';
 
-export async function getPackSessions(opts?: { orgId?: string; isPlatform?: boolean; isAggregator?: boolean; warehouseId?: string; status?: string }) {
-  const aggregatorOrgIds = await resolveAggregatorOrgIds(opts);
+export async function getPackSessions(opts?: { orgId?: string; isPlatform?: boolean; isAggregator?: boolean; warehouseId?: string; status?: string; includeChildren?: boolean }) {
+  let scopeOrgIds: string[] | null = null;
+  if (opts?.includeChildren && opts?.orgId) {
+    const { data: hierarchy } = await supabase
+      .from('org_hierarchy').select('child_id').eq('parent_id', opts.orgId);
+    const childIds = (hierarchy ?? []).map((h: { child_id: string }) => h.child_id);
+    scopeOrgIds = [opts.orgId, ...childIds];
+  }
+
+  const aggregatorOrgIds = scopeOrgIds ? null : await resolveAggregatorOrgIds(opts);
 
   return query<PackSession[]>((sb) => {
     let q = sb.from('pack_sessions')
-      .select('*, order:orders(order_number, status), packer:profiles!pack_sessions_packed_by_fkey(full_name)')
+      .select('*, order:orders(order_number, status, org_id), packer:profiles!pack_sessions_packed_by_fkey(full_name), organization:organizations(name, type)')
       .order('created_at', { ascending: false });
 
-    q = applyOrgScope(q, opts, aggregatorOrgIds);
+    if (scopeOrgIds) {
+      q = q.in('org_id', scopeOrgIds);
+    } else {
+      q = applyOrgScope(q, opts, aggregatorOrgIds);
+    }
     if (opts?.warehouseId) q = q.eq('warehouse_id', opts.warehouseId);
     if (opts?.status) q = q.eq('status', opts.status);
     return q;

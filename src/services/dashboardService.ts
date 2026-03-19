@@ -172,15 +172,28 @@ export interface OrgPickingSummary {
   inProgressPicks: number;
 }
 
-export function getOrgPickingSummaries(): Promise<OrgPickingSummary[]> {
-  return buildOrgSummaries<OrgPickingSummary>(async (org) => {
-    const [totalRes, pendingRes, inProgressRes] = await Promise.all([
-      supabase.from('pick_lists').select('id', { count: 'exact', head: true }).eq('org_id', org.id),
-      supabase.from('pick_lists').select('id', { count: 'exact', head: true }).eq('org_id', org.id).in('status', [...PENDING_PICK_STATUSES]),
-      supabase.from('pick_lists').select('id', { count: 'exact', head: true }).eq('org_id', org.id).in('status', [...IN_PROGRESS_PICK_STATUSES]),
-    ]);
-    return { pickListCount: totalRes.count ?? 0, pendingPicks: pendingRes.count ?? 0, inProgressPicks: inProgressRes.count ?? 0 };
-  });
+export async function getOrgPickingSummaries(): Promise<OrgPickingSummary[]> {
+  const { data: aggregators } = await supabase
+    .from('organizations').select('id, name, type')
+    .eq('type', 'aggregator').eq('status', 'active').order('name');
+  const aggs = (aggregators as ActiveOrg[] | null) ?? [];
+  if (aggs.length === 0) return [];
+
+  return Promise.all(
+    aggs.map(async (org) => {
+      const { data: hierarchy } = await supabase
+        .from('org_hierarchy').select('child_id').eq('parent_id', org.id);
+      const childIds = (hierarchy ?? []).map((h: { child_id: string }) => h.child_id);
+      const allOrgIds = [org.id, ...childIds];
+
+      const [totalRes, pendingRes, inProgressRes] = await Promise.all([
+        supabase.from('pick_lists').select('id', { count: 'exact', head: true }).in('org_id', allOrgIds),
+        supabase.from('pick_lists').select('id', { count: 'exact', head: true }).in('org_id', allOrgIds).in('status', [...PENDING_PICK_STATUSES]),
+        supabase.from('pick_lists').select('id', { count: 'exact', head: true }).in('org_id', allOrgIds).in('status', [...IN_PROGRESS_PICK_STATUSES]),
+      ]);
+      return { id: org.id, name: org.name, type: org.type, pickListCount: totalRes.count ?? 0, pendingPicks: pendingRes.count ?? 0, inProgressPicks: inProgressRes.count ?? 0 };
+    }),
+  );
 }
 
 /* ── Packing ── */
@@ -194,15 +207,28 @@ export interface OrgPackingSummary {
   inProgressPacks: number;
 }
 
-export function getOrgPackingSummaries(): Promise<OrgPackingSummary[]> {
-  return buildOrgSummaries<OrgPackingSummary>(async (org) => {
-    const [totalRes, pendingRes, inProgressRes] = await Promise.all([
-      supabase.from('pack_sessions').select('id', { count: 'exact', head: true }).eq('org_id', org.id),
-      supabase.from('pack_sessions').select('id', { count: 'exact', head: true }).eq('org_id', org.id).in('status', [...PENDING_PACK_STATUSES]),
-      supabase.from('pack_sessions').select('id', { count: 'exact', head: true }).eq('org_id', org.id).in('status', [...IN_PROGRESS_PACK_STATUSES]),
-    ]);
-    return { packSessionCount: totalRes.count ?? 0, pendingPacks: pendingRes.count ?? 0, inProgressPacks: inProgressRes.count ?? 0 };
-  });
+export async function getOrgPackingSummaries(): Promise<OrgPackingSummary[]> {
+  const { data: aggregators } = await supabase
+    .from('organizations').select('id, name, type')
+    .eq('type', 'aggregator').eq('status', 'active').order('name');
+  const aggs = (aggregators as ActiveOrg[] | null) ?? [];
+  if (aggs.length === 0) return [];
+
+  return Promise.all(
+    aggs.map(async (org) => {
+      const { data: hierarchy } = await supabase
+        .from('org_hierarchy').select('child_id').eq('parent_id', org.id);
+      const childIds = (hierarchy ?? []).map((h: { child_id: string }) => h.child_id);
+      const allOrgIds = [org.id, ...childIds];
+
+      const [totalRes, pendingRes, inProgressRes] = await Promise.all([
+        supabase.from('pack_sessions').select('id', { count: 'exact', head: true }).in('org_id', allOrgIds),
+        supabase.from('pack_sessions').select('id', { count: 'exact', head: true }).in('org_id', allOrgIds).in('status', [...PENDING_PACK_STATUSES]),
+        supabase.from('pack_sessions').select('id', { count: 'exact', head: true }).in('org_id', allOrgIds).in('status', [...IN_PROGRESS_PACK_STATUSES]),
+      ]);
+      return { id: org.id, name: org.name, type: org.type, packSessionCount: totalRes.count ?? 0, pendingPacks: pendingRes.count ?? 0, inProgressPacks: inProgressRes.count ?? 0 };
+    }),
+  );
 }
 
 /* ── Returns ── */

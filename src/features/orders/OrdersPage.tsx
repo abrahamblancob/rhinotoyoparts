@@ -7,6 +7,7 @@ import { StatusBadge } from '@/components/hub/shared/StatusBadge.tsx';
 import { EmptyState } from '@/components/hub/shared/EmptyState.tsx';
 import { StatsCard } from '@/components/hub/shared/StatsCard.tsx';
 import { OrgSelectorGrid } from '@/components/hub/shared/OrgSelectorGrid.tsx';
+import { Breadcrumbs } from '@/components/hub/shared/Breadcrumbs.tsx';
 import { OrderCreateModal } from './OrderCreateModal.tsx';
 import type { Order } from '@/lib/database.types.ts';
 import { ORDER_STATUS_LABELS, SOURCE_LABELS } from '@/lib/statusConfig.ts';
@@ -97,13 +98,10 @@ export function OrdersPage() {
       <div className="rh-page-header">
         <div>
           {isPlatform && selectedOrg && (
-            <button
-              onClick={() => setSelectedOrgId(null)}
-              className="rh-btn rh-btn-ghost"
-              style={{ fontSize: 13, marginBottom: 4, padding: '2px 0' }}
-            >
-              ← Todos los agregadores
-            </button>
+            <Breadcrumbs items={[
+              { label: 'Agregadores', onClick: () => setSelectedOrgId(null) },
+              { label: selectedOrg.name },
+            ]} />
           )}
           <h1 className="rh-page-title">
             Órdenes{isPlatform && selectedOrg ? ` — ${selectedOrg.name}` : ''}
