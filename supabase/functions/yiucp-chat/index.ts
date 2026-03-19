@@ -274,6 +274,9 @@ Deno.serve(async (req) => {
       return jsonResponse({ answer: 'No pude procesar tu consulta. Intenta reformularla con más detalle.' })
     }
 
+    // Strip trailing semicolons (Gemini often adds them)
+    sqlResponse.sql = sqlResponse.sql.replace(/;\s*$/, '').trim()
+
     console.log('📝 Generated SQL:', sqlResponse.sql)
 
     // Validate SQL
