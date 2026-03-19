@@ -1,4 +1,4 @@
-import { query } from './base.ts';
+import { query, supabase } from './base.ts';
 import type { Product } from '@/lib/database.types.ts';
 
 interface ProductPayload {
@@ -16,10 +16,21 @@ interface ProductPayload {
   supplier_id: string | null;
 }
 
-export async function getProducts(opts?: { orgId?: string; isPlatform?: boolean; status?: string }) {
+export async function getProducts(opts?: { orgId?: string; isPlatform?: boolean; status?: string; includeChildren?: boolean }) {
+  // Resolve child org IDs if includeChildren
+  let scopeOrgIds: string[] | null = null;
+  if (opts?.includeChildren && opts?.orgId) {
+    const { data: hierarchy } = await supabase
+      .from('org_hierarchy').select('child_id').eq('parent_id', opts.orgId);
+    const childIds = (hierarchy ?? []).map((h: { child_id: string }) => h.child_id);
+    scopeOrgIds = [opts.orgId, ...childIds];
+  }
+
   return query<Product[]>((sb) => {
     let q = sb.from('products').select('*').order('created_at', { ascending: false });
-    if (!opts?.isPlatform && opts?.orgId) {
+    if (scopeOrgIds) {
+      q = q.in('org_id', scopeOrgIds);
+    } else if (!opts?.isPlatform && opts?.orgId) {
       q = q.eq('org_id', opts.orgId);
     }
     if (opts?.status === 'active' || opts?.status === 'inactive') {

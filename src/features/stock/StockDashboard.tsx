@@ -9,11 +9,13 @@ import {
 import { useAuthStore } from '@/stores/authStore.ts';
 import { usePermissions } from '@/hooks/usePermissions.ts';
 import { useAsyncData } from '@/hooks/useAsyncData.ts';
-import { useOrgSelector } from '@/hooks/useOrgSelector.ts';
+import { useAggregatorNav } from '@/hooks/useAggregatorNav.ts';
 import { useWarehouses, useWarehouseStats } from '@/hooks/useWarehouse.ts';
 import { StatsCard } from '@/components/hub/shared/StatsCard.tsx';
 import { EmptyState } from '@/components/hub/shared/EmptyState.tsx';
 import { OrgSelectorGrid } from '@/components/hub/shared/OrgSelectorGrid.tsx';
+import { Breadcrumbs } from '@/components/hub/shared/Breadcrumbs.tsx';
+import { AssociateFilterCards } from '@/components/hub/shared/AssociateFilterCards.tsx';
 import * as warehouseService from '@/services/warehouseService.ts';
 import { getOrgStockSummaries } from '@/services/dashboardService.ts';
 import type { OrgStockSummary } from '@/services/dashboardService.ts';
@@ -32,9 +34,7 @@ function DonutChart({ located, unlocated }: { located: number; unlocated: number
 
   return (
     <svg width={180} height={180} viewBox="0 0 180 180" style={{ display: 'block', margin: '0 auto' }}>
-      {/* Background ring */}
       <circle cx={90} cy={90} r={radius} fill="none" stroke="#F1F5F9" strokeWidth={18} />
-      {/* Located (green) */}
       {locatedArc > 0 && (
         <circle cx={90} cy={90} r={radius} fill="none"
           stroke="#10B981" strokeWidth={18} strokeLinecap="round"
@@ -43,7 +43,6 @@ function DonutChart({ located, unlocated }: { located: number; unlocated: number
           style={{ transition: 'stroke-dasharray 0.6s ease' }}
         />
       )}
-      {/* Unlocated (orange) */}
       {total > 0 && located < total && (
         <circle cx={90} cy={90} r={radius} fill="none"
           stroke="#F59E0B" strokeWidth={18} strokeLinecap="round"
@@ -53,7 +52,6 @@ function DonutChart({ located, unlocated }: { located: number; unlocated: number
           style={{ transition: 'stroke-dasharray 0.6s ease, stroke-dashoffset 0.6s ease' }}
         />
       )}
-      {/* Center text */}
       <text x={90} y={82} textAnchor="middle" fontSize={30} fontWeight={700} fill="#1E293B">{pct}%</text>
       <text x={90} y={104} textAnchor="middle" fontSize={12} fill="#94A3B8">Ubicados</text>
     </svg>
@@ -107,10 +105,10 @@ export function StockDashboard() {
   const { isPlatform } = usePermissions();
   const organization = useAuthStore((s) => s.organization);
 
-  const { summaries, selectedOrgId, selectedOrg, loading: loadingSummaries, setSelectedOrgId, showSelector } =
-    useOrgSelector<OrgStockSummary>(getOrgStockSummaries, isPlatform);
+  const nav = useAggregatorNav<OrgStockSummary>(getOrgStockSummaries, isPlatform);
 
-  const orgId = isPlatform ? selectedOrgId ?? undefined : organization?.id;
+  const orgId = isPlatform ? nav.effectiveOrgId ?? undefined : organization?.id;
+  const shouldIncludeChildren = isPlatform && nav.includeChildren && !!nav.selectedAggregatorId;
 
   const { data: defaultWarehouses } = useWarehouses();
 
@@ -120,23 +118,21 @@ export function StockDashboard() {
     [orgId],
   );
   const { data: orgWarehouses } = useAsyncData(whFetcher, [orgId]);
-  const warehouses = isPlatform && selectedOrgId ? orgWarehouses : defaultWarehouses;
+  const warehouses = isPlatform && nav.selectedAggregatorId ? orgWarehouses : defaultWarehouses;
 
   const fetcher = useCallback(
     () => {
       if (!orgId) return Promise.resolve({ data: [] as InventoryStock[], error: null });
       if (warehouseFilter !== 'all') return warehouseService.getStockByWarehouse(warehouseFilter);
-      return warehouseService.getStockByOrg(orgId);
+      return warehouseService.getStockByOrg(orgId, shouldIncludeChildren);
     },
-    [orgId, warehouseFilter],
+    [orgId, warehouseFilter, shouldIncludeChildren],
   );
 
-  const { data: stockItems, loading, reload } = useAsyncData<InventoryStock[]>(fetcher, [orgId, warehouseFilter]);
+  const { data: stockItems, loading, reload } = useAsyncData<InventoryStock[]>(fetcher, [orgId, warehouseFilter, shouldIncludeChildren]);
 
-  // Warehouse stats (only when specific warehouse selected)
   const { stats } = useWarehouseStats(warehouseFilter !== 'all' ? warehouseFilter : undefined);
 
-  // Realtime subscription
   useEffect(() => {
     if (!orgId) return;
     const whIds = (warehouses ?? []).map((w) => w.id);
@@ -144,12 +140,10 @@ export function StockDashboard() {
     return () => { channels.forEach((ch) => supabase.removeChannel(ch)); };
   }, [orgId, warehouses, reload]);
 
-  // Reset warehouse filter when org changes
   useEffect(() => { setWarehouseFilter('all'); }, [orgId]);
 
-  const items = showSelector ? [] : (stockItems ?? []);
+  const items = nav.navState !== 'list' && isPlatform ? [] : (stockItems ?? []);
 
-  // ── Filters ──
   let filtered = search.trim()
     ? items.filter((s) =>
         s.product?.name?.toLowerCase().includes(search.toLowerCase()) ||
@@ -159,13 +153,11 @@ export function StockDashboard() {
     : items;
   if (showLowStockOnly) filtered = filtered.filter((s) => s.quantity <= LOW_STOCK_THRESHOLD);
 
-  // ── Metrics ──
   const uniqueProducts = new Set(items.map((s) => s.product_id)).size;
   const totalUnits = items.reduce((sum, s) => sum + s.quantity, 0);
   const totalReserved = items.reduce((sum, s) => sum + s.reserved_quantity, 0);
   const totalAvailable = totalUnits - totalReserved;
 
-  // Location metrics
   const locatedItems = items.filter((s) => s.location_id !== null);
   const unlocatedItems = items.filter((s) => s.location_id === null);
   const locatedUnits = locatedItems.reduce((sum, s) => sum + s.quantity, 0);
@@ -173,7 +165,6 @@ export function StockDashboard() {
   const totalRows = items.length;
   const locationCoveragePct = totalRows > 0 ? Math.round((locatedItems.length / totalRows) * 100) : 0;
 
-  // Health metrics
   const lowStockCount = items.filter((s) => s.quantity <= LOW_STOCK_THRESHOLD).length;
   const normalStockCount = items.filter((s) => s.quantity > LOW_STOCK_THRESHOLD).length;
   const zeroStockCount = items.filter((s) => s.quantity === 0).length;
@@ -190,19 +181,20 @@ export function StockDashboard() {
     ? warehouses?.find((w) => w.id === warehouseFilter)?.name ?? 'Almacén'
     : null;
 
-  if (showSelector) {
-    const totalProducts = summaries.reduce((s, o) => s + o.productCount, 0);
-    const totalUnitsAll = summaries.reduce((s, o) => s + o.totalUnits, 0);
-    const totalLow = summaries.reduce((s, o) => s + o.lowStockCount, 0);
-    const totalWarehouses = summaries.reduce((s, o) => s + o.warehouseCount, 0);
+  // Level 1: Aggregator grid
+  if (nav.navState === 'aggregators') {
+    const totalProducts = nav.summaries.reduce((s, o) => s + o.productCount, 0);
+    const totalUnitsAll = nav.summaries.reduce((s, o) => s + o.totalUnits, 0);
+    const totalLow = nav.summaries.reduce((s, o) => s + o.lowStockCount, 0);
+    const totalWarehouses = nav.summaries.reduce((s, o) => s + o.warehouseCount, 0);
 
     return (
       <OrgSelectorGrid<OrgStockSummary>
-        summaries={summaries}
-        loading={loadingSummaries}
-        onSelect={setSelectedOrgId}
+        summaries={nav.summaries}
+        loading={nav.loading}
+        onSelect={nav.selectAggregator}
         pageTitle="Stock por Ubicación"
-        pageSubtitle="Selecciona una organización para ver su inventario"
+        pageSubtitle="Selecciona un agregador para ver su inventario"
         globalStats={[
           { title: 'Productos', value: totalProducts, icon: '📦', color: '#6366F1' },
           { title: 'Unidades Totales', value: totalUnitsAll.toLocaleString(), icon: '📊', color: '#10B981' },
@@ -221,17 +213,10 @@ export function StockDashboard() {
 
   return (
     <div>
-      {/* ── Header + warehouse filter ── */}
       <div className="rh-page-header" style={{ marginBottom: 24 }}>
         <div>
-          {isPlatform && selectedOrg && (
-            <button onClick={() => setSelectedOrgId(null)} className="rh-btn rh-btn-ghost" style={{ fontSize: 13, marginBottom: 4, padding: '2px 0' }}>
-              ← Todas las organizaciones
-            </button>
-          )}
-          <h1 className="rh-page-title">
-            Stock de Inventario{isPlatform && selectedOrg ? ` — ${selectedOrg.name}` : ''}
-          </h1>
+          {isPlatform && nav.breadcrumbs.length > 0 && <Breadcrumbs items={nav.breadcrumbs} />}
+          <h1 className="rh-page-title">Stock de Inventario</h1>
           <p style={{ color: '#8A8886', fontSize: 14, marginTop: 4 }}>
             {selectedWarehouseName
               ? `Dashboard de stock — ${selectedWarehouseName}`
@@ -247,6 +232,14 @@ export function StockDashboard() {
         </select>
       </div>
 
+      {isPlatform && nav.childOrgs.length > 0 && (
+        <AssociateFilterCards
+          childOrgs={nav.childOrgs}
+          filterChildOrgId={nav.filterChildOrgId}
+          onFilter={nav.setFilterChildOrgId}
+        />
+      )}
+
       {loading ? (
         <p className="rh-loading">Cargando dashboard...</p>
       ) : items.length === 0 ? (
@@ -254,7 +247,6 @@ export function StockDashboard() {
           description="El inventario aparecerá aquí cuando se registren productos en las ubicaciones del almacén" />
       ) : (
         <>
-          {/* ═══ ROW 1: KPI Stats ═══ */}
           <div className="rh-stats-grid-5">
             <StatsCard title="Productos en Almacén" value={uniqueProducts} icon="📦" color="#6366F1" />
             <StatsCard title="En Estantería" value={`${locatedUnits} uds`} icon="📍" color="#10B981"
@@ -268,15 +260,12 @@ export function StockDashboard() {
             <StatsCard title="Reservadas" value={`${totalReserved} uds`} icon="🔒" color="#8B5CF6" />
           </div>
 
-          {/* ═══ Unlocated items panel ═══ */}
           {showUnlocated && unlocatedItems.length > 0 && (
             <div className="rh-card" style={{ padding: 0, overflow: 'hidden', marginBottom: 24, border: '1px solid #F59E0B' }}>
               <div style={{ padding: '16px 24px', display: 'flex', justifyContent: 'space-between', alignItems: 'center',
                 backgroundColor: '#FFF7ED', borderBottom: '1px solid #FED7AA' }}>
                 <div>
-                  <h3 style={{ fontSize: 15, fontWeight: 600, color: '#9A3412', margin: 0 }}>
-                    🚫 Productos sin ubicación asignada
-                  </h3>
+                  <h3 style={{ fontSize: 15, fontWeight: 600, color: '#9A3412', margin: 0 }}>🚫 Productos sin ubicación asignada</h3>
                   <p style={{ fontSize: 12, color: '#C2410C', margin: '4px 0 0' }}>
                     Estos productos están en el almacén pero no tienen estante asignado. Asígnalos desde el{' '}
                     <button onClick={() => navigate('/hub/warehouse')}
@@ -324,13 +313,9 @@ export function StockDashboard() {
             </div>
           )}
 
-          {/* ═══ ROW 2: Charts ═══ */}
           <div className="stock-charts-grid">
-            {/* Donut: Location Coverage */}
             <div className="rh-card" style={{ padding: 24 }}>
-              <h3 style={{ fontSize: 15, fontWeight: 600, color: '#1E293B', marginBottom: 20 }}>
-                📊 Cobertura de Ubicación
-              </h3>
+              <h3 style={{ fontSize: 15, fontWeight: 600, color: '#1E293B', marginBottom: 20 }}>📊 Cobertura de Ubicación</h3>
               <DonutChart located={locatedItems.length} unlocated={unlocatedItems.length} />
               <div style={{ marginTop: 20, display: 'flex', flexDirection: 'column', gap: 10 }}>
                 <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
@@ -338,27 +323,20 @@ export function StockDashboard() {
                     <span style={{ width: 12, height: 12, borderRadius: '50%', backgroundColor: '#10B981', display: 'inline-block' }} />
                     <span style={{ fontSize: 13, color: '#475569' }}>En estantería</span>
                   </div>
-                  <span style={{ fontSize: 13, fontWeight: 600, color: '#1E293B' }}>
-                    {locatedUnits} unidades
-                  </span>
+                  <span style={{ fontSize: 13, fontWeight: 600, color: '#1E293B' }}>{locatedUnits} unidades</span>
                 </div>
                 <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
                   <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
                     <span style={{ width: 12, height: 12, borderRadius: '50%', backgroundColor: '#F59E0B', display: 'inline-block' }} />
                     <span style={{ fontSize: 13, color: '#475569' }}>Sin ubicar</span>
                   </div>
-                  <span style={{ fontSize: 13, fontWeight: 600, color: '#1E293B' }}>
-                    {unlocatedUnits} unidades
-                  </span>
+                  <span style={{ fontSize: 13, fontWeight: 600, color: '#1E293B' }}>{unlocatedUnits} unidades</span>
                 </div>
               </div>
             </div>
 
-            {/* Stacked Bar: Health Distribution */}
             <div className="rh-card" style={{ padding: 24 }}>
-              <h3 style={{ fontSize: 15, fontWeight: 600, color: '#1E293B', marginBottom: 20 }}>
-                🩺 Salud del Inventario
-              </h3>
+              <h3 style={{ fontSize: 15, fontWeight: 600, color: '#1E293B', marginBottom: 20 }}>🩺 Salud del Inventario</h3>
               <StackedBar segments={healthData.map((d) => ({ color: d.color, value: d.count }))} />
               <div style={{ marginTop: 20, display: 'flex', flexDirection: 'column', gap: 12 }}>
                 {healthData.map((d) => (
@@ -374,11 +352,8 @@ export function StockDashboard() {
                 ))}
               </div>
 
-              {/* Disponibilidad sub-section */}
               <div style={{ marginTop: 24, paddingTop: 20, borderTop: '1px solid #E2E8F0' }}>
-                <h4 style={{ fontSize: 13, fontWeight: 600, color: '#64748B', marginBottom: 12, textTransform: 'uppercase', letterSpacing: '0.5px' }}>
-                  Disponibilidad
-                </h4>
+                <h4 style={{ fontSize: 13, fontWeight: 600, color: '#64748B', marginBottom: 12, textTransform: 'uppercase', letterSpacing: '0.5px' }}>Disponibilidad</h4>
                 <div style={{ display: 'flex', gap: 12 }}>
                   <div style={{ flex: 1, textAlign: 'center', padding: '12px 8px', backgroundColor: '#F0FDF4', borderRadius: 8 }}>
                     <div style={{ fontSize: 22, fontWeight: 700, color: '#10B981' }}>{totalAvailable}</div>
@@ -397,14 +372,11 @@ export function StockDashboard() {
             </div>
           </div>
 
-          {/* ═══ ROW 2B: Occupancy Gauge (only for specific warehouse) ═══ */}
           {warehouseFilter !== 'all' && stats && stats.totalLocations > 0 && (
             <OccupancyGauge occupied={stats.occupiedLocations} total={stats.totalLocations} rate={stats.occupancyRate} />
           )}
 
-          {/* ═══ ROW 3: Collapsible Table ═══ */}
           <div className="rh-card" style={{ padding: 0, overflow: 'hidden' }}>
-            {/* Header with toggle */}
             <button onClick={() => setShowTable(!showTable)}
               style={{ width: '100%', padding: '16px 24px', display: 'flex', justifyContent: 'space-between',
                 alignItems: 'center', border: 'none', background: 'none', cursor: 'pointer', fontSize: 15, fontWeight: 600, color: '#1E293B' }}>
@@ -414,7 +386,6 @@ export function StockDashboard() {
 
             {showTable && (
               <div style={{ padding: '0 24px 24px' }}>
-                {/* Filters inside table */}
                 <div style={{ display: 'flex', gap: 12, marginBottom: 16, flexWrap: 'wrap', alignItems: 'center' }}>
                   <div style={{ position: 'relative', flex: 1, maxWidth: 320 }}>
                     <Search size={16} style={{ position: 'absolute', left: 12, top: '50%', transform: 'translateY(-50%)', color: '#8A8886' }} />

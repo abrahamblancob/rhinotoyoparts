@@ -9,6 +9,7 @@ import { StatsCard } from '@/components/hub/shared/StatsCard.tsx';
 import { EmptyState } from '@/components/hub/shared/EmptyState.tsx';
 import { OrgSelectorGrid } from '@/components/hub/shared/OrgSelectorGrid.tsx';
 import { Breadcrumbs } from '@/components/hub/shared/Breadcrumbs.tsx';
+import { AssociateFilterCards } from '@/components/hub/shared/AssociateFilterCards.tsx';
 import * as pickingService from '@/services/pickingService.ts';
 import { getOrgPickingSummaries } from '@/services/dashboardService.ts';
 import type { OrgPickingSummary } from '@/services/dashboardService.ts';
@@ -160,6 +161,14 @@ export function PickingDashboard() {
           </p>
         </div>
       </div>
+
+      {isPlatform && nav.childOrgs.length > 0 && (
+        <AssociateFilterCards
+          childOrgs={nav.childOrgs}
+          filterChildOrgId={nav.filterChildOrgId}
+          onFilter={nav.setFilterChildOrgId}
+        />
+      )}
 
       <div className="rh-stats-grid mb-6">
         <StatsCard title="Total" value={totalCount} icon="📋" color="#6366F1" />

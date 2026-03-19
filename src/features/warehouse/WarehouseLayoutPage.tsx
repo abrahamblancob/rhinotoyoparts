@@ -19,6 +19,7 @@ import {
   Ban,
 } from 'lucide-react';
 import { usePermissions } from '@/hooks/usePermissions.ts';
+import { useAggregatorNav } from '@/hooks/useAggregatorNav.ts';
 import {
   useWarehouses,
   useWarehouseStats,
@@ -33,9 +34,13 @@ import { RackMiniGrid } from './components/RackMiniGrid.tsx';
 import { WarehouseCenitalMini } from './components/WarehouseCenitalMini.tsx';
 import { CELL_SIZE_M } from './FloorPlanBuilder.tsx';
 import { ConfirmDeleteModal } from '@/components/hub/shared/ConfirmDeleteModal.tsx';
+import { OrgSelectorGrid } from '@/components/hub/shared/OrgSelectorGrid.tsx';
+import { Breadcrumbs } from '@/components/hub/shared/Breadcrumbs.tsx';
+import { AssociateFilterCards } from '@/components/hub/shared/AssociateFilterCards.tsx';
 import * as warehouseService from '@/services/warehouseService.ts';
+import { getOrgWarehouseSummaries } from '@/services/dashboardService.ts';
+import type { OrgWarehouseSummary } from '@/services/dashboardService.ts';
 import { supabase } from '@/lib/supabase.ts';
-import type { Organization } from '@/lib/database.types.ts';
 import type { Warehouse, WarehouseRack, WarehouseLocation, InventoryStock } from '@/types/warehouse.ts';
 
 const ZONE_TYPE_LABELS: Record<string, string> = {
@@ -57,32 +62,14 @@ export function WarehouseLayoutPage() {
 
   const { data: warehouses, loading: warehousesLoading, reload: reloadWarehouses } = useWarehouses();
 
-  // Platform org selector
-  const [availableOrgs, setAvailableOrgs] = useState<Organization[]>([]);
-  const [selectedOrgFilter, setSelectedOrgFilter] = useState<string | null>(null);
-  const [loadingOrgs, setLoadingOrgs] = useState(isPlatform);
+  // Platform aggregator nav
+  const nav = useAggregatorNav<OrgWarehouseSummary>(getOrgWarehouseSummaries, isPlatform);
 
-  useEffect(() => {
-    if (isPlatform) {
-      setLoadingOrgs(true);
-      supabase
-        .from('organizations')
-        .select('*')
-        .in('type', ['aggregator', 'associate'])
-        .eq('status', 'active')
-        .order('name')
-        .then(({ data }) => {
-          setAvailableOrgs((data as Organization[]) ?? []);
-          setLoadingOrgs(false);
-        });
-    }
-  }, [isPlatform]);
-
-  const selectedOrgInfo = availableOrgs.find((o) => o.id === selectedOrgFilter);
+  const effectiveOrgId = nav.effectiveOrgId;
 
   // Filter warehouses by selected org for platform users
-  const filteredWarehouses = isPlatform && selectedOrgFilter
-    ? (warehouses ?? []).filter((w) => w.org_id === selectedOrgFilter)
+  const filteredWarehouses = isPlatform && effectiveOrgId
+    ? (warehouses ?? []).filter((w) => w.org_id === effectiveOrgId)
     : warehouses;
 
   const [selectedWarehouseId, setSelectedWarehouseId] = useState<string | null>(null);
@@ -200,95 +187,35 @@ export function WarehouseLayoutPage() {
   };
 
   // ── Loading state ──
-  if (warehousesLoading || loadingOrgs) {
+  if (warehousesLoading || nav.loading) {
     return <p className="rh-loading">Cargando almacenes...</p>;
   }
 
-  // ── Platform org selector (before showing warehouses) ──
-  if (isPlatform && !selectedOrgFilter) {
-    // Count warehouses per org
-    const warehouseCountByOrg = new Map<string, number>();
-    for (const wh of warehouses ?? []) {
-      warehouseCountByOrg.set(wh.org_id, (warehouseCountByOrg.get(wh.org_id) ?? 0) + 1);
-    }
+  // ── Platform: Aggregator grid ──
+  if (nav.navState === 'aggregators') {
+    const totalWh = nav.summaries.reduce((s, o) => s + o.warehouseCount, 0);
+    const totalLoc = nav.summaries.reduce((s, o) => s + o.totalLocations, 0);
+    const totalOcc = nav.summaries.reduce((s, o) => s + o.occupiedLocations, 0);
 
     return (
-      <div>
-        <div className="rh-page-header">
-          <div>
-            <h1 className="rh-page-title">
-              <WarehouseIcon size={24} style={{ display: 'inline', marginRight: 8, verticalAlign: 'middle' }} />
-              Almacenes
-            </h1>
-            <p className="rh-page-subtitle">Selecciona una organización para ver sus almacenes</p>
-          </div>
-        </div>
-
-        <div style={{
-          display: 'grid',
-          gridTemplateColumns: 'repeat(auto-fill, minmax(320px, 1fr))',
-          gap: 16,
-        }}>
-          {availableOrgs.map((org) => {
-            const whCount = warehouseCountByOrg.get(org.id) ?? 0;
-            return (
-              <div
-                key={org.id}
-                onClick={() => setSelectedOrgFilter(org.id)}
-                className="rh-card"
-                style={{
-                  padding: '20px 24px',
-                  cursor: 'pointer',
-                  transition: 'all 0.15s ease',
-                  border: '1px solid #E2E0DE',
-                }}
-                onMouseEnter={(e) => {
-                  e.currentTarget.style.borderColor = '#D3010A';
-                  e.currentTarget.style.boxShadow = '0 4px 12px rgba(211,1,10,0.1)';
-                  e.currentTarget.style.transform = 'translateY(-2px)';
-                }}
-                onMouseLeave={(e) => {
-                  e.currentTarget.style.borderColor = '#E2E0DE';
-                  e.currentTarget.style.boxShadow = 'none';
-                  e.currentTarget.style.transform = 'none';
-                }}
-              >
-                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: 16 }}>
-                  <div>
-                    <h3 style={{ fontSize: 16, fontWeight: 700, color: '#1E293B', margin: 0 }}>
-                      {org.name}
-                    </h3>
-                    <span style={{
-                      display: 'inline-block',
-                      marginTop: 4,
-                      padding: '2px 8px',
-                      borderRadius: 4,
-                      fontSize: 11,
-                      fontWeight: 600,
-                      backgroundColor: org.type === 'aggregator' ? 'rgba(99,102,241,0.1)' : 'rgba(16,185,129,0.1)',
-                      color: org.type === 'aggregator' ? '#6366F1' : '#10B981',
-                    }}>
-                      {org.type === 'aggregator' ? 'Agregador' : 'Asociado'}
-                    </span>
-                  </div>
-                  <span style={{ fontSize: 24, opacity: 0.3 }}>→</span>
-                </div>
-
-                <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
-                  <div style={{ textAlign: 'center', padding: '10px 20px', backgroundColor: '#F8FAFC', borderRadius: 8, flex: 1 }}>
-                    <p style={{ fontSize: 24, fontWeight: 800, color: '#6366F1', margin: 0 }}>
-                      {whCount}
-                    </p>
-                    <p style={{ fontSize: 11, color: '#94A3B8', margin: 0 }}>
-                      {whCount === 1 ? 'Almacén' : 'Almacenes'}
-                    </p>
-                  </div>
-                </div>
-              </div>
-            );
-          })}
-        </div>
-      </div>
+      <OrgSelectorGrid<OrgWarehouseSummary>
+        summaries={nav.summaries}
+        loading={nav.loading}
+        onSelect={nav.selectAggregator}
+        pageTitle="Layout de Almacén"
+        pageSubtitle="Selecciona un agregador para ver sus almacenes"
+        globalStats={[
+          { title: 'Almacenes', value: totalWh, icon: '🏭', color: '#6366F1' },
+          { title: 'Ubicaciones', value: totalLoc, icon: '📍', color: '#10B981' },
+          { title: 'Ocupadas', value: totalOcc, icon: '📦', color: '#F59E0B' },
+          { title: 'Agregadores', value: nav.summaries.length, icon: '🏢', color: '#8B5CF6' },
+        ]}
+        statFields={[
+          { key: 'warehouseCount', label: 'Almacenes', color: '#6366F1' },
+          { key: 'totalLocations', label: 'Ubicaciones', color: '#10B981' },
+          { key: 'occupiedLocations', label: 'Ocupadas', color: '#F59E0B', highlight: true },
+        ]}
+      />
     );
   }
 
@@ -298,19 +225,12 @@ export function WarehouseLayoutPage() {
       <div>
         <div className="rh-page-header">
           <div>
+            {isPlatform && nav.breadcrumbs.length > 0 && <Breadcrumbs items={nav.breadcrumbs} />}
             <h1 className="rh-page-title">
               <WarehouseIcon size={24} style={{ display: 'inline', marginRight: 8, verticalAlign: 'middle' }} />
-              {isPlatform && selectedOrgInfo ? `Almacén — ${selectedOrgInfo.name}` : 'Almacén'}
+              Almacén
             </h1>
           </div>
-          {isPlatform && selectedOrgFilter && (
-            <button
-              onClick={() => setSelectedOrgFilter(null)}
-              className="rh-btn rh-btn-ghost"
-            >
-              ← Todas las organizaciones
-            </button>
-          )}
         </div>
         <div
           style={{
@@ -349,23 +269,16 @@ export function WarehouseLayoutPage() {
       <div>
         <div className="rh-page-header">
           <div>
+            {isPlatform && nav.breadcrumbs.length > 0 && <Breadcrumbs items={nav.breadcrumbs} />}
             <h1 className="rh-page-title">
               <WarehouseIcon size={24} style={{ display: 'inline', marginRight: 8, verticalAlign: 'middle' }} />
-              {isPlatform && selectedOrgInfo ? `Almacenes — ${selectedOrgInfo.name}` : 'Almacenes'}
+              Almacenes
             </h1>
             <p className="rh-page-subtitle">
               Selecciona un almacen para ver su layout y configuracion
             </p>
           </div>
           <div className="rh-page-actions">
-            {isPlatform && selectedOrgFilter && (
-              <button
-                onClick={() => setSelectedOrgFilter(null)}
-                className="rh-btn rh-btn-ghost"
-              >
-                ← Todas las organizaciones
-              </button>
-            )}
             {canWrite('warehouse') && (
               <button
                 onClick={() => navigate('/hub/warehouse/setup')}
@@ -378,6 +291,14 @@ export function WarehouseLayoutPage() {
             )}
           </div>
         </div>
+
+        {isPlatform && nav.childOrgs.length > 0 && (
+          <AssociateFilterCards
+            childOrgs={nav.childOrgs}
+            filterChildOrgId={nav.filterChildOrgId}
+            onFilter={nav.setFilterChildOrgId}
+          />
+        )}
 
         <div
           style={{

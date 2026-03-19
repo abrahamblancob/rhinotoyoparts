@@ -216,14 +216,28 @@ export async function getStockByProduct(productId: string, warehouseId?: string)
   });
 }
 
-export async function getStockByOrg(orgId: string) {
-  return query<InventoryStock[]>((sb) =>
-    sb.from('inventory_stock')
+export async function getStockByOrg(orgId: string, includeChildren?: boolean) {
+  // Resolve child org IDs if includeChildren
+  let scopeOrgIds: string[] | null = null;
+  if (includeChildren) {
+    const { data: hierarchy } = await supabase
+      .from('org_hierarchy').select('child_id').eq('parent_id', orgId);
+    const childIds = (hierarchy ?? []).map((h: { child_id: string }) => h.child_id);
+    scopeOrgIds = [orgId, ...childIds];
+  }
+
+  return query<InventoryStock[]>((sb) => {
+    let q = sb.from('inventory_stock')
       .select('*, product:products(name, sku, brand), location:warehouse_locations(code)')
-      .eq('org_id', orgId)
       .not('warehouse_id', 'is', null)
-      .order('updated_at', { ascending: false })
-  );
+      .order('updated_at', { ascending: false });
+    if (scopeOrgIds) {
+      q = q.in('org_id', scopeOrgIds);
+    } else {
+      q = q.eq('org_id', orgId);
+    }
+    return q;
+  });
 }
 
 export async function assignProductToLocation(data: {

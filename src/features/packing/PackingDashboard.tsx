@@ -10,6 +10,7 @@ import { StatusBadge } from '@/components/hub/shared/StatusBadge.tsx';
 import { EmptyState } from '@/components/hub/shared/EmptyState.tsx';
 import { OrgSelectorGrid } from '@/components/hub/shared/OrgSelectorGrid.tsx';
 import { Breadcrumbs } from '@/components/hub/shared/Breadcrumbs.tsx';
+import { AssociateFilterCards } from '@/components/hub/shared/AssociateFilterCards.tsx';
 import { PACK_SESSION_STATUS_LABELS } from '@/lib/statusConfig.ts';
 import * as packingService from '@/services/packingService.ts';
 import { getOrgPackingSummaries } from '@/services/dashboardService.ts';
@@ -112,6 +113,14 @@ export function PackingDashboard() {
           </p>
         </div>
       </div>
+
+      {isPlatform && nav.childOrgs.length > 0 && (
+        <AssociateFilterCards
+          childOrgs={nav.childOrgs}
+          filterChildOrgId={nav.filterChildOrgId}
+          onFilter={nav.setFilterChildOrgId}
+        />
+      )}
 
       <div className="rh-stats-grid mb-6">
         <StatsCard title="Total" value={totalCount} icon="📦" color="#6366F1" />

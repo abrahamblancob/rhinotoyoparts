@@ -4,11 +4,13 @@ import { Search, Package } from 'lucide-react';
 import { useAuthStore } from '@/stores/authStore.ts';
 import { usePermissions } from '@/hooks/usePermissions.ts';
 import { useAsyncData } from '@/hooks/useAsyncData.ts';
-import { useOrgSelector } from '@/hooks/useOrgSelector.ts';
+import { useAggregatorNav } from '@/hooks/useAggregatorNav.ts';
 import { StatsCard } from '@/components/hub/shared/StatsCard.tsx';
 import { StatusBadge } from '@/components/hub/shared/StatusBadge.tsx';
 import { EmptyState } from '@/components/hub/shared/EmptyState.tsx';
 import { OrgSelectorGrid } from '@/components/hub/shared/OrgSelectorGrid.tsx';
+import { Breadcrumbs } from '@/components/hub/shared/Breadcrumbs.tsx';
+import { AssociateFilterCards } from '@/components/hub/shared/AssociateFilterCards.tsx';
 import { RETURN_STATUS_LABELS } from '@/lib/statusConfig.ts';
 import { formatDateTime } from '@/utils/dateUtils.ts';
 import * as returnService from '@/services/returnService.ts';
@@ -24,10 +26,10 @@ export function ReturnsDashboard() {
   const { isPlatform, isAggregator } = usePermissions();
   const organization = useAuthStore((s) => s.organization);
 
-  const { summaries, selectedOrgId, selectedOrg, loading: loadingSummaries, setSelectedOrgId, showSelector } =
-    useOrgSelector<OrgReturnSummary>(getOrgReturnSummaries, isPlatform);
+  const nav = useAggregatorNav<OrgReturnSummary>(getOrgReturnSummaries, isPlatform);
 
-  const orgId = isPlatform ? selectedOrgId ?? undefined : organization?.id;
+  const orgId = isPlatform ? nav.effectiveOrgId ?? undefined : organization?.id;
+  const shouldIncludeChildren = isPlatform && nav.includeChildren && !!nav.selectedAggregatorId;
 
   const fetcher = useCallback(
     () =>
@@ -36,13 +38,15 @@ export function ReturnsDashboard() {
         isPlatform: false,
         isAggregator,
         status: statusFilter === 'all' ? undefined : statusFilter,
+        includeChildren: shouldIncludeChildren,
       }),
-    [orgId, isAggregator, statusFilter],
+    [orgId, isAggregator, statusFilter, shouldIncludeChildren],
   );
 
   const { data: returns, loading, reload } = useAsyncData<ReturnOrder[]>(fetcher, [
     orgId,
     statusFilter,
+    shouldIncludeChildren,
   ]);
 
   useEffect(() => {
@@ -52,7 +56,7 @@ export function ReturnsDashboard() {
     return () => { supabase.removeChannel(channel); };
   }, [orgId, organization?.id, reload]);
 
-  const items = showSelector ? [] : (returns ?? []);
+  const items = nav.navState !== 'list' && isPlatform ? [] : (returns ?? []);
   const filtered = search.trim()
     ? items.filter((r) => r.order_number?.toLowerCase().includes(search.toLowerCase()))
     : items;
@@ -68,23 +72,24 @@ export function ReturnsDashboard() {
 
   const statuses = ['all', 'pending', 'inspecting', 'completed'];
 
-  if (showSelector) {
-    const totalReturns = summaries.reduce((s, o) => s + o.returnCount, 0);
-    const totalPending = summaries.reduce((s, o) => s + o.pendingReturns, 0);
-    const totalInspecting = summaries.reduce((s, o) => s + o.inspectingReturns, 0);
+  // Level 1: Aggregator grid
+  if (nav.navState === 'aggregators') {
+    const totalReturns = nav.summaries.reduce((s, o) => s + o.returnCount, 0);
+    const totalPending = nav.summaries.reduce((s, o) => s + o.pendingReturns, 0);
+    const totalInspecting = nav.summaries.reduce((s, o) => s + o.inspectingReturns, 0);
 
     return (
       <OrgSelectorGrid<OrgReturnSummary>
-        summaries={summaries}
-        loading={loadingSummaries}
-        onSelect={setSelectedOrgId}
+        summaries={nav.summaries}
+        loading={nav.loading}
+        onSelect={nav.selectAggregator}
         pageTitle="Devoluciones"
-        pageSubtitle="Selecciona una organización para ver sus devoluciones"
+        pageSubtitle="Selecciona un agregador para ver sus devoluciones"
         globalStats={[
           { title: 'Total Devoluciones', value: totalReturns, icon: '🔄', color: '#6366F1' },
           { title: 'Pendientes', value: totalPending, icon: '⏳', color: '#F59E0B' },
           { title: 'En Inspección', value: totalInspecting, icon: '🔍', color: '#3B82F6' },
-          { title: 'Organizaciones', value: summaries.length, icon: '🏢', color: '#8B5CF6' },
+          { title: 'Agregadores', value: nav.summaries.length, icon: '🏢', color: '#8B5CF6' },
         ]}
         statFields={[
           { key: 'returnCount', label: 'Devoluciones', color: '#6366F1' },
@@ -95,23 +100,28 @@ export function ReturnsDashboard() {
     );
   }
 
+  // List view
+  const showAssociateCol = isPlatform && nav.selectedAggregatorId && nav.includeChildren;
+
   return (
     <div>
       <div className="rh-page-header">
         <div>
-          {isPlatform && selectedOrg && (
-            <button onClick={() => setSelectedOrgId(null)} className="rh-btn rh-btn-ghost" style={{ fontSize: 13, marginBottom: 4, padding: '2px 0' }}>
-              ← Todas las organizaciones
-            </button>
-          )}
-          <h1 className="rh-page-title">
-            Devoluciones{isPlatform && selectedOrg ? ` — ${selectedOrg.name}` : ''}
-          </h1>
+          {isPlatform && nav.breadcrumbs.length > 0 && <Breadcrumbs items={nav.breadcrumbs} />}
+          <h1 className="rh-page-title">Devoluciones</h1>
           <p style={{ color: '#8A8886', fontSize: 14, marginTop: 4 }}>
             Gestiona las devoluciones de pedidos
           </p>
         </div>
       </div>
+
+      {isPlatform && nav.childOrgs.length > 0 && (
+        <AssociateFilterCards
+          childOrgs={nav.childOrgs}
+          filterChildOrgId={nav.filterChildOrgId}
+          onFilter={nav.setFilterChildOrgId}
+        />
+      )}
 
       <div className="rh-stats-grid mb-6">
         <StatsCard title="Total" value={totalCount} icon="🔄" color="#6366F1" />
@@ -143,6 +153,7 @@ export function ReturnsDashboard() {
             <thead>
               <tr>
                 <th>Orden #</th>
+                {showAssociateCol && <th>Asociado</th>}
                 <th>Recibido por</th>
                 <th>Estado</th>
                 <th>Bultos</th>
@@ -152,21 +163,34 @@ export function ReturnsDashboard() {
               </tr>
             </thead>
             <tbody>
-              {filtered.map((ret) => (
-                <tr key={ret.id} className="cursor-pointer" onClick={() => navigate(`/hub/returns/${ret.id}`)}>
-                  <td className="cell-primary cell-mono">{ret.order_number ?? '-'}</td>
-                  <td>{ret.receiver?.full_name ?? <span style={{ color: '#C8C6C4' }}>Sin asignar</span>}</td>
-                  <td><StatusBadge status={ret.status} /></td>
-                  <td><span style={{ display: 'flex', alignItems: 'center', gap: 4 }}><Package size={14} style={{ color: '#8A8886' }} />{ret.package_count}</span></td>
-                  <td>{(ret.photo_urls?.length ?? 0) > 0 ? `${ret.photo_urls.length} foto${ret.photo_urls.length > 1 ? 's' : ''}` : '-'}</td>
-                  <td style={{ fontSize: 13, color: '#605E5C' }}>{formatDateTime(ret.created_at)}</td>
-                  <td>
-                    <button className="rh-btn" style={{ fontSize: 12, padding: '4px 10px' }} onClick={(e) => { e.stopPropagation(); navigate(`/hub/returns/${ret.id}`); }}>
-                      Ver detalle
-                    </button>
-                  </td>
-                </tr>
-              ))}
+              {filtered.map((ret) => {
+                const org = (ret as unknown as { organization: { name: string; type: string } | null }).organization;
+                const isAssoc = org?.type === 'associate';
+                return (
+                  <tr key={ret.id} className="cursor-pointer" onClick={() => navigate(`/hub/returns/${ret.id}`)}>
+                    <td className="cell-primary cell-mono">{ret.order_number ?? '-'}</td>
+                    {showAssociateCol && (
+                      <td>
+                        {isAssoc ? (
+                          <span style={{ fontSize: 12, background: '#EDE9FE', color: '#7C3AED', padding: '2px 8px', borderRadius: 10 }}>{org?.name}</span>
+                        ) : (
+                          <span style={{ fontSize: 12, color: '#9CA3AF' }}>Directa</span>
+                        )}
+                      </td>
+                    )}
+                    <td>{ret.receiver?.full_name ?? <span style={{ color: '#C8C6C4' }}>Sin asignar</span>}</td>
+                    <td><StatusBadge status={ret.status} /></td>
+                    <td><span style={{ display: 'flex', alignItems: 'center', gap: 4 }}><Package size={14} style={{ color: '#8A8886' }} />{ret.package_count}</span></td>
+                    <td>{(ret.photo_urls?.length ?? 0) > 0 ? `${ret.photo_urls.length} foto${ret.photo_urls.length > 1 ? 's' : ''}` : '-'}</td>
+                    <td style={{ fontSize: 13, color: '#605E5C' }}>{formatDateTime(ret.created_at)}</td>
+                    <td>
+                      <button className="rh-btn" style={{ fontSize: 12, padding: '4px 10px' }} onClick={(e) => { e.stopPropagation(); navigate(`/hub/returns/${ret.id}`); }}>
+                        Ver detalle
+                      </button>
+                    </td>
+                  </tr>
+                );
+              })}
             </tbody>
           </table>
         </div>

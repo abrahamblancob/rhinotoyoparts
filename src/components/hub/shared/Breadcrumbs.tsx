@@ -7,7 +7,7 @@ export function Breadcrumbs({ items }: { items: BreadcrumbItem[] }) {
   if (items.length === 0) return null;
 
   return (
-    <nav style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 13, marginBottom: 4 }}>
+    <nav style={{ display: 'flex', alignItems: 'center', gap: 8, fontSize: 15, fontWeight: 500, marginBottom: 8 }}>
       {items.map((item, i) => (
         <span key={i} style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
           {i > 0 && <span style={{ color: '#CBD5E1' }}>/</span>}

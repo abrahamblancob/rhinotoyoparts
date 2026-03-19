@@ -1,12 +1,25 @@
-import { query } from './base.ts';
+import { query, supabase } from './base.ts';
 import type { ReceivingOrder, ReceivingOrderItem } from '@/types/warehouse.ts';
 
-export async function getReceivingOrders(opts?: { orgId?: string; isPlatform?: boolean; warehouseId?: string; status?: string }) {
+export async function getReceivingOrders(opts?: { orgId?: string; isPlatform?: boolean; warehouseId?: string; status?: string; includeChildren?: boolean }) {
+  // Resolve child org IDs if includeChildren
+  let scopeOrgIds: string[] | null = null;
+  if (opts?.includeChildren && opts?.orgId) {
+    const { data: hierarchy } = await supabase
+      .from('org_hierarchy').select('child_id').eq('parent_id', opts.orgId);
+    const childIds = (hierarchy ?? []).map((h: { child_id: string }) => h.child_id);
+    scopeOrgIds = [opts.orgId, ...childIds];
+  }
+
   return query<ReceivingOrder[]>((sb) => {
     let q = sb.from('receiving_orders')
-      .select('*, warehouse:warehouses(name, org_id), receiver:profiles!receiving_orders_received_by_fkey(full_name), supplier:suppliers(name)')
+      .select('*, warehouse:warehouses(name, org_id), receiver:profiles!receiving_orders_received_by_fkey(full_name), supplier:suppliers(name), organization:organizations(name, type)')
       .order('created_at', { ascending: false });
-    if (!opts?.isPlatform && opts?.orgId) q = q.eq('org_id', opts.orgId);
+    if (scopeOrgIds) {
+      q = q.in('org_id', scopeOrgIds);
+    } else if (!opts?.isPlatform && opts?.orgId) {
+      q = q.eq('org_id', opts.orgId);
+    }
     if (opts?.warehouseId) q = q.eq('warehouse_id', opts.warehouseId);
     if (opts?.status) q = q.eq('status', opts.status);
     return q;

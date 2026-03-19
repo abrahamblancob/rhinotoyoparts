@@ -2,8 +2,10 @@ import { useState, useEffect, useCallback } from 'react';
 import { ArrowLeft, ClipboardCheck, History, Plus } from 'lucide-react';
 import { useAuthStore } from '@/stores/authStore.ts';
 import { usePermissions } from '@/hooks/usePermissions.ts';
-import { useOrgSelector } from '@/hooks/useOrgSelector.ts';
+import { useAggregatorNav } from '@/hooks/useAggregatorNav.ts';
 import { OrgSelectorGrid } from '@/components/hub/shared/OrgSelectorGrid.tsx';
+import { Breadcrumbs } from '@/components/hub/shared/Breadcrumbs.tsx';
+import { AssociateFilterCards } from '@/components/hub/shared/AssociateFilterCards.tsx';
 import { getOrgAuditSummaries } from '@/services/stockAuditService.ts';
 import type { OrgAuditSummary } from '@/services/stockAuditService.ts';
 import { useStockAudit } from './hooks/useStockAudit.ts';
@@ -45,10 +47,9 @@ export function StockAuditPage() {
   const user = useAuthStore((s) => s.user);
 
   const fetchSummaries = useCallback(() => getOrgAuditSummaries(), []);
-  const { summaries, selectedOrgId, loading: loadingSummaries, setSelectedOrgId, clearSelection, showSelector } =
-    useOrgSelector<OrgAuditSummary>(fetchSummaries, isPlatform);
+  const nav = useAggregatorNav<OrgAuditSummary>(fetchSummaries, isPlatform);
 
-  const orgId = isPlatform ? selectedOrgId ?? undefined : organization?.id;
+  const orgId = isPlatform ? nav.effectiveOrgId ?? undefined : organization?.id;
 
   const [tab, setTab] = useState<Tab>('new');
   const [focusedRackId, setFocusedRackId] = useState<string | null>(null);
@@ -56,7 +57,6 @@ export function StockAuditPage() {
 
   const audit = useStockAudit(orgId);
 
-  // Load all location IDs when warehouse is selected (for jackpot)
   useEffect(() => {
     if (audit.selectedWarehouse) {
       fetchAllLocationIds(audit.selectedWarehouse.id).then(setAllLocationIds);
@@ -67,12 +67,10 @@ export function StockAuditPage() {
 
   const jackpot = useJackpotAnimation(allLocationIds, audit.randomCount);
 
-  // When jackpot finishes → confirm the random locations and proceed to start audit
   useEffect(() => {
     if (jackpot.phase === 'done' && audit.phase === 'jackpot') {
       const finalArr = Array.from(jackpot.finalIds);
       audit.confirmRandomLocations(finalArr);
-      // Auto-start audit after jackpot
       setTimeout(() => {
         audit.startAudit();
       }, 1500);
@@ -83,7 +81,6 @@ export function StockAuditPage() {
   const handleModeSelect = (mode: StockAuditType, count?: number) => {
     audit.selectMode(mode, count);
     if (mode !== 'manual') {
-      // Start jackpot after a short delay
       setTimeout(() => jackpot.start(), 300);
     }
   };
@@ -106,15 +103,15 @@ export function StockAuditPage() {
     setFocusedRackId(null);
   };
 
-  // ─── Platform: Org Selector ───
-  if (showSelector) {
+  // ─── Platform: Aggregator grid ───
+  if (nav.navState === 'aggregators') {
     return (
       <OrgSelectorGrid<OrgAuditSummary>
-        summaries={summaries}
-        loading={loadingSummaries}
-        onSelect={setSelectedOrgId}
+        summaries={nav.summaries}
+        loading={nav.loading}
+        onSelect={nav.selectAggregator}
         pageTitle="Auditoría de Stock"
-        pageSubtitle="Selecciona una organización para auditar su inventario"
+        pageSubtitle="Selecciona un agregador para auditar su inventario"
         statFields={[
           { key: 'totalAudits', label: 'Auditorías', color: '#6366F1' },
           { key: 'warehouseCount', label: 'Almacenes', color: '#10B981' },
@@ -129,16 +126,6 @@ export function StockAuditPage() {
       {/* Header */}
       <div className="rh-page-header">
         <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
-          {(isPlatform && selectedOrgId) && (
-            <button
-              onClick={clearSelection}
-              className="rh-btn rh-btn-secondary"
-              style={{ display: 'flex', alignItems: 'center', gap: 4, fontSize: 12 }}
-            >
-              <ArrowLeft size={14} />
-              Organizaciones
-            </button>
-          )}
           {audit.selectedWarehouse && audit.phase !== 'warehouse_select' && (
             <button
               onClick={audit.goBackToWarehouse}
@@ -150,6 +137,7 @@ export function StockAuditPage() {
             </button>
           )}
           <div>
+            {isPlatform && nav.breadcrumbs.length > 0 && <Breadcrumbs items={nav.breadcrumbs} />}
             <h1 className="rh-page-title">Auditoría de Stock</h1>
             <p className="rh-page-subtitle">
               {audit.selectedWarehouse
@@ -160,14 +148,21 @@ export function StockAuditPage() {
         </div>
       </div>
 
+      {isPlatform && nav.childOrgs.length > 0 && !audit.selectedWarehouse && (
+        <AssociateFilterCards
+          childOrgs={nav.childOrgs}
+          filterChildOrgId={nav.filterChildOrgId}
+          onFilter={nav.setFilterChildOrgId}
+        />
+      )}
+
       {/* Warehouse Selector phase */}
       {audit.phase === 'warehouse_select' && (
         <>
-          {/* Tabs */}
           {audit.selectedWarehouse == null && (
             <WarehouseSelector
               orgId={orgId}
-              isPlatform={isPlatform && !selectedOrgId}
+              isPlatform={isPlatform && !nav.selectedAggregatorId}
               onSelect={audit.selectWarehouse}
             />
           )}
@@ -177,7 +172,6 @@ export function StockAuditPage() {
       {/* After warehouse is selected: show tabs */}
       {audit.selectedWarehouse && (
         <>
-          {/* Tabs */}
           <div style={{ display: 'flex', gap: 0, marginBottom: 20, borderBottom: '2px solid #E2E8F0' }}>
             <button onClick={() => setTab('new')} style={tabStyle(tab === 'new')}>
               <Plus size={14} />
@@ -195,12 +189,10 @@ export function StockAuditPage() {
 
           {tab === 'new' && (
             <>
-              {/* Mode Selection */}
               {audit.phase === 'mode_select' && (
                 <AuditModeSelector onSelect={handleModeSelect} />
               )}
 
-              {/* Manual Map Selection */}
               {audit.phase === 'map_select' && (
                 <>
                   <AuditMapView
@@ -213,11 +205,7 @@ export function StockAuditPage() {
                     focusedRackId={focusedRackId}
                   />
                   <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginTop: 16 }}>
-                    <button
-                      onClick={handleResetAudit}
-                      className="rh-btn rh-btn-secondary"
-                      style={{ display: 'flex', alignItems: 'center', gap: 6 }}
-                    >
+                    <button onClick={handleResetAudit} className="rh-btn rh-btn-secondary" style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
                       <ArrowLeft size={14} />
                       Cambiar modo
                     </button>
@@ -225,12 +213,7 @@ export function StockAuditPage() {
                       onClick={handleStartManualAudit}
                       disabled={audit.selectedLocationIds.size === 0}
                       className="rh-btn rh-btn-primary"
-                      style={{
-                        display: 'flex',
-                        alignItems: 'center',
-                        gap: 6,
-                        opacity: audit.selectedLocationIds.size === 0 ? 0.5 : 1,
-                      }}
+                      style={{ display: 'flex', alignItems: 'center', gap: 6, opacity: audit.selectedLocationIds.size === 0 ? 0.5 : 1 }}
                     >
                       <ClipboardCheck size={14} />
                       Iniciar Auditoría ({audit.selectedLocationIds.size} ubicación{audit.selectedLocationIds.size !== 1 ? 'es' : ''})
@@ -239,13 +222,11 @@ export function StockAuditPage() {
                 </>
               )}
 
-              {/* Jackpot Animation */}
               {audit.phase === 'jackpot' && (
                 <>
                   <div style={{ textAlign: 'center', marginBottom: 16 }}>
                     <p style={{
-                      fontSize: 18,
-                      fontWeight: 700,
+                      fontSize: 18, fontWeight: 700,
                       color: jackpot.phase === 'done' ? '#10B981' : '#F97316',
                       animation: jackpot.phase !== 'done' ? 'pulse 1s ease-in-out infinite' : undefined,
                     }}>
@@ -269,7 +250,6 @@ export function StockAuditPage() {
                 </>
               )}
 
-              {/* Confirmation */}
               {audit.phase === 'confirmation' && (
                 <>
                   <AuditMapView
@@ -287,7 +267,6 @@ export function StockAuditPage() {
                 </>
               )}
 
-              {/* Email Modal */}
               {audit.phase === 'email_modal' && (
                 <AuditEmailModal
                   open={true}
@@ -301,30 +280,17 @@ export function StockAuditPage() {
                 />
               )}
 
-              {/* Done */}
               {audit.phase === 'done' && (
                 <div style={{ textAlign: 'center', padding: 40 }}>
                   <ClipboardCheck size={48} style={{ color: '#10B981', marginBottom: 16 }} />
-                  <h3 style={{ fontSize: 18, fontWeight: 700, color: '#1E293B', marginBottom: 8 }}>
-                    Auditoría Completada
-                  </h3>
-                  <p style={{ fontSize: 13, color: '#64748B', marginBottom: 24 }}>
-                    La auditoría ha sido registrada exitosamente.
-                  </p>
+                  <h3 style={{ fontSize: 18, fontWeight: 700, color: '#1E293B', marginBottom: 8 }}>Auditoría Completada</h3>
+                  <p style={{ fontSize: 13, color: '#64748B', marginBottom: 24 }}>La auditoría ha sido registrada exitosamente.</p>
                   <div style={{ display: 'flex', gap: 12, justifyContent: 'center' }}>
-                    <button
-                      onClick={handleResetAudit}
-                      className="rh-btn rh-btn-primary"
-                      style={{ display: 'flex', alignItems: 'center', gap: 6 }}
-                    >
+                    <button onClick={handleResetAudit} className="rh-btn rh-btn-primary" style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
                       <Plus size={14} />
                       Nueva Auditoría
                     </button>
-                    <button
-                      onClick={() => setTab('history')}
-                      className="rh-btn rh-btn-secondary"
-                      style={{ display: 'flex', alignItems: 'center', gap: 6 }}
-                    >
+                    <button onClick={() => setTab('history')} className="rh-btn rh-btn-secondary" style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
                       <History size={14} />
                       Ver Historial
                     </button>

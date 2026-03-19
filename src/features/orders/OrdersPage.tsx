@@ -1,13 +1,14 @@
-import { useEffect, useState, useMemo } from 'react';
+import { useEffect, useState, useMemo, useCallback } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { usePermissions } from '@/hooks/usePermissions.ts';
 import { useAuthStore } from '@/stores/authStore.ts';
-import { useOrgSelector } from '@/hooks/useOrgSelector.ts';
+import { useAggregatorNav } from '@/hooks/useAggregatorNav.ts';
 import { StatusBadge } from '@/components/hub/shared/StatusBadge.tsx';
 import { EmptyState } from '@/components/hub/shared/EmptyState.tsx';
 import { StatsCard } from '@/components/hub/shared/StatsCard.tsx';
 import { OrgSelectorGrid } from '@/components/hub/shared/OrgSelectorGrid.tsx';
 import { Breadcrumbs } from '@/components/hub/shared/Breadcrumbs.tsx';
+import { AssociateFilterCards } from '@/components/hub/shared/AssociateFilterCards.tsx';
 import { OrderCreateModal } from './OrderCreateModal.tsx';
 import type { Order } from '@/lib/database.types.ts';
 import { ORDER_STATUS_LABELS, SOURCE_LABELS } from '@/lib/statusConfig.ts';
@@ -26,17 +27,19 @@ export function OrdersPage() {
   const profile = useAuthStore((s) => s.profile);
   const navigate = useNavigate();
 
-  const { summaries, selectedOrgId, selectedOrg, loading: loadingSummaries, setSelectedOrgId, showSelector } =
-    useOrgSelector<OrgOrderSummary>(getOrgOrderSummaries, isPlatform);
+  const fetchSummaries = useCallback(() => getOrgOrderSummaries(), []);
+  const nav = useAggregatorNav<OrgOrderSummary>(fetchSummaries, isPlatform);
+
+  const orgId = isPlatform ? nav.effectiveOrgId ?? undefined : organization?.id;
+  const shouldIncludeChildren = isPlatform && nav.includeChildren && !!nav.selectedAggregatorId;
 
   useEffect(() => {
-    if (showSelector) return;
+    if (nav.navState !== 'list' && isPlatform) return;
     loadOrders();
-  }, [statusFilter, selectedOrgId, showSelector]);
+  }, [statusFilter, orgId, nav.navState, shouldIncludeChildren]);
 
   const loadOrders = async () => {
     setLoading(true);
-    const orgId = isPlatform ? selectedOrgId ?? undefined : organization?.id;
     const result = await getOrders({
       orgId,
       isPlatform: false,
@@ -44,7 +47,7 @@ export function OrdersPage() {
       isDispatcher,
       assignedTo: profile?.id,
       status: statusFilter,
-      includeChildren: isPlatform && !!selectedOrgId,
+      includeChildren: shouldIncludeChildren,
     });
     setOrders((result.data ?? []) as (Order & { customers: { name: string } | null; organizations: { name: string; type: string } | null })[]);
     setLoading(false);
@@ -64,24 +67,24 @@ export function OrdersPage() {
   const statuses = ['all', 'draft', 'pending', 'confirmed', 'picking', 'packing', 'packed', 'assigned', 'picked', 'shipped', 'in_transit', 'delivered', 'cancelled'];
   const statusLabels = ORDER_STATUS_LABELS;
 
-  // Platform user without org selected → show org cards
-  if (showSelector) {
-    const totalOrders = summaries.reduce((s, o) => s + o.orderCount, 0);
-    const totalPending = summaries.reduce((s, o) => s + o.pendingOrders, 0);
-    const totalRevAll = summaries.reduce((s, o) => s + o.revenue, 0);
+  // Level 1: Aggregator grid
+  if (nav.navState === 'aggregators') {
+    const totalOrders = nav.summaries.reduce((s, o) => s + o.orderCount, 0);
+    const totalPending = nav.summaries.reduce((s, o) => s + o.pendingOrders, 0);
+    const totalRevAll = nav.summaries.reduce((s, o) => s + o.revenue, 0);
 
     return (
       <OrgSelectorGrid<OrgOrderSummary>
-        summaries={summaries}
-        loading={loadingSummaries}
-        onSelect={setSelectedOrgId}
+        summaries={nav.summaries}
+        loading={nav.loading}
+        onSelect={nav.selectAggregator}
         pageTitle="Órdenes de Compra"
         pageSubtitle="Selecciona un agregador para ver sus órdenes"
         globalStats={[
           { title: 'Total Órdenes', value: totalOrders.toLocaleString(), icon: '🛒', color: '#6366F1' },
           { title: 'Ingresos Totales', value: `$${totalRevAll.toFixed(2)}`, icon: '💰', color: '#10B981' },
           { title: 'Pendientes', value: totalPending, icon: '⏳', color: '#F59E0B' },
-          { title: 'Agregadores', value: summaries.length, icon: '🏢', color: '#8B5CF6' },
+          { title: 'Agregadores', value: nav.summaries.length, icon: '🏢', color: '#8B5CF6' },
         ]}
         statFields={[
           { key: 'orderCount', label: 'Órdenes', color: '#6366F1' },
@@ -93,19 +96,15 @@ export function OrdersPage() {
     );
   }
 
+  // List view
+  const showAssociateCol = isPlatform && nav.selectedAggregatorId && nav.includeChildren;
+
   return (
     <div>
       <div className="rh-page-header">
         <div>
-          {isPlatform && selectedOrg && (
-            <Breadcrumbs items={[
-              { label: 'Agregadores', onClick: () => setSelectedOrgId(null) },
-              { label: selectedOrg.name },
-            ]} />
-          )}
-          <h1 className="rh-page-title">
-            Órdenes{isPlatform && selectedOrg ? ` — ${selectedOrg.name}` : ''}
-          </h1>
+          {isPlatform && nav.breadcrumbs.length > 0 && <Breadcrumbs items={nav.breadcrumbs} />}
+          <h1 className="rh-page-title">Órdenes de Compra</h1>
         </div>
         {canWrite('orders') && !isDispatcher && (
           <button className="rh-btn rh-btn-primary" onClick={() => setShowCreate(true)}>
@@ -114,7 +113,14 @@ export function OrdersPage() {
         )}
       </div>
 
-      {/* Stats */}
+      {isPlatform && nav.childOrgs.length > 0 && (
+        <AssociateFilterCards
+          childOrgs={nav.childOrgs}
+          filterChildOrgId={nav.filterChildOrgId}
+          onFilter={nav.setFilterChildOrgId}
+        />
+      )}
+
       <div className="rh-stats-grid mb-6">
         <StatsCard title="Total Órdenes" value={orders.length} icon="🛒" color="#6366F1" />
         <StatsCard title="Ingresos" value={`$${totalRevenue.toFixed(2)}`} icon="💰" color="#10B981" />
@@ -122,7 +128,6 @@ export function OrdersPage() {
         <StatsCard title="En Proceso" value={inProgressCount} icon="🔄" color="#8B5CF6" />
       </div>
 
-      {/* Filters */}
       <div className="rh-filters flex-wrap">
         {statuses.map((s) => (
           <button
@@ -145,7 +150,7 @@ export function OrdersPage() {
             <thead>
               <tr>
                 <th>Orden #</th>
-                {isPlatform && selectedOrg && <th>Asociado</th>}
+                {showAssociateCol && <th>Asociado</th>}
                 <th>Cliente</th>
                 <th
                   style={{ cursor: 'pointer', userSelect: 'none' }}
@@ -168,7 +173,7 @@ export function OrdersPage() {
                 return (
                   <tr key={order.id} className="cursor-pointer" onClick={() => navigate(`/hub/orders/${order.id}`)}>
                     <td className="cell-primary cell-mono">{order.order_number}</td>
-                    {isPlatform && selectedOrg && (
+                    {showAssociateCol && (
                       <td>
                         {isAssociate ? (
                           <span style={{ fontSize: 12, background: '#EDE9FE', color: '#7C3AED', padding: '2px 8px', borderRadius: 10 }}>

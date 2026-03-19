@@ -6,10 +6,12 @@ import {
 } from 'lucide-react';
 import { useAuthStore } from '@/stores/authStore.ts';
 import { usePermissions } from '@/hooks/usePermissions.ts';
-import { useOrgSelector } from '@/hooks/useOrgSelector.ts';
+import { useAggregatorNav } from '@/hooks/useAggregatorNav.ts';
 import { useAsyncData } from '@/hooks/useAsyncData.ts';
 import { useWarehouses } from '@/hooks/useWarehouse.ts';
 import { OrgSelectorGrid } from '@/components/hub/shared/OrgSelectorGrid.tsx';
+import { Breadcrumbs } from '@/components/hub/shared/Breadcrumbs.tsx';
+import { AssociateFilterCards } from '@/components/hub/shared/AssociateFilterCards.tsx';
 import { StatsCard } from '@/components/hub/shared/StatsCard.tsx';
 import { EmptyState } from '@/components/hub/shared/EmptyState.tsx';
 import { Modal } from '@/components/hub/shared/Modal.tsx';
@@ -44,35 +46,31 @@ export function ReceivingPage() {
   const { isPlatform, canWrite } = usePermissions();
   const organization = useAuthStore((s) => s.organization);
 
-  const {
-    summaries,
-    selectedOrgId,
-    loading: loadingSummaries,
-    setSelectedOrgId,
-    showSelector,
-  } = useOrgSelector<OrgReceivingSummary>(getOrgReceivingSummaries, isPlatform);
+  const nav = useAggregatorNav<OrgReceivingSummary>(getOrgReceivingSummaries, isPlatform);
 
-  const orgId = selectedOrgId ?? organization?.id;
+  const orgId = isPlatform ? nav.effectiveOrgId ?? undefined : organization?.id;
+  const shouldIncludeChildren = isPlatform && nav.includeChildren && !!nav.selectedAggregatorId;
 
   const fetcher = useCallback(
     () => {
-      if (showSelector) return Promise.resolve({ data: [], error: null });
+      if (nav.navState !== 'list' && isPlatform) return Promise.resolve({ data: [], error: null });
       return receivingService.getReceivingOrders({
         orgId,
         isPlatform: false,
         status: statusFilter === 'all' ? undefined : statusFilter,
+        includeChildren: shouldIncludeChildren,
       });
     },
-    [orgId, statusFilter, showSelector],
+    [orgId, statusFilter, isPlatform, nav.navState, shouldIncludeChildren],
   );
 
   const { data: orders, loading, reload } = useAsyncData<ReceivingOrder[]>(fetcher, [
     orgId,
     statusFilter,
-    showSelector,
+    shouldIncludeChildren,
   ]);
 
-  const items = orders ?? [];
+  const items = nav.navState !== 'list' && isPlatform ? [] : (orders ?? []);
   const filtered = search.trim()
     ? items.filter(
         (o) =>
@@ -81,7 +79,6 @@ export function ReceivingPage() {
       )
     : items;
 
-  // Stats
   const totalCount = items.length;
   const pendingCount = items.filter((o) => o.status === 'pending').length;
   const inProgressCount = items.filter((o) => o.status === 'receiving').length;
@@ -89,20 +86,20 @@ export function ReceivingPage() {
 
   const statuses = ['all', 'pending', 'receiving', 'completed', 'cancelled'];
 
-  // Platform org selector view
-  if (showSelector) {
-    const totalReceiving = summaries.reduce((s, o) => s + o.receivingCount, 0);
-    const totalPending = summaries.reduce((s, o) => s + o.pendingReceiving, 0);
-    const totalInProgress = summaries.reduce((s, o) => s + o.inProgressReceiving, 0);
-    const totalCompleted = summaries.reduce((s, o) => s + o.completedReceiving, 0);
+  // Level 1: Aggregator grid
+  if (nav.navState === 'aggregators') {
+    const totalReceiving = nav.summaries.reduce((s, o) => s + o.receivingCount, 0);
+    const totalPending = nav.summaries.reduce((s, o) => s + o.pendingReceiving, 0);
+    const totalInProgress = nav.summaries.reduce((s, o) => s + o.inProgressReceiving, 0);
+    const totalCompleted = nav.summaries.reduce((s, o) => s + o.completedReceiving, 0);
 
     return (
       <OrgSelectorGrid<OrgReceivingSummary>
-        summaries={summaries}
-        loading={loadingSummaries}
-        onSelect={setSelectedOrgId}
+        summaries={nav.summaries}
+        loading={nav.loading}
+        onSelect={nav.selectAggregator}
         pageTitle="Recepcion de Mercancia"
-        pageSubtitle="Selecciona una organizacion para gestionar sus recepciones"
+        pageSubtitle="Selecciona un agregador para gestionar sus recepciones"
         globalStats={[
           { title: 'Total Recepciones', value: totalReceiving, icon: '📥', color: '#6366F1' },
           { title: 'Pendientes', value: totalPending, icon: '⏳', color: '#F59E0B' },
@@ -119,19 +116,14 @@ export function ReceivingPage() {
     );
   }
 
+  // List view
+  const showAssociateCol = isPlatform && nav.selectedAggregatorId && nav.includeChildren;
+
   return (
     <div>
       <div className="rh-page-header">
         <div>
-          {isPlatform && (
-            <button
-              className="rh-btn rh-btn-ghost"
-              onClick={() => setSelectedOrgId(null)}
-              style={{ marginBottom: 8, fontSize: 13 }}
-            >
-              ← Volver a organizaciones
-            </button>
-          )}
+          {isPlatform && nav.breadcrumbs.length > 0 && <Breadcrumbs items={nav.breadcrumbs} />}
           <h1 className="rh-page-title">Recepcion de Mercancia</h1>
           <p style={{ color: '#8A8886', fontSize: 14, marginTop: 4 }}>
             Gestiona la recepcion de productos en almacen
@@ -148,7 +140,14 @@ export function ReceivingPage() {
         )}
       </div>
 
-      {/* Stats */}
+      {isPlatform && nav.childOrgs.length > 0 && (
+        <AssociateFilterCards
+          childOrgs={nav.childOrgs}
+          filterChildOrgId={nav.filterChildOrgId}
+          onFilter={nav.setFilterChildOrgId}
+        />
+      )}
+
       <div className="rh-stats-grid mb-6">
         <StatsCard title="Total" value={totalCount} icon="📥" color="#6366F1" />
         <StatsCard title="Pendientes" value={pendingCount} icon="⏳" color="#F59E0B" />
@@ -156,7 +155,6 @@ export function ReceivingPage() {
         <StatsCard title="Completados" value={completedCount} icon="✅" color="#10B981" />
       </div>
 
-      {/* Filters */}
       <div className="rh-filters flex-wrap" style={{ gap: 8, marginBottom: 16 }}>
         {statuses.map((s) => (
           <button
@@ -169,7 +167,6 @@ export function ReceivingPage() {
         ))}
       </div>
 
-      {/* Search */}
       <div style={{ marginBottom: 16, position: 'relative', maxWidth: 360 }}>
         <Search
           size={16}
@@ -201,6 +198,7 @@ export function ReceivingPage() {
             <thead>
               <tr>
                 <th>Referencia</th>
+                {showAssociateCol && <th>Asociado</th>}
                 <th>Proveedor</th>
                 <th>Almacen</th>
                 <th>Estado</th>
@@ -213,6 +211,8 @@ export function ReceivingPage() {
                   bg: '#8A888615',
                   text: '#8A8886',
                 };
+                const org = (order as unknown as { organization: { name: string; type: string } | null }).organization;
+                const isAssoc = org?.type === 'associate';
 
                 return (
                   <tr
@@ -223,6 +223,15 @@ export function ReceivingPage() {
                     <td className="cell-primary cell-mono">
                       {order.reference_number ?? '-'}
                     </td>
+                    {showAssociateCol && (
+                      <td>
+                        {isAssoc ? (
+                          <span style={{ fontSize: 12, background: '#EDE9FE', color: '#7C3AED', padding: '2px 8px', borderRadius: 10 }}>{org?.name}</span>
+                        ) : (
+                          <span style={{ fontSize: 12, color: '#9CA3AF' }}>Directa</span>
+                        )}
+                      </td>
+                    )}
                     <td>{order.supplier_name ?? '-'}</td>
                     <td>{order.warehouse?.name ?? '-'}</td>
                     <td>
@@ -244,10 +253,9 @@ export function ReceivingPage() {
         </div>
       )}
 
-      {/* Create Modal */}
       <CreateReceivingModal
         open={showCreateModal}
-        filterOrgId={selectedOrgId ?? undefined}
+        filterOrgId={orgId}
         onClose={() => setShowCreateModal(false)}
         onCreated={() => {
           setShowCreateModal(false);

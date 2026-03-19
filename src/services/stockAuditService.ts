@@ -152,29 +152,33 @@ export interface OrgAuditSummary {
 }
 
 export async function getOrgAuditSummaries(): Promise<OrgAuditSummary[]> {
-  const { data: orgs } = await supabase
+  const { data: aggregators } = await supabase
     .from('organizations')
     .select('id, name, type')
-    .in('type', ['aggregator', 'associate'])
+    .eq('type', 'aggregator')
     .eq('status', 'active')
-    .order('type')
     .order('name');
 
-  if (!orgs) return [];
+  if (!aggregators) return [];
 
   return Promise.all(
-    orgs.map(async (org) => {
+    aggregators.map(async (org) => {
+      const { data: hierarchy } = await supabase
+        .from('org_hierarchy').select('child_id').eq('parent_id', org.id);
+      const childIds = (hierarchy ?? []).map((h: { child_id: string }) => h.child_id);
+      const allOrgIds = [org.id, ...childIds];
+
       const [auditsRes, whRes] = await Promise.all([
         supabase
           .from('stock_audits')
           .select('id, created_at', { count: 'exact' })
-          .eq('org_id', org.id)
+          .in('org_id', allOrgIds)
           .order('created_at', { ascending: false })
           .limit(1),
         supabase
           .from('warehouses')
           .select('id', { count: 'exact', head: true })
-          .eq('org_id', org.id)
+          .in('org_id', allOrgIds)
           .eq('is_active', true),
       ]);
       return {

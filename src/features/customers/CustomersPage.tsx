@@ -1,16 +1,17 @@
 import { useEffect, useState, useCallback } from 'react';
 import { usePermissions } from '@/hooks/usePermissions.ts';
 import { useAuthStore } from '@/stores/authStore.ts';
-import { useOrgSelector } from '@/hooks/useOrgSelector.ts';
+import { useAggregatorNav } from '@/hooks/useAggregatorNav.ts';
 import { EmptyState } from '@/components/hub/shared/EmptyState.tsx';
 import { OrgSelectorGrid } from '@/components/hub/shared/OrgSelectorGrid.tsx';
+import { Breadcrumbs } from '@/components/hub/shared/Breadcrumbs.tsx';
+import { AssociateFilterCards } from '@/components/hub/shared/AssociateFilterCards.tsx';
 import { Modal } from '@/components/hub/shared/Modal.tsx';
 import { ConfirmDeleteModal } from '@/components/hub/shared/ConfirmDeleteModal.tsx';
 import GooglePlacesAutocomplete from '@/components/GooglePlacesAutocomplete.tsx';
 import type { Customer } from '@/lib/database.types.ts';
 import * as customerService from '@/services/customerService.ts';
 import { logActivity } from '@/services/activityLogService.ts';
-import { getOrgNameMap } from '@/services/orgService.ts';
 import { getOrgCustomerSummaries } from '@/services/dashboardService.ts';
 import type { OrgCustomerSummary } from '@/services/dashboardService.ts';
 
@@ -28,43 +29,31 @@ export function CustomersPage() {
   const { canWrite, isPlatformOwner } = usePermissions();
   const organization = useAuthStore((s) => s.organization);
 
-  const { summaries, selectedOrgId, selectedOrg, loading: loadingSummaries, setSelectedOrgId, showSelector } =
-    useOrgSelector<OrgCustomerSummary>(getOrgCustomerSummaries, isPlatformOwner);
+  const nav = useAggregatorNav<OrgCustomerSummary>(getOrgCustomerSummaries, isPlatformOwner);
 
   const [form, setForm] = useState({ ...emptyForm });
   const [saveLoading, setSaveLoading] = useState(false);
   const [saveError, setSaveError] = useState('');
 
-  // Org name cache for Super Admin view
-  const [orgNames, setOrgNames] = useState<Record<string, string>>({});
-
   const isEditMode = Boolean(editCustomer);
 
-  const orgId = isPlatformOwner ? selectedOrgId ?? undefined : organization?.id;
+  const orgId = isPlatformOwner ? nav.effectiveOrgId ?? undefined : organization?.id;
+  const shouldIncludeChildren = isPlatformOwner && nav.includeChildren && !!nav.selectedAggregatorId;
 
-  // ── Load customers ──
   const loadCustomers = useCallback(async () => {
-    if (showSelector) return;
+    if (nav.navState !== 'list' && isPlatformOwner) return;
     setLoading(true);
     const result = await customerService.getCustomers({
       orgId,
       isPlatform: false,
+      includeChildren: shouldIncludeChildren,
     });
-    const list = result.data ?? [];
-    setCustomers(list);
+    setCustomers(result.data ?? []);
     setLoading(false);
-
-    // Load org names for Super Admin (only when no org selected)
-    if (isPlatformOwner && !selectedOrgId && list.length > 0) {
-      const uniqueOrgIds = [...new Set(list.map((c) => c.org_id))];
-      const map = await getOrgNameMap(uniqueOrgIds);
-      setOrgNames(map);
-    }
-  }, [isPlatformOwner, organization, orgId, showSelector, selectedOrgId]);
+  }, [isPlatformOwner, orgId, nav.navState, shouldIncludeChildren]);
 
   useEffect(() => { loadCustomers(); }, [loadCustomers]);
 
-  // ── Filtered list ──
   const filtered = customers.filter((c) => {
     if (!search) return true;
     const q = search.toLowerCase();
@@ -77,7 +66,6 @@ export function CustomersPage() {
     );
   });
 
-  // ── Open create modal ──
   const openCreate = () => {
     setEditCustomer(null);
     setForm({ ...emptyForm });
@@ -85,7 +73,6 @@ export function CustomersPage() {
     setShowModal(true);
   };
 
-  // ── Open edit modal ──
   const openEdit = (customer: Customer) => {
     setEditCustomer(customer);
     setForm({
@@ -105,7 +92,6 @@ export function CustomersPage() {
     setShowModal(true);
   };
 
-  // ── Save (create or edit) ──
   const handleSave = async () => {
     if (!form.name.trim()) return;
     setSaveLoading(true);
@@ -134,13 +120,13 @@ export function CustomersPage() {
       }
       logActivity({ action: 'update', entityType: 'customer', entityId: editCustomer.id, description: `Actualizó cliente ${payload.name}` });
     } else {
-      const orgId = organization?.id;
-      if (!orgId) {
+      const customerOrgId = organization?.id;
+      if (!customerOrgId) {
         setSaveError('No se pudo determinar la organizacion');
         setSaveLoading(false);
         return;
       }
-      const result = await customerService.createCustomer({ ...payload, org_id: orgId });
+      const result = await customerService.createCustomer({ ...payload, org_id: customerOrgId });
       if (result.error) {
         setSaveError(result.error);
         setSaveLoading(false);
@@ -156,21 +142,16 @@ export function CustomersPage() {
     loadCustomers();
   };
 
-  // ── Delete ──
   const handleDelete = async () => {
     if (!deleteConfirm) return;
     setDeleteLoading(true);
-
     await customerService.deleteCustomer(deleteConfirm.id);
-
     logActivity({ action: 'delete', entityType: 'customer', entityId: deleteConfirm.id, description: `Eliminó cliente ${deleteConfirm.name}` });
-
     setDeleteLoading(false);
     setDeleteConfirm(null);
     loadCustomers();
   };
 
-  // ── Close modal ──
   const closeModal = () => {
     setShowModal(false);
     setEditCustomer(null);
@@ -178,23 +159,24 @@ export function CustomersPage() {
     setSaveError('');
   };
 
-  if (showSelector) {
-    const totalCustomers = summaries.reduce((s, o) => s + o.customerCount, 0);
-    const totalWithEmail = summaries.reduce((s, o) => s + o.withEmail, 0);
-    const totalWithPhone = summaries.reduce((s, o) => s + o.withPhone, 0);
+  // Level 1: Aggregator grid
+  if (nav.navState === 'aggregators') {
+    const totalCustomers = nav.summaries.reduce((s, o) => s + o.customerCount, 0);
+    const totalWithEmail = nav.summaries.reduce((s, o) => s + o.withEmail, 0);
+    const totalWithPhone = nav.summaries.reduce((s, o) => s + o.withPhone, 0);
 
     return (
       <OrgSelectorGrid<OrgCustomerSummary>
-        summaries={summaries}
-        loading={loadingSummaries}
-        onSelect={setSelectedOrgId}
+        summaries={nav.summaries}
+        loading={nav.loading}
+        onSelect={nav.selectAggregator}
         pageTitle="Clientes"
-        pageSubtitle="Selecciona una organización para ver sus clientes"
+        pageSubtitle="Selecciona un agregador para ver sus clientes"
         globalStats={[
           { title: 'Total Clientes', value: totalCustomers, icon: '👤', color: '#6366F1' },
           { title: 'Con Email', value: totalWithEmail, icon: '📧', color: '#10B981' },
           { title: 'Con Teléfono', value: totalWithPhone, icon: '📱', color: '#3B82F6' },
-          { title: 'Organizaciones', value: summaries.length, icon: '🏢', color: '#8B5CF6' },
+          { title: 'Agregadores', value: nav.summaries.length, icon: '🏢', color: '#8B5CF6' },
         ]}
         statFields={[
           { key: 'customerCount', label: 'Clientes', color: '#6366F1' },
@@ -205,18 +187,15 @@ export function CustomersPage() {
     );
   }
 
+  // List view
+  const showAssociateCol = isPlatformOwner && nav.selectedAggregatorId && nav.includeChildren;
+
   return (
     <div>
       <div className="rh-page-header">
         <div>
-          {isPlatformOwner && selectedOrg && (
-            <button onClick={() => setSelectedOrgId(null)} className="rh-btn rh-btn-ghost" style={{ fontSize: 13, marginBottom: 4, padding: '2px 0' }}>
-              ← Todas las organizaciones
-            </button>
-          )}
-          <h1 className="rh-page-title">
-            Clientes{isPlatformOwner && selectedOrg ? ` — ${selectedOrg.name}` : ''}
-          </h1>
+          {isPlatformOwner && nav.breadcrumbs.length > 0 && <Breadcrumbs items={nav.breadcrumbs} />}
+          <h1 className="rh-page-title">Clientes</h1>
         </div>
         <div className="rh-page-actions">
           <input
@@ -234,6 +213,14 @@ export function CustomersPage() {
         </div>
       </div>
 
+      {isPlatformOwner && nav.childOrgs.length > 0 && (
+        <AssociateFilterCards
+          childOrgs={nav.childOrgs}
+          filterChildOrgId={nav.filterChildOrgId}
+          onFilter={nav.setFilterChildOrgId}
+        />
+      )}
+
       {loading ? (
         <p className="rh-loading">Cargando...</p>
       ) : filtered.length === 0 ? (
@@ -250,46 +237,54 @@ export function CustomersPage() {
             <thead>
               <tr>
                 <th>Nombre</th>
+                {showAssociateCol && <th>Asociado</th>}
                 <th>RIF / Cédula</th>
                 <th>Teléfono</th>
                 <th>Email</th>
                 <th>Ciudad</th>
-                {isPlatformOwner && <th>Organización</th>}
                 <th style={{ width: 80 }}></th>
               </tr>
             </thead>
             <tbody>
-              {filtered.map((customer) => (
-                <tr
-                  key={customer.id}
-                  className="cursor-pointer"
-                  onClick={() => openEdit(customer)}
-                  style={{ cursor: 'pointer' }}
-                >
-                  <td className="cell-primary">{customer.name}</td>
-                  <td className="cell-muted">{customer.rif ?? '—'}</td>
-                  <td className="cell-muted">{customer.phone ?? '—'}</td>
-                  <td className="cell-muted">{customer.email ?? '—'}</td>
-                  <td className="cell-muted">{customer.city ?? '—'}</td>
-                  {isPlatformOwner && (
-                    <td className="cell-muted" style={{ fontSize: 12, color: '#64748B' }}>
-                      {orgNames[customer.org_id] ?? '—'}
-                    </td>
-                  )}
-                  <td>
-                    {canWrite('customers') && (
-                      <button
-                        onClick={(e) => { e.stopPropagation(); setDeleteConfirm(customer); }}
-                        className="rh-btn rh-btn-ghost"
-                        style={{ color: '#EF4444', padding: '4px 10px', fontSize: 13 }}
-                        title="Eliminar cliente"
-                      >
-                        Eliminar
-                      </button>
+              {filtered.map((customer) => {
+                const org = (customer as unknown as { organization: { name: string; type: string } | null }).organization;
+                const isAssoc = org?.type === 'associate';
+                return (
+                  <tr
+                    key={customer.id}
+                    className="cursor-pointer"
+                    onClick={() => openEdit(customer)}
+                    style={{ cursor: 'pointer' }}
+                  >
+                    <td className="cell-primary">{customer.name}</td>
+                    {showAssociateCol && (
+                      <td>
+                        {isAssoc ? (
+                          <span style={{ fontSize: 12, background: '#EDE9FE', color: '#7C3AED', padding: '2px 8px', borderRadius: 10 }}>{org?.name}</span>
+                        ) : (
+                          <span style={{ fontSize: 12, color: '#9CA3AF' }}>Directa</span>
+                        )}
+                      </td>
                     )}
-                  </td>
-                </tr>
-              ))}
+                    <td className="cell-muted">{customer.rif ?? '—'}</td>
+                    <td className="cell-muted">{customer.phone ?? '—'}</td>
+                    <td className="cell-muted">{customer.email ?? '—'}</td>
+                    <td className="cell-muted">{customer.city ?? '—'}</td>
+                    <td>
+                      {canWrite('customers') && (
+                        <button
+                          onClick={(e) => { e.stopPropagation(); setDeleteConfirm(customer); }}
+                          className="rh-btn rh-btn-ghost"
+                          style={{ color: '#EF4444', padding: '4px 10px', fontSize: 13 }}
+                          title="Eliminar cliente"
+                        >
+                          Eliminar
+                        </button>
+                      )}
+                    </td>
+                  </tr>
+                );
+              })}
             </tbody>
           </table>
         </div>
@@ -320,69 +315,28 @@ export function CustomersPage() {
           <div className="rh-alert rh-alert-error mb-4">{saveError}</div>
         )}
         <div className="rh-form-grid">
-          {/* Name */}
           <div className="col-span-2">
             <div className="rh-field">
               <label className="rh-label">Nombre *</label>
-              <input
-                type="text"
-                value={form.name}
-                onChange={(e) => setForm((f) => ({ ...f, name: e.target.value }))}
-                className="rh-input"
-                placeholder="Nombre del cliente o empresa"
-              />
+              <input type="text" value={form.name} onChange={(e) => setForm((f) => ({ ...f, name: e.target.value }))} className="rh-input" placeholder="Nombre del cliente o empresa" />
             </div>
           </div>
-
-          {/* RIF */}
           <div className="rh-field">
             <label className="rh-label">RIF / Cédula</label>
-            <input
-              type="text"
-              value={form.rif}
-              onChange={(e) => setForm((f) => ({ ...f, rif: e.target.value }))}
-              className="rh-input"
-              placeholder="J-12345678-9"
-            />
+            <input type="text" value={form.rif} onChange={(e) => setForm((f) => ({ ...f, rif: e.target.value }))} className="rh-input" placeholder="J-12345678-9" />
           </div>
-
-          {/* Email */}
           <div className="rh-field">
             <label className="rh-label">Email</label>
-            <input
-              type="email"
-              value={form.email}
-              onChange={(e) => setForm((f) => ({ ...f, email: e.target.value }))}
-              className="rh-input"
-              placeholder="cliente@email.com"
-            />
+            <input type="email" value={form.email} onChange={(e) => setForm((f) => ({ ...f, email: e.target.value }))} className="rh-input" placeholder="cliente@email.com" />
           </div>
-
-          {/* Phone */}
           <div className="rh-field">
             <label className="rh-label">Teléfono</label>
-            <input
-              type="tel"
-              value={form.phone}
-              onChange={(e) => setForm((f) => ({ ...f, phone: e.target.value }))}
-              className="rh-input"
-              placeholder="+58 412 1234567"
-            />
+            <input type="tel" value={form.phone} onChange={(e) => setForm((f) => ({ ...f, phone: e.target.value }))} className="rh-input" placeholder="+58 412 1234567" />
           </div>
-
-          {/* WhatsApp */}
           <div className="rh-field">
             <label className="rh-label">WhatsApp</label>
-            <input
-              type="tel"
-              value={form.whatsapp}
-              onChange={(e) => setForm((f) => ({ ...f, whatsapp: e.target.value }))}
-              className="rh-input"
-              placeholder="+58 412 1234567"
-            />
+            <input type="tel" value={form.whatsapp} onChange={(e) => setForm((f) => ({ ...f, whatsapp: e.target.value }))} className="rh-input" placeholder="+58 412 1234567" />
           </div>
-
-          {/* Address — Google Maps Autocomplete */}
           <div className="col-span-2">
             <div className="rh-field">
               <label className="rh-label">Dirección de envío</label>
@@ -390,91 +344,46 @@ export function CustomersPage() {
                 className="rh-input"
                 placeholder="Escribe la dirección y selecciona de las sugerencias..."
                 value={form.address}
-                onChange={(addr) => {
-                  // If user edits text manually after selecting, clear coordinates
-                  // so they must re-select from Google to get valid lat/lng
-                  setForm((f) => ({ ...f, address: addr, lat: null, lng: null }));
-                }}
+                onChange={(addr) => setForm((f) => ({ ...f, address: addr, lat: null, lng: null }))}
                 onPlaceSelect={(place) => {
-                  // Extract city and state from Google result
                   const parts = place.address.split(',').map((p) => p.trim());
                   const extractedCity = parts.length >= 3 ? parts[parts.length - 3] : '';
                   const extractedState = parts.length >= 2 ? parts[parts.length - 2] : '';
-
-                  setForm((f) => ({
-                    ...f,
-                    address: place.address,
-                    lat: place.lat,
-                    lng: place.lng,
-                    city: extractedCity || f.city,
-                    state: extractedState || f.state,
-                  }));
+                  setForm((f) => ({ ...f, address: place.address, lat: place.lat, lng: place.lng, city: extractedCity || f.city, state: extractedState || f.state }));
                 }}
               />
-              {/* Status indicator — validated vs not */}
               {form.address && form.lat && form.lng ? (
                 <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginTop: 4 }}>
                   <div style={{ width: 6, height: 6, borderRadius: '50%', background: '#10B981' }} />
-                  <span style={{ fontSize: 11, color: '#10B981' }}>
-                    Dirección verificada por Google Maps ({form.lat.toFixed(4)}, {form.lng.toFixed(4)})
-                  </span>
+                  <span style={{ fontSize: 11, color: '#10B981' }}>Dirección verificada por Google Maps ({form.lat.toFixed(4)}, {form.lng.toFixed(4)})</span>
                 </div>
               ) : form.address ? (
                 <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginTop: 4 }}>
                   <div style={{ width: 6, height: 6, borderRadius: '50%', background: '#F59E0B' }} />
-                  <span style={{ fontSize: 11, color: '#D97706' }}>
-                    Selecciona una dirección de las sugerencias de Google Maps para guardar las coordenadas
-                  </span>
+                  <span style={{ fontSize: 11, color: '#D97706' }}>Selecciona una dirección de las sugerencias de Google Maps para guardar las coordenadas</span>
                 </div>
               ) : (
-                <span style={{ fontSize: 11, color: '#94A3B8', marginTop: 2, display: 'block' }}>
-                  Escribe y selecciona una dirección de las sugerencias de Google Maps
-                </span>
+                <span style={{ fontSize: 11, color: '#94A3B8', marginTop: 2, display: 'block' }}>Escribe y selecciona una dirección de las sugerencias de Google Maps</span>
               )}
             </div>
           </div>
-
-          {/* State */}
           <div className="rh-field">
             <label className="rh-label">Estado</label>
-            <input
-              type="text"
-              value={form.state}
-              onChange={(e) => setForm((f) => ({ ...f, state: e.target.value }))}
-              className="rh-input"
-              placeholder="Miranda"
-            />
+            <input type="text" value={form.state} onChange={(e) => setForm((f) => ({ ...f, state: e.target.value }))} className="rh-input" placeholder="Miranda" />
           </div>
-
-          {/* City */}
           <div className="rh-field">
             <label className="rh-label">Ciudad</label>
-            <input
-              type="text"
-              value={form.city}
-              onChange={(e) => setForm((f) => ({ ...f, city: e.target.value }))}
-              className="rh-input"
-              placeholder="Caracas"
-            />
+            <input type="text" value={form.city} onChange={(e) => setForm((f) => ({ ...f, city: e.target.value }))} className="rh-input" placeholder="Caracas" />
           </div>
-
-          {/* Notes */}
           <div className="col-span-2">
             <div className="rh-field">
               <label className="rh-label">Notas</label>
-              <textarea
-                value={form.notes}
-                onChange={(e) => setForm((f) => ({ ...f, notes: e.target.value }))}
-                className="rh-input resize-none"
-                rows={3}
-                placeholder="Notas adicionales sobre el cliente"
-              />
+              <textarea value={form.notes} onChange={(e) => setForm((f) => ({ ...f, notes: e.target.value }))} className="rh-input resize-none" rows={3} placeholder="Notas adicionales sobre el cliente" />
             </div>
           </div>
         </div>
       </Modal>
 
-      {/* ── Delete Confirmation Modal ── */}
       <ConfirmDeleteModal
         open={Boolean(deleteConfirm)}
         title="Eliminar Cliente"
@@ -486,13 +395,9 @@ export function CustomersPage() {
           ¿Estás seguro de eliminar al cliente <strong>{deleteConfirm?.name}</strong>?
         </p>
         {deleteConfirm?.rif && (
-          <p style={{ color: '#94A3B8', fontSize: 14, marginBottom: 8 }}>
-            RIF: {deleteConfirm.rif}
-          </p>
+          <p style={{ color: '#94A3B8', fontSize: 14, marginBottom: 8 }}>RIF: {deleteConfirm.rif}</p>
         )}
-        <p style={{ color: '#F59E0B', fontSize: 13 }}>
-          Esta acción no se puede deshacer.
-        </p>
+        <p style={{ color: '#F59E0B', fontSize: 13 }}>Esta acción no se puede deshacer.</p>
       </ConfirmDeleteModal>
     </div>
   );
