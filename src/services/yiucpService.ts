@@ -14,7 +14,7 @@ interface YiucpResponse {
 }
 
 export function askYiucp(req: YiucpRequest): Promise<YiucpResponse> {
-  return callEdgeFunction<YiucpResponse>('yiucp-chat', req);
+  return callEdgeFunction<YiucpResponse>('yiucp-chat', req as unknown as Record<string, unknown>);
 }
 
 export function getSuggestionChips(orgType: string, roles: string[]): string[] {
