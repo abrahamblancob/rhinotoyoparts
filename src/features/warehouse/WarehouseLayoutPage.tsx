@@ -40,7 +40,6 @@ import { AssociateFilterCards } from '@/components/hub/shared/AssociateFilterCar
 import * as warehouseService from '@/services/warehouseService.ts';
 import { getOrgWarehouseSummaries } from '@/services/dashboardService.ts';
 import type { OrgWarehouseSummary } from '@/services/dashboardService.ts';
-import { supabase } from '@/lib/supabase.ts';
 import type { Warehouse, WarehouseRack, WarehouseLocation, InventoryStock } from '@/types/warehouse.ts';
 
 const ZONE_TYPE_LABELS: Record<string, string> = {
