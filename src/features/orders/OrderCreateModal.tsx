@@ -131,17 +131,19 @@ export function OrderCreateModal({ open, onClose, onCreated, editOrder, editItem
   }, [open, isPlatformOwner, isAggregator, organization]);
 
   // ── Load warehouses for platform owners after org selection ──
+  // When an associate is selected, warehouses come from the parent aggregator (selectedOrg)
   useEffect(() => {
     if (open && isPlatformOwner && inventoryOrg) {
+      const warehouseOrgId = selectedOrg && inventoryOrg.id !== selectedOrg.id ? selectedOrg.id : inventoryOrg.id;
       supabase
-        .from('warehouses').select('*').eq('org_id', inventoryOrg.id).eq('is_active', true).order('name')
+        .from('warehouses').select('*').eq('org_id', warehouseOrgId).eq('is_active', true).order('name')
         .then(({ data }) => {
           const whs = (data as Warehouse[]) ?? [];
           setWarehouses(whs);
           if (whs.length === 1) setSelectedWarehouse(whs[0]);
         });
     }
-  }, [open, isPlatformOwner, inventoryOrg]);
+  }, [open, isPlatformOwner, inventoryOrg, selectedOrg]);
 
   // ── Org selection handlers ──
   const handleSelectAggregator = useCallback((org: Organization) => {
@@ -175,7 +177,9 @@ export function OrderCreateModal({ open, onClose, onCreated, editOrder, editItem
     if (!open) return;
     if (isPlatformOwner) {
       if (!inventoryOrg) return;
-      supabase.from('customers').select('*').eq('org_id', inventoryOrg.id).order('name').then(({ data }) => {
+      // Use aggregator's customers when an associate is selected
+      const customerOrgId = selectedOrg && inventoryOrg.id !== selectedOrg.id ? selectedOrg.id : inventoryOrg.id;
+      supabase.from('customers').select('*').eq('org_id', customerOrgId).order('name').then(({ data }) => {
         setCustomers((data as Customer[]) ?? []);
       });
     } else if (isAggregator && organization) {
@@ -287,14 +291,17 @@ export function OrderCreateModal({ open, onClose, onCreated, editOrder, editItem
         // No-warehouse flow: search products table directly (legacy non-WMS)
         let q = supabase.from('products').select('*').eq('status', 'active').gt('stock', 0)
           .or(`name.ilike.%${query}%,sku.ilike.%${query}%`).limit(10);
-        if (isPlatformOwner && inventoryOrg) q = q.eq('org_id', inventoryOrg.id);
-        else if (!isPlatformOwner && organization) q = q.eq('org_id', organization.id);
+        if (isPlatformOwner && inventoryOrg) {
+          // Use aggregator's catalog when an associate is selected
+          const catalogOrgId = selectedOrg && inventoryOrg.id !== selectedOrg.id ? selectedOrg.id : inventoryOrg.id;
+          q = q.eq('org_id', catalogOrgId);
+        } else if (!isPlatformOwner && organization) q = q.eq('org_id', organization.id);
         const { data, error } = await q;
         if (error) console.error('Product search error:', error);
         if (productSearchRef.current === query) { setProductResults((data as Product[]) ?? []); setProductLoading(false); }
       }
     }, 200);
-  }, [organization, isPlatformOwner, isAggregator, inventoryOrg, selectedWarehouse]);
+  }, [organization, isPlatformOwner, isAggregator, inventoryOrg, selectedOrg, selectedWarehouse]);
 
   useEffect(() => { return () => { if (productDebounceRef.current) clearTimeout(productDebounceRef.current); }; }, []);
 
