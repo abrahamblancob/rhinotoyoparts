@@ -562,9 +562,14 @@ async function obtener_actividad_usuario(
     }
   }
 
-  // First and last activity timestamps
-  const primeraActividad = logs.length ? logs[logs.length - 1].created_at : null
-  const ultimaActividad = logs.length ? logs[0].created_at : null
+  // First and last activity timestamps converted to GMT-4 (Venezuela)
+  const toGMT4 = (iso: string) => {
+    const d = new Date(iso)
+    d.setHours(d.getHours() - 4)
+    return d.toISOString().replace('T', ' ').slice(0, 19) + ' (GMT-4)'
+  }
+  const primeraActividad = logs.length ? toGMT4(logs[logs.length - 1].created_at) : null
+  const ultimaActividad = logs.length ? toGMT4(logs[0].created_at) : null
 
   return {
     _instruccion: 'ESTOS SON LOS DATOS EXACTOS. Presenta un RESUMEN organizado por módulo, NO listes cada actividad individual. Usa los datos de porModulo para mostrar qué hizo el usuario en cada área.',
