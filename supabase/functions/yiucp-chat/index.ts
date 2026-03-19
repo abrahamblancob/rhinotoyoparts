@@ -132,33 +132,40 @@ async function callGemini(systemPrompt: string, userMessage: string): Promise<st
   return textContent.trim()
 }
 
-function validateSQL(sql: string, isPlatform: boolean): string | null {
-  const normalized = sql.trim().toLowerCase()
+function validateSQL(sql: string, _isPlatform: boolean): string | null {
+  // Strip SQL comments (-- line comments and /* block comments */)
+  const cleaned = sql
+    .replace(/--[^\n]*/g, '')
+    .replace(/\/\*[\s\S]*?\*\//g, '')
+    .trim()
+  const normalized = cleaned.toLowerCase()
 
-  if (!normalized.startsWith('select')) {
+  // Allow SELECT and WITH ... SELECT (CTEs)
+  if (!normalized.startsWith('select') && !normalized.startsWith('with')) {
     return 'Solo se permiten consultas SELECT'
   }
 
-  const forbidden = ['insert', 'update', 'delete', 'drop', 'alter', 'truncate', 'create', 'grant', 'revoke']
-  for (const word of forbidden) {
-    // Check as whole word to avoid false positives (e.g., "created_at" contains "create")
-    const regex = new RegExp(`\\b${word}\\b`, 'i')
-    if (word !== 'create' && regex.test(sql)) {
-      return `Operación no permitida: ${word.toUpperCase()}`
-    }
-    // For 'create', be more specific — only block if followed by table/function/index etc.
-    if (word === 'create' && /\bcreate\s+(table|function|index|view|schema|role|database)\b/i.test(sql)) {
-      return 'Operación no permitida: CREATE'
+  // Block dangerous DML/DDL statements — check as statement keywords (followed by space or table name)
+  const dangerousStatements = [
+    /\binsert\s+into\b/i,
+    /\bupdate\s+\w+\s+set\b/i,
+    /\bdelete\s+from\b/i,
+    /\bdrop\s+(table|function|index|view|schema|database)\b/i,
+    /\balter\s+(table|function|column)\b/i,
+    /\btruncate\b/i,
+    /\bcreate\s+(table|function|index|view|schema|role|database)\b/i,
+    /\bgrant\b/i,
+    /\brevoke\b/i,
+  ]
+  for (const regex of dangerousStatements) {
+    if (regex.test(cleaned)) {
+      const match = cleaned.match(regex)?.[0] ?? ''
+      return `Operación no permitida: ${match.toUpperCase()}`
     }
   }
 
-  if (sql.includes(';')) {
+  if (cleaned.includes(';')) {
     return 'No se permiten múltiples sentencias'
-  }
-
-  if (!normalized.includes('limit')) {
-    // Auto-add LIMIT if missing
-    return null
   }
 
   return null
