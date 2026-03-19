@@ -58,6 +58,12 @@ const NAV_CONFIG: Record<OrgType, NavSection[]> = {
       ],
     },
     {
+      title: 'IA',
+      items: [
+        { label: 'Yiucp Asistente', path: '/hub/yiucp', icon: '🤖', module: 'yiucp' },
+      ],
+    },
+    {
       title: 'CUENTA',
       items: [
         { label: 'Centro de Ayuda', path: '/hub/help', icon: '❓', module: 'help' },
@@ -103,6 +109,12 @@ const NAV_CONFIG: Record<OrgType, NavSection[]> = {
       ],
     },
     {
+      title: 'IA',
+      items: [
+        { label: 'Yiucp Asistente', path: '/hub/yiucp', icon: '🤖', module: 'yiucp' },
+      ],
+    },
+    {
       title: 'CUENTA',
       items: [
         { label: 'Centro de Ayuda', path: '/hub/help', icon: '❓', module: 'help' },
@@ -138,6 +150,12 @@ const NAV_CONFIG: Record<OrgType, NavSection[]> = {
         { label: 'Catálogo de Productos', path: '/hub/catalog', icon: '🗂️', module: 'catalog' },
         { label: 'Facturación y Pagos', path: '/hub/billing', icon: '🧾', module: 'billing' },
         { label: 'Auditoría de Stock', path: '/hub/audit', icon: '📜', module: 'audit' },
+      ],
+    },
+    {
+      title: 'IA',
+      items: [
+        { label: 'Yiucp Asistente', path: '/hub/yiucp', icon: '🤖', module: 'yiucp', hideForRoles: ['associate_admin', 'associate_editor', 'associate_viewer', 'associate_dispatcher', 'warehouse_picker', 'warehouse_packer', 'warehouse_receiver'] },
       ],
     },
     {

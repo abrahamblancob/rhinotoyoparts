@@ -41,6 +41,7 @@ export const MODULES = [
   'receiving',
   'stock',
   'returns',
+  'yiucp',
 ] as const;
 
 export const ACTIONS = ['read', 'write', 'delete', 'manage'] as const;
