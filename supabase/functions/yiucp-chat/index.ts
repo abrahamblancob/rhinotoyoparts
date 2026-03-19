@@ -70,6 +70,8 @@ REGLAS SQL:
 - Para fechas "hoy" usa CURRENT_DATE, para "esta semana" usa date_trunc('week', CURRENT_DATE).
 - Los status de órdenes son: draft, pending, confirmed, picking, picked, packing, packed, assigned, shipped, in_transit, delivered, cancelled.
 - Usa COUNT, SUM, AVG para resúmenes. Usa alias claros en español.
+- Cuando busques por nombre de organización, producto, cliente o proveedor, SIEMPRE usa ILIKE con wildcards: name ILIKE '%palabra%'. Nunca uses igualdad exacta (=) para nombres.
+- Si el usuario no especifica fecha, consulta los últimos 7 días por defecto.
 
 Responde SOLO con JSON válido:
 { "sql": "SELECT ...", "explanation": "Breve explicación de lo que hace la consulta" }`
