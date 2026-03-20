@@ -12,20 +12,25 @@ import { Breadcrumbs } from '@/components/hub/shared/Breadcrumbs.tsx';
 import { AssociateFilterCards } from '@/components/hub/shared/AssociateFilterCards.tsx';
 import { supabase } from '@/lib/supabase.ts';
 
+/** Statuses relevant to the dispatch workflow */
+const DISPATCH_STATUSES = ['packed', 'shipped', 'delivered'];
+
 interface OrgDispatchSummary {
   id: string;
   name: string;
   type: string;
-  readyToShip: number;
-  inTransit: number;
+  packedCount: number;
+  shippedCount: number;
+  deliveredCount: number;
   total: number;
 }
 
-type TabKey = 'ready_to_ship' | 'in_transit';
+type TabKey = 'packed' | 'shipped' | 'delivered';
 
-const TABS: { key: TabKey; label: string; statuses: string[] }[] = [
-  { key: 'ready_to_ship', label: 'Esperando Recoger', statuses: ['ready_to_ship'] },
-  { key: 'in_transit', label: 'En Tránsito', statuses: ['shipped', 'in_transit'] },
+const TABS: { key: TabKey; label: string; statuses: string[]; emptyIcon: string; emptyTitle: string }[] = [
+  { key: 'packed', label: 'Listas para Despachar', statuses: ['packed'], emptyIcon: '📦', emptyTitle: 'No hay órdenes listas para despachar' },
+  { key: 'shipped', label: 'En Tránsito', statuses: ['shipped'], emptyIcon: '🚚', emptyTitle: 'No hay órdenes en tránsito' },
+  { key: 'delivered', label: 'Entregadas', statuses: ['delivered'], emptyIcon: '✅', emptyTitle: 'No hay órdenes entregadas' },
 ];
 
 interface OrderRow {
@@ -42,7 +47,6 @@ interface OrderRow {
 }
 
 async function getOrgDispatchSummaries(): Promise<OrgDispatchSummary[]> {
-  // Fetch aggregators with their children
   const { data: aggregators } = await supabase
     .from('organizations')
     .select('id, name, type')
@@ -54,7 +58,6 @@ async function getOrgDispatchSummaries(): Promise<OrgDispatchSummary[]> {
   const results: OrgDispatchSummary[] = [];
 
   for (const agg of aggregators) {
-    // Get child org IDs
     const { data: hierarchy } = await supabase
       .from('org_hierarchy')
       .select('child_id')
@@ -67,22 +70,26 @@ async function getOrgDispatchSummaries(): Promise<OrgDispatchSummary[]> {
       .from('orders')
       .select('status')
       .in('org_id', allOrgIds)
-      .in('status', ['ready_to_ship', 'shipped', 'in_transit']);
+      .in('status', DISPATCH_STATUSES);
 
-    let readyToShip = 0;
-    let inTransit = 0;
+    let packedCount = 0;
+    let shippedCount = 0;
+    let deliveredCount = 0;
     for (const o of orders ?? []) {
-      if ((o as { status: string }).status === 'ready_to_ship') readyToShip++;
-      else inTransit++;
+      const s = (o as { status: string }).status;
+      if (s === 'packed') packedCount++;
+      else if (s === 'shipped') shippedCount++;
+      else if (s === 'delivered') deliveredCount++;
     }
 
     results.push({
       id: agg.id,
       name: agg.name,
       type: agg.type,
-      readyToShip,
-      inTransit,
-      total: readyToShip + inTransit,
+      packedCount,
+      shippedCount,
+      deliveredCount,
+      total: packedCount + shippedCount + deliveredCount,
     });
   }
 
@@ -99,7 +106,7 @@ function timeAgo(date: string): string {
 }
 
 export function WmsDispatchesDashboard() {
-  const [activeTab, setActiveTab] = useState<TabKey>('ready_to_ship');
+  const [activeTab, setActiveTab] = useState<TabKey>('packed');
   const navigate = useNavigate();
   const { isPlatform } = usePermissions();
   const organization = useAuthStore((s) => s.organization);
@@ -111,7 +118,6 @@ export function WmsDispatchesDashboard() {
   const fetcher = useCallback(async (): Promise<{ data: OrderRow[] | null; error: string | null }> => {
     if (!orgId) return { data: [], error: null };
 
-    // If platform viewing aggregator (includeChildren), get child org IDs too
     let orgIds = [orgId];
     if (isPlatform && nav.includeChildren) {
       const { data: hierarchy } = await supabase
@@ -126,7 +132,7 @@ export function WmsDispatchesDashboard() {
       .from('orders')
       .select('id, order_number, status, total, created_at, updated_at, shipped_at, customer_phone, customers(name), assigned_profile:profiles!orders_assigned_to_fkey(full_name)')
       .in('org_id', orgIds)
-      .in('status', ['ready_to_ship', 'shipped', 'in_transit'])
+      .in('status', DISPATCH_STATUSES)
       .order('updated_at', { ascending: false });
     if (error) return { data: null, error: error.message };
     return { data: (data as unknown as OrderRow[]) ?? [], error: null };
@@ -138,13 +144,17 @@ export function WmsDispatchesDashboard() {
   const tab = TABS.find((t) => t.key === activeTab)!;
   const filtered = allOrders.filter((o) => tab.statuses.includes(o.status));
 
-  const readyCount = allOrders.filter((o) => o.status === 'ready_to_ship').length;
-  const transitCount = allOrders.filter((o) => ['shipped', 'in_transit'].includes(o.status)).length;
+  const packedCount = allOrders.filter((o) => o.status === 'packed').length;
+  const shippedCount = allOrders.filter((o) => o.status === 'shipped').length;
+  const deliveredCount = allOrders.filter((o) => o.status === 'delivered').length;
+
+  const tabCounts: Record<TabKey, number> = { packed: packedCount, shipped: shippedCount, delivered: deliveredCount };
 
   // Level 1: Aggregator grid (platform only)
   if (nav.navState === 'aggregators') {
-    const totalReady = nav.summaries.reduce((s, o) => s + o.readyToShip, 0);
-    const totalTransit = nav.summaries.reduce((s, o) => s + o.inTransit, 0);
+    const totalPacked = nav.summaries.reduce((s, o) => s + o.packedCount, 0);
+    const totalShipped = nav.summaries.reduce((s, o) => s + o.shippedCount, 0);
+    const totalDelivered = nav.summaries.reduce((s, o) => s + o.deliveredCount, 0);
 
     return (
       <OrgSelectorGrid<OrgDispatchSummary>
@@ -154,13 +164,14 @@ export function WmsDispatchesDashboard() {
         pageTitle="Despachos"
         pageSubtitle="Selecciona un agregador para gestionar sus despachos"
         globalStats={[
-          { title: 'Esperando Recoger', value: totalReady, icon: '📦', color: '#F59E0B' },
-          { title: 'En Tránsito', value: totalTransit, icon: '🚚', color: '#3B82F6' },
+          { title: 'Listas para Despachar', value: totalPacked, icon: '📦', color: '#F59E0B' },
+          { title: 'En Tránsito', value: totalShipped, icon: '🚚', color: '#3B82F6' },
+          { title: 'Entregadas', value: totalDelivered, icon: '✅', color: '#10B981' },
         ]}
         statFields={[
-          { key: 'readyToShip', label: 'Esperando', color: '#F59E0B', highlight: true },
-          { key: 'inTransit', label: 'En Tránsito', color: '#3B82F6' },
-          { key: 'total', label: 'Total', color: '#6366F1' },
+          { key: 'packedCount', label: 'Listas', color: '#F59E0B', highlight: true },
+          { key: 'shippedCount', label: 'En Tránsito', color: '#3B82F6' },
+          { key: 'deliveredCount', label: 'Entregadas', color: '#10B981' },
         ]}
       />
     );
@@ -171,9 +182,9 @@ export function WmsDispatchesDashboard() {
       <>
         {/* Stats */}
         <div className="rh-stats-grid mb-6">
-          <StatsCard title="Esperando Recoger" value={readyCount} icon="📦" color="#F59E0B" />
-          <StatsCard title="En Tránsito" value={transitCount} icon="🚚" color="#3B82F6" />
-          <StatsCard title="Total" value={allOrders.length} icon="📊" color="#6366F1" />
+          <StatsCard title="Listas para Despachar" value={packedCount} icon="📦" color="#F59E0B" />
+          <StatsCard title="En Tránsito" value={shippedCount} icon="🚚" color="#3B82F6" />
+          <StatsCard title="Entregadas" value={deliveredCount} icon="✅" color="#10B981" />
         </div>
 
         {/* Tabs */}
@@ -184,15 +195,15 @@ export function WmsDispatchesDashboard() {
               onClick={() => setActiveTab(t.key)}
               className={`rh-filter-pill ${activeTab === t.key ? 'active' : ''}`}
             >
-              {t.label} ({t.key === 'ready_to_ship' ? readyCount : transitCount})
+              {t.label} ({tabCounts[t.key]})
             </button>
           ))}
         </div>
 
         {filtered.length === 0 ? (
           <EmptyState
-            icon={activeTab === 'ready_to_ship' ? '✅' : '🚚'}
-            title={activeTab === 'ready_to_ship' ? 'No hay órdenes esperando recoger' : 'No hay órdenes en tránsito'}
+            icon={tab.emptyIcon}
+            title={tab.emptyTitle}
             description="Las órdenes aparecerán aquí cuando cambien de estado"
           />
         ) : (
@@ -225,8 +236,9 @@ export function WmsDispatchesDashboard() {
                   <div style={{ textAlign: 'right' }}>
                     <span style={{ fontWeight: 700, fontSize: 16 }}>${Number(order.total).toFixed(2)}</span>
                     <p style={{ fontSize: 12, color: '#94A3B8', margin: '2px 0 0' }}>
-                      {order.status === 'ready_to_ship' && `Lista ${timeAgo(order.updated_at)}`}
-                      {(order.status === 'shipped' || order.status === 'in_transit') && order.shipped_at && `Despachada ${timeAgo(order.shipped_at)}`}
+                      {order.status === 'packed' && `Empacada ${timeAgo(order.updated_at)}`}
+                      {order.status === 'shipped' && order.shipped_at && `Despachada ${timeAgo(order.shipped_at)}`}
+                      {order.status === 'delivered' && `Entregada ${timeAgo(order.updated_at)}`}
                     </p>
                   </div>
                 </div>
