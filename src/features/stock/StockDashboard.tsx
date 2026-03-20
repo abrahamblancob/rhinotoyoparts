@@ -257,7 +257,6 @@ export function StockDashboard() {
               <StatsCard title="Sin Ubicar" value={`${unlocatedUnits} uds`} icon="🚫" color="#F59E0B" />
             </div>
             <StatsCard title="Alertas Stock Bajo" value={lowStockCount} icon="⚠️" color="#D3010A" />
-            <StatsCard title="Reservadas" value={`${totalReserved} uds`} icon="🔒" color="#8B5CF6" />
           </div>
 
           {showUnlocated && unlocatedItems.length > 0 && (
@@ -286,21 +285,16 @@ export function StockDashboard() {
                       <th>Producto</th>
                       <th>Marca</th>
                       <th className="text-right">Cantidad</th>
-                      <th className="text-right">Reservado</th>
-                      <th className="text-right">Disponible</th>
                     </tr>
                   </thead>
                   <tbody>
                     {unlocatedItems.map((stock) => {
-                      const available = stock.quantity - stock.reserved_quantity;
                       return (
                         <tr key={stock.id}>
                           <td className="cell-mono cell-bold">{stock.product?.sku ?? '-'}</td>
                           <td className="cell-muted" style={{ fontSize: 12 }}>{stock.product?.name ?? '-'}</td>
                           <td style={{ color: '#605E5C' }}>{stock.product?.brand ?? '-'}</td>
                           <td className="text-right cell-bold">{stock.quantity}</td>
-                          <td className="text-right" style={{ color: '#8B5CF6' }}>{stock.reserved_quantity}</td>
-                          <td className="text-right cell-bold" style={{ color: available > 0 ? '#10B981' : '#D3010A' }}>{available}</td>
                         </tr>
                       );
                     })}
@@ -356,16 +350,8 @@ export function StockDashboard() {
                 <h4 style={{ fontSize: 13, fontWeight: 600, color: '#64748B', marginBottom: 12, textTransform: 'uppercase', letterSpacing: '0.5px' }}>Disponibilidad</h4>
                 <div style={{ display: 'flex', gap: 12 }}>
                   <div style={{ flex: 1, textAlign: 'center', padding: '12px 8px', backgroundColor: '#F0FDF4', borderRadius: 8 }}>
-                    <div style={{ fontSize: 22, fontWeight: 700, color: '#10B981' }}>{totalAvailable}</div>
-                    <div style={{ fontSize: 11, color: '#64748B', marginTop: 2 }}>Disponibles</div>
-                  </div>
-                  <div style={{ flex: 1, textAlign: 'center', padding: '12px 8px', backgroundColor: '#F5F3FF', borderRadius: 8 }}>
-                    <div style={{ fontSize: 22, fontWeight: 700, color: '#8B5CF6' }}>{totalReserved}</div>
-                    <div style={{ fontSize: 11, color: '#64748B', marginTop: 2 }}>Reservadas</div>
-                  </div>
-                  <div style={{ flex: 1, textAlign: 'center', padding: '12px 8px', backgroundColor: '#F8FAFC', borderRadius: 8 }}>
-                    <div style={{ fontSize: 22, fontWeight: 700, color: '#1E293B' }}>{totalUnits}</div>
-                    <div style={{ fontSize: 11, color: '#64748B', marginTop: 2 }}>Total</div>
+                    <div style={{ fontSize: 22, fontWeight: 700, color: '#10B981' }}>{totalUnits}</div>
+                    <div style={{ fontSize: 11, color: '#64748B', marginTop: 2 }}>Total en Stock</div>
                   </div>
                 </div>
               </div>
@@ -410,9 +396,7 @@ export function StockDashboard() {
                           <th>SKU</th>
                           <th>Producto</th>
                           <th>Marca</th>
-                          <th className="text-right">Stock</th>
-                          <th className="text-right">Reservado</th>
-                          <th className="text-right">Disponible</th>
+                          <th className="text-right">Cantidad</th>
                           <th>Ubicación</th>
                           <th>Estado</th>
                         </tr>
@@ -429,8 +413,6 @@ export function StockDashboard() {
                               <td className="cell-muted" style={{ fontSize: 12 }}>{stock.product?.name ?? '-'}</td>
                               <td style={{ color: '#605E5C' }}>{stock.product?.brand ?? '-'}</td>
                               <td className="text-right cell-bold">{stock.quantity}</td>
-                              <td className="text-right" style={{ color: '#8B5CF6' }}>{stock.reserved_quantity}</td>
-                              <td className="text-right cell-bold" style={{ color: available > 0 ? '#10B981' : '#D3010A' }}>{available}</td>
                               <td>
                                 {isUnlocated ? (
                                   <span className="rh-badge" style={{ backgroundColor: '#FFF7ED', color: '#EA580C', border: '1px solid #FDBA74' }}>

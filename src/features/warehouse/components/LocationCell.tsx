@@ -19,14 +19,15 @@ function abbreviateCode(code: string): string {
 export function LocationCell({ location, stocks = [], onClick }: LocationCellProps) {
   const bgColor = getOccupancyColor(location, stocks);
   const borderColor = getOccupancyBorderColor(location, stocks);
-  const totalQty = stocks.reduce((sum, s) => sum + s.quantity, 0);
-  const productCount = stocks.length;
-  const hasStock = totalQty > 0;
+  const availableStocks = stocks.filter((s) => (s.quantity - s.reserved_quantity) > 0);
+  const totalAvailable = availableStocks.reduce((sum, s) => sum + (s.quantity - s.reserved_quantity), 0);
+  const productCount = availableStocks.length;
+  const hasStock = totalAvailable > 0;
 
   const tooltipLines = [location.code];
   if (hasStock) {
-    for (const s of stocks) {
-      tooltipLines.push(`${s.product?.sku ?? '?'}: ${s.quantity} uds`);
+    for (const s of availableStocks) {
+      tooltipLines.push(`${s.product?.sku ?? '?'}: ${s.quantity - s.reserved_quantity} uds`);
     }
   } else {
     tooltipLines.push('Vacío');
@@ -92,7 +93,7 @@ export function LocationCell({ location, stocks = [], onClick }: LocationCellPro
               textAlign: 'center',
             }}
           >
-            {totalQty}
+            {totalAvailable}
           </span>
           {productCount > 1 && (
             <span

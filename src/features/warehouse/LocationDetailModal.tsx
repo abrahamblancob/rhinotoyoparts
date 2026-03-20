@@ -43,7 +43,7 @@ export function LocationDetailModal({ open, location, warehouseId, orgId, onClos
   );
   const { data: allStock, reload: reloadStock } = useAsyncData<InventoryStock[]>(stockFetcher, [warehouseId]);
 
-  const locationStocks = allStock?.filter((s) => s.location_id === location.id) ?? [];
+  const locationStocks = allStock?.filter((s) => s.location_id === location.id && (s.quantity - s.reserved_quantity) > 0) ?? [];
 
   // Client-side search within warehouse inventory_stock (not aggregator catalog)
   const handleProductSearch = useCallback((query: string) => {
@@ -278,7 +278,7 @@ export function LocationDetailModal({ open, location, warehouseId, orgId, onClos
               {locationStocks.length === 1 ? 'Producto en Ubicación' : `${locationStocks.length} Productos en Ubicación`}
             </h4>
             <span style={{ fontSize: 12, color: '#64748B', fontWeight: 600 }}>
-              Total: {locationStocks.reduce((sum, s) => sum + s.quantity, 0)} uds
+              Total: {locationStocks.reduce((sum, s) => sum + (s.quantity - s.reserved_quantity), 0)} uds
             </span>
           </div>
 
@@ -319,10 +319,10 @@ export function LocationDetailModal({ open, location, warehouseId, orgId, onClos
                 </div>
                 <span style={{
                   fontSize: 16, fontWeight: 700,
-                  color: stock.quantity > 0 ? '#10B981' : '#94A3B8',
+                  color: '#10B981',
                   textAlign: 'right', minWidth: 36,
                 }}>
-                  {stock.quantity}
+                  {stock.quantity - stock.reserved_quantity}
                 </span>
               </div>
             ))}
