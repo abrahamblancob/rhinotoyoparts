@@ -371,11 +371,11 @@ export function PickListDetail() {
                     <div style={{ display: 'flex', alignItems: 'center', gap: 4, color: '#605E5C', fontSize: 12 }}>
                       <Package size={12} /> Producto
                     </div>
-                    <div style={{ fontWeight: 500, fontSize: 14, color: '#323130' }}>
-                      {item.product?.name ?? '-'}
+                    <div style={{ fontWeight: 600, fontSize: 14, color: '#323130', fontFamily: 'monospace' }}>
+                      {item.product?.sku ?? '-'}
                     </div>
                     <div style={{ fontSize: 12, color: '#8A8886' }}>
-                      SKU: {item.product?.sku ?? '-'}
+                      {item.product?.name ?? '-'}
                     </div>
                   </div>
 

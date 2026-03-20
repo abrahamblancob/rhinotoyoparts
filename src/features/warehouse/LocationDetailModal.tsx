@@ -289,7 +289,7 @@ export function LocationDetailModal({ open, location, warehouseId, orgId, onClos
             borderBottom: '1px solid #E2E8F0',
           }}>
             <span style={{ fontSize: 11, fontWeight: 700, color: '#64748B', textTransform: 'uppercase', letterSpacing: 0.5 }}>
-              Producto
+              SKU / Producto
             </span>
             <span style={{ fontSize: 11, fontWeight: 700, color: '#64748B', textTransform: 'uppercase', letterSpacing: 0.5, textAlign: 'right' }}>
               Cant.
@@ -309,11 +309,11 @@ export function LocationDetailModal({ open, location, warehouseId, orgId, onClos
                 }}
               >
                 <div style={{ minWidth: 0 }}>
-                  <p style={{ fontSize: 13, fontWeight: 600, color: '#1E293B', margin: 0, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-                    {stock.product?.name ?? 'Sin nombre'}
-                  </p>
-                  <p style={{ fontSize: 11, color: '#94A3B8', margin: '2px 0 0', fontFamily: 'monospace' }}>
+                  <p style={{ fontSize: 13, fontWeight: 600, color: '#1E293B', margin: 0, fontFamily: 'monospace' }}>
                     {stock.product?.sku ?? '—'}
+                  </p>
+                  <p style={{ fontSize: 11, color: '#94A3B8', margin: '2px 0 0', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                    {stock.product?.name ?? 'Sin nombre'}
                     {stock.lot_number && <span style={{ marginLeft: 8, color: '#B45309' }}>Lote: {stock.lot_number}</span>}
                   </p>
                 </div>

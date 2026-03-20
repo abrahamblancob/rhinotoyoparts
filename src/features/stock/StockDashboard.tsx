@@ -282,8 +282,8 @@ export function StockDashboard() {
                 <table className="rh-table">
                   <thead>
                     <tr>
-                      <th>Producto</th>
                       <th>SKU</th>
+                      <th>Producto</th>
                       <th>Marca</th>
                       <th className="text-right">Cantidad</th>
                       <th className="text-right">Reservado</th>
@@ -295,8 +295,8 @@ export function StockDashboard() {
                       const available = stock.quantity - stock.reserved_quantity;
                       return (
                         <tr key={stock.id}>
-                          <td className="cell-primary">{stock.product?.name ?? '-'}</td>
-                          <td className="cell-mono" style={{ fontSize: 12, color: '#605E5C' }}>{stock.product?.sku ?? '-'}</td>
+                          <td className="cell-mono cell-bold">{stock.product?.sku ?? '-'}</td>
+                          <td className="cell-muted" style={{ fontSize: 12 }}>{stock.product?.name ?? '-'}</td>
                           <td style={{ color: '#605E5C' }}>{stock.product?.brand ?? '-'}</td>
                           <td className="text-right cell-bold">{stock.quantity}</td>
                           <td className="text-right" style={{ color: '#8B5CF6' }}>{stock.reserved_quantity}</td>
@@ -407,8 +407,8 @@ export function StockDashboard() {
                     <table className="rh-table">
                       <thead>
                         <tr>
-                          <th>Producto</th>
                           <th>SKU</th>
+                          <th>Producto</th>
                           <th>Marca</th>
                           <th className="text-right">Stock</th>
                           <th className="text-right">Reservado</th>
@@ -425,8 +425,8 @@ export function StockDashboard() {
 
                           return (
                             <tr key={stock.id} style={isLow ? { backgroundColor: '#FEF2F2' } : {}}>
-                              <td className="cell-primary">{stock.product?.name ?? '-'}</td>
-                              <td className="cell-mono" style={{ fontSize: 12, color: '#605E5C' }}>{stock.product?.sku ?? '-'}</td>
+                              <td className="cell-mono cell-bold">{stock.product?.sku ?? '-'}</td>
+                              <td className="cell-muted" style={{ fontSize: 12 }}>{stock.product?.name ?? '-'}</td>
                               <td style={{ color: '#605E5C' }}>{stock.product?.brand ?? '-'}</td>
                               <td className="text-right cell-bold">{stock.quantity}</td>
                               <td className="text-right" style={{ color: '#8B5CF6' }}>{stock.reserved_quantity}</td>

@@ -24,8 +24,8 @@ export function OrderItemsTable({ items, total }: OrderItemsTableProps) {
           {items.map((item) => (
             <tr key={item.id} style={{ borderTop: '1px solid #F1F5F9' }}>
               <td style={{ padding: '10px 16px' }}>
-                <div style={{ fontWeight: 500 }}>{item.products?.name ?? 'Producto'}</div>
-                <div style={{ fontSize: 12, color: '#8A8886' }}>{item.products?.sku ?? ''}</div>
+                <div style={{ fontWeight: 600, fontFamily: 'monospace' }}>{item.products?.sku ?? ''}</div>
+                <div style={{ fontSize: 12, color: '#8A8886' }}>{item.products?.name ?? 'Producto'}</div>
               </td>
               <td style={{ padding: '10px 16px', textAlign: 'center' }}>{item.quantity}</td>
               <td style={{ padding: '10px 16px', textAlign: 'right' }}>${Number(item.unit_price).toFixed(2)}</td>

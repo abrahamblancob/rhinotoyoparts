@@ -83,8 +83,8 @@ export function CatalogPage() {
                   <span className="text-4xl">📦</span>
                 )}
               </div>
-              <p className="rh-product-card-name">{product.name}</p>
-              <p className="rh-product-card-meta">{product.brand ?? 'Sin marca'} &middot; {product.sku}</p>
+              <p className="rh-product-card-name" style={{ fontFamily: 'monospace' }}>{product.sku}</p>
+              <p className="rh-product-card-meta">{product.name}</p>
               <div className="rh-product-card-footer">
                 <span className="rh-product-card-price">${product.price.toFixed(2)}</span>
                 <span className={`rh-stock-badge ${product.stock > 0 ? 'in-stock' : 'out-of-stock'}`}>
@@ -99,8 +99,8 @@ export function CatalogPage() {
           <table className="rh-table">
             <thead>
               <tr>
-                <th>Producto</th>
                 <th>SKU</th>
+                <th>Producto</th>
                 <th>Marca</th>
                 <th className="text-right">Precio</th>
                 <th className="text-right">Stock</th>
@@ -109,8 +109,8 @@ export function CatalogPage() {
             <tbody>
               {filtered.map((product) => (
                 <tr key={product.id}>
-                  <td className="cell-primary">{product.name}</td>
-                  <td className="cell-mono cell-muted">{product.sku}</td>
+                  <td className="cell-mono cell-bold">{product.sku}</td>
+                  <td className="cell-muted" style={{ fontSize: 12 }}>{product.name}</td>
                   <td className="cell-muted">{product.brand ?? '—'}</td>
                   <td className="text-right cell-bold">${product.price.toFixed(2)}</td>
                   <td className="text-right">

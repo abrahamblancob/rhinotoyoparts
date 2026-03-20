@@ -248,8 +248,8 @@ export function SummaryView({
                 {previewPageData.map((p) => (
                   <tr key={p.rowNumber}>
                     <td className="cell-mono cell-muted">{p.rowNumber}</td>
-                    <td className="cell-mono">{p.sku}</td>
-                    <td className="cell-primary">{p.name}</td>
+                    <td className="cell-mono cell-bold">{p.sku}</td>
+                    <td className="cell-muted" style={{ fontSize: 12 }}>{p.name}</td>
                     <td className="cell-muted">{p.brand ?? '—'}</td>
                     <td className="text-right cell-bold">${p.price.toFixed(2)}</td>
                     <td className="text-right">{p.stock}</td>

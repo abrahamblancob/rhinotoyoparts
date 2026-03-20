@@ -95,8 +95,8 @@ export function OrderConfirmStep({
               {items.map((item) => (
                 <tr key={item.product.id} style={{ borderTop: '1px solid #F1F5F9' }}>
                   <td style={{ padding: '8px 12px' }}>
-                    <div style={{ fontWeight: 500 }}>{item.product.name}</div>
-                    <div style={{ fontSize: 11, color: '#8A8886' }}>SKU: {item.product.sku}</div>
+                    <div style={{ fontWeight: 600, fontFamily: 'monospace' }}>{item.product.sku}</div>
+                    <div style={{ fontSize: 11, color: '#8A8886' }}>{item.product.name}</div>
                   </td>
                   <td style={{ padding: '8px 12px', textAlign: 'center' }}>{item.quantity}</td>
                   <td style={{ padding: '8px 12px', textAlign: 'right', fontWeight: 600 }}>

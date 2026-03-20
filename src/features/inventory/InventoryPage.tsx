@@ -249,8 +249,8 @@ export function InventoryPage() {
           <table className="rh-table">
             <thead>
               <tr>
-                <th>Producto</th>
                 <th>SKU</th>
+                <th>Producto</th>
                 <th>Marca</th>
                 <th className="text-right" style={{ cursor: 'pointer', userSelect: 'none' }} onClick={() => toggleSort('price')}>Precio{sortIndicator('price')}</th>
                 <th className="text-right" style={{ cursor: 'pointer', userSelect: 'none' }} onClick={() => toggleSort('stock')}>Stock{sortIndicator('stock')}</th>
@@ -261,13 +261,13 @@ export function InventoryPage() {
             <tbody>
               {paginatedProducts.map((product) => (
                 <tr key={product.id} className="cursor-pointer" onClick={() => canWrite('inventory') && openEditModal(product)}>
+                  <td className="cell-mono cell-bold">{product.sku}</td>
                   <td>
                     <div>
-                      <p className="cell-primary">{product.name}</p>
+                      <p className="cell-muted" style={{ fontSize: 12 }}>{product.name}</p>
                       {product.oem_number && <p className="cell-muted text-xs mt-0.5">OEM: {product.oem_number}</p>}
                     </div>
                   </td>
-                  <td className="cell-mono cell-muted">{product.sku}</td>
                   <td className="cell-muted">{product.brand ?? '—'}</td>
                   <td className="text-right cell-bold">${product.price.toFixed(2)}</td>
                   <td className="text-right">

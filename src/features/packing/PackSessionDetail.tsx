@@ -169,11 +169,11 @@ export function PackSessionDetail() {
 
                   {/* Product info */}
                   <div style={{ flex: 1, minWidth: 0 }}>
-                    <div style={{ fontWeight: 500, fontSize: 14, color: '#323130' }}>
-                      {item.product?.name ?? '-'}
+                    <div style={{ fontWeight: 600, fontSize: 14, color: '#323130', fontFamily: 'monospace' }}>
+                      {item.product?.sku ?? '-'}
                     </div>
                     <div style={{ fontSize: 12, color: '#8A8886' }}>
-                      SKU: {item.product?.sku ?? '-'} | Cantidad esperada: {item.quantity_expected}
+                      {item.product?.name ?? '-'} | Cantidad esperada: {item.quantity_expected}
                     </div>
                   </div>
 
