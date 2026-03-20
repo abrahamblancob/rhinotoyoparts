@@ -33,10 +33,11 @@ const NAV_CONFIG: Record<OrgType, NavSection[]> = {
     {
       title: 'ALMACÉN (WMS)',
       items: [
-        { label: 'Layout Almacén', path: '/hub/warehouse', icon: '🏭', module: 'warehouse' },
+        { label: 'Almacén', path: '/hub/warehouse', icon: '🏭', module: 'warehouse' },
+        { label: 'Recepción', path: '/hub/receiving', icon: '📥', module: 'receiving' },
         { label: 'Picking', path: '/hub/picking', icon: '📋', module: 'picking' },
         { label: 'Packing', path: '/hub/packing', icon: '📦', module: 'packing' },
-        { label: 'Recepción', path: '/hub/receiving', icon: '📥', module: 'receiving' },
+        { label: 'Despachos', path: '/hub/wms-dispatches', icon: '🚚', module: 'dispatches' },
         { label: 'Stock por Ubicación', path: '/hub/stock', icon: '📊', module: 'stock' },
         { label: 'Devoluciones', path: '/hub/returns', icon: '🔄', module: 'returns' },
       ],
@@ -85,10 +86,11 @@ const NAV_CONFIG: Record<OrgType, NavSection[]> = {
     {
       title: 'ALMACÉN (WMS)',
       items: [
-        { label: 'Layout Almacén', path: '/hub/warehouse', icon: '🏭', module: 'warehouse' },
+        { label: 'Almacén', path: '/hub/warehouse', icon: '🏭', module: 'warehouse' },
+        { label: 'Recepción', path: '/hub/receiving', icon: '📥', module: 'receiving' },
         { label: 'Picking', path: '/hub/picking', icon: '📋', module: 'picking' },
         { label: 'Packing', path: '/hub/packing', icon: '📦', module: 'packing' },
-        { label: 'Recepción', path: '/hub/receiving', icon: '📥', module: 'receiving' },
+        { label: 'Despachos', path: '/hub/wms-dispatches', icon: '🚚', module: 'dispatches' },
         { label: 'Stock por Ubicación', path: '/hub/stock', icon: '📊', module: 'stock' },
         { label: 'Devoluciones', path: '/hub/returns', icon: '🔄', module: 'returns' },
       ],
@@ -137,9 +139,10 @@ const NAV_CONFIG: Record<OrgType, NavSection[]> = {
     {
       title: 'ALMACÉN (WMS)',
       items: [
+        { label: 'Recepción', path: '/hub/receiving', icon: '📥', module: 'receiving' },
         { label: 'Picking', path: '/hub/picking', icon: '📋', module: 'picking' },
         { label: 'Packing', path: '/hub/packing', icon: '📦', module: 'packing' },
-        { label: 'Recepción', path: '/hub/receiving', icon: '📥', module: 'receiving' },
+        { label: 'Despachos', path: '/hub/wms-dispatches', icon: '🚚', module: 'dispatches' },
         { label: 'Stock por Ubicación', path: '/hub/stock', icon: '📊', module: 'stock' },
         { label: 'Devoluciones', path: '/hub/returns', icon: '🔄', module: 'returns' },
       ],

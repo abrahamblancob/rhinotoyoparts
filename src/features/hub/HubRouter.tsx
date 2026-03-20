@@ -17,6 +17,7 @@ const OrdersPage = lazy(() => import('@/features/orders/OrdersPage.tsx').then(m 
 const OrderDetailPage = lazy(() => import('@/features/orders/OrderDetailPage.tsx').then(m => ({ default: m.OrderDetailPage })));
 const CustomersPage = lazy(() => import('@/features/customers/CustomersPage.tsx').then(m => ({ default: m.CustomersPage })));
 const DispatchesPage = lazy(() => import('@/features/dispatches/DispatchesPage.tsx').then(m => ({ default: m.DispatchesPage })));
+const WmsDispatchesDashboard = lazy(() => import('@/features/dispatches/WmsDispatchesDashboard.tsx').then(m => ({ default: m.WmsDispatchesDashboard })));
 const BillingPage = lazy(() => import('@/features/billing/BillingPage.tsx').then(m => ({ default: m.BillingPage })));
 const AuditPage = lazy(() => import('@/features/audit/AuditPage.tsx').then(m => ({ default: m.AuditPage })));
 const SettingsPage = lazy(() => import('@/features/settings/SettingsPage.tsx').then(m => ({ default: m.SettingsPage })));
@@ -101,6 +102,7 @@ export function HubRouter() {
                   <Route path="orders/:orderId" element={<OrderDetailPage />} />
                   <Route path="customers" element={<CustomersPage />} />
                   <Route path="dispatches" element={<DispatchesPage />} />
+                  <Route path="wms-dispatches" element={<WmsDispatchesDashboard />} />
                   <Route path="billing" element={<BillingPage />} />
                   <Route path="audit" element={<AuditPage />} />
                   <Route path="settings" element={<SettingsPage />} />
