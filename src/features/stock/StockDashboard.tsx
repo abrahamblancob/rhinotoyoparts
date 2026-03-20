@@ -153,7 +153,6 @@ export function StockDashboard() {
     : items;
   if (showLowStockOnly) filtered = filtered.filter((s) => s.quantity <= LOW_STOCK_THRESHOLD);
 
-  const uniqueProducts = new Set(items.map((s) => s.product_id)).size;
   const totalUnits = items.reduce((sum, s) => sum + s.quantity, 0);
 
   const locatedItems = items.filter((s) => s.location_id !== null);
@@ -162,8 +161,6 @@ export function StockDashboard() {
   const unlocatedUnits = unlocatedItems.reduce((sum, s) => sum + s.quantity, 0);
   const totalReserved = items.reduce((sum, s) => sum + s.reserved_quantity, 0);
   const positionsWithStock = new Set(locatedItems.filter((s) => (s.quantity - s.reserved_quantity) > 0).map((s) => s.location_id)).size;
-  const totalRows = items.length;
-  const locationCoveragePct = totalRows > 0 ? Math.round((locatedItems.length / totalRows) * 100) : 0;
 
   const lowStockCount = items.filter((s) => s.quantity <= LOW_STOCK_THRESHOLD).length;
   const normalStockCount = items.filter((s) => s.quantity > LOW_STOCK_THRESHOLD).length;
