@@ -44,6 +44,8 @@ interface OrderRow {
   customer_phone: string | null;
   customers: { name: string } | null;
   assigned_profile: { full_name: string } | null;
+  items_count: number;
+  package_count: number;
 }
 
 async function getOrgDispatchSummaries(): Promise<OrgDispatchSummary[]> {
@@ -130,12 +132,21 @@ export function WmsDispatchesDashboard() {
 
     const { data, error } = await supabase
       .from('orders')
-      .select('id, order_number, status, total, created_at, updated_at, shipped_at, customer_phone, customers(name), assigned_profile:profiles!orders_assigned_to_fkey(full_name)')
+      .select('id, order_number, status, total, created_at, updated_at, shipped_at, customer_phone, customers(name), assigned_profile:profiles!orders_assigned_to_fkey(full_name), order_items(quantity), pack_sessions(package_count)')
       .in('org_id', orgIds)
       .in('status', DISPATCH_STATUSES)
       .order('updated_at', { ascending: false });
     if (error) return { data: null, error: error.message };
-    return { data: (data as unknown as OrderRow[]) ?? [], error: null };
+    const rows = (data ?? []).map((row: Record<string, unknown>) => {
+      const items = row.order_items as { quantity: number }[] | null;
+      const packs = row.pack_sessions as { package_count: number | null }[] | null;
+      return {
+        ...row,
+        items_count: items?.length ?? 0,
+        package_count: packs?.[0]?.package_count ?? 1,
+      };
+    });
+    return { data: rows as unknown as OrderRow[], error: null };
   }, [orgId, isPlatform, nav.includeChildren]);
 
   const { data: orders } = useAsyncData<OrderRow[]>(fetcher, [orgId, nav.includeChildren]);
@@ -226,6 +237,10 @@ export function WmsDispatchesDashboard() {
                     <p style={{ fontSize: 14, color: '#475569', margin: '4px 0 0' }}>
                       {order.customers?.name ?? 'Sin cliente'}
                       {order.customer_phone && ` · ${order.customer_phone}`}
+                    </p>
+                    <p style={{ fontSize: 12, color: '#64748B', margin: '4px 0 0', display: 'flex', gap: 12 }}>
+                      <span>📦 {order.items_count} producto{order.items_count !== 1 ? 's' : ''}</span>
+                      <span>📋 {order.package_count} bulto{order.package_count !== 1 ? 's' : ''}</span>
                     </p>
                     {order.assigned_profile?.full_name && (
                       <p style={{ fontSize: 12, color: '#94A3B8', margin: '2px 0 0' }}>
