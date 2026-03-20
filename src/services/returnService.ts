@@ -17,7 +17,7 @@ export async function getReturnOrders(opts?: {
 
   return query<ReturnOrder[]>((sb) => {
     let q = sb.from('return_orders')
-      .select('*, receiver:profiles!return_orders_received_by_fkey(full_name), organization:organizations(name, type)')
+      .select('*, receiver:profiles!return_orders_received_by_fkey(full_name), organization:organizations(name, type), order:orders!return_orders_order_id_fkey(order_number)')
       .order('created_at', { ascending: false });
 
     if (aggregatorOrgIds) {
@@ -33,7 +33,7 @@ export async function getReturnOrders(opts?: {
 export async function getReturnOrder(id: string) {
   return query<ReturnOrder>((sb) =>
     sb.from('return_orders')
-      .select('*, receiver:profiles!return_orders_received_by_fkey(full_name)')
+      .select('*, receiver:profiles!return_orders_received_by_fkey(full_name), order:orders!return_orders_order_id_fkey(order_number)')
       .eq('id', id)
       .single()
   );
@@ -50,7 +50,7 @@ export async function getReturnOrderItems(returnOrderId: string) {
 export async function getReturnOrderForOrder(orderId: string) {
   return query<ReturnOrder>((sb) =>
     sb.from('return_orders')
-      .select('*, receiver:profiles!return_orders_received_by_fkey(full_name)')
+      .select('*, receiver:profiles!return_orders_received_by_fkey(full_name), order:orders!return_orders_order_id_fkey(order_number)')
       .eq('order_id', orderId)
       .order('created_at', { ascending: false })
       .limit(1)

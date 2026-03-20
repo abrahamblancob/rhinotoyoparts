@@ -271,6 +271,7 @@ export interface ReturnOrder {
   completed_at: string | null;
   // Joined fields
   receiver?: { full_name: string };
+  order?: { order_number: string };
 }
 
 export interface ReturnOrderItem {

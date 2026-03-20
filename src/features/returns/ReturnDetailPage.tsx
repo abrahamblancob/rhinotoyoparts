@@ -93,7 +93,7 @@ export function ReturnDetailPage() {
         <div style={{ display: 'flex', justifyContent: 'space-between', flexWrap: 'wrap', gap: 16 }}>
           <div>
             <h1 style={{ fontSize: 22, fontWeight: 700, color: '#323130', marginBottom: 8 }}>
-              Devolucion - Orden {returnOrder.order_number}
+              Devolucion - Orden {returnOrder.order?.order_number ?? returnOrder.order_number}
             </h1>
             <div style={{ display: 'flex', gap: 24, flexWrap: 'wrap', color: '#605E5C', fontSize: 14 }}>
               <span style={{ display: 'flex', alignItems: 'center', gap: 4 }}>

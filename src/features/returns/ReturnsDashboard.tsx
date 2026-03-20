@@ -58,7 +58,7 @@ export function ReturnsDashboard() {
 
   const items = nav.navState !== 'list' && isPlatform ? [] : (returns ?? []);
   const filtered = search.trim()
-    ? items.filter((r) => r.order_number?.toLowerCase().includes(search.toLowerCase()))
+    ? items.filter((r) => (r.order?.order_number ?? r.order_number)?.toLowerCase().includes(search.toLowerCase()))
     : items;
 
   const totalCount = items.length;
@@ -168,7 +168,7 @@ export function ReturnsDashboard() {
                 const isAssoc = org?.type === 'associate';
                 return (
                   <tr key={ret.id} className="cursor-pointer" onClick={() => navigate(`/hub/returns/${ret.id}`)}>
-                    <td className="cell-primary cell-mono">{ret.order_number ?? '-'}</td>
+                    <td className="cell-primary cell-mono">{ret.order?.order_number ?? ret.order_number ?? '-'}</td>
                     {showAssociateCol && (
                       <td>
                         {isAssoc ? (
