@@ -1,5 +1,5 @@
 import { useState, useCallback, useRef } from 'react';
-import { MapPin, Package, QrCode, Printer, Eye, Search, Trash2, X } from 'lucide-react';
+import { MapPin, Package, QrCode, Eye, Search, Trash2, X } from 'lucide-react';
 import { QRCodeSVG } from 'qrcode.react';
 import { Modal } from '@/components/hub/shared/Modal.tsx';
 import { useAsyncData } from '@/hooks/useAsyncData.ts';
@@ -176,80 +176,6 @@ export function LocationDetailModal({ open, location, warehouseId, orgId, onClos
     reloadStock();
   };
 
-  const handlePrintQR = () => {
-    const qrValue = location.qr_code ?? location.code;
-    const printWindow = window.open('', '_blank', 'width=400,height=500');
-    if (!printWindow) return;
-    printWindow.document.write(`
-      <!DOCTYPE html>
-      <html>
-      <head>
-        <title>QR - ${location.code}</title>
-        <style>
-          body { margin: 0; display: flex; flex-direction: column; align-items: center; justify-content: center; min-height: 100vh; font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; }
-          .label { font-size: 28px; font-weight: 800; color: #1E293B; margin-bottom: 12px; letter-spacing: 1px; }
-          .sublabel { font-size: 13px; color: #64748B; margin-top: 10px; }
-          .qr-container { padding: 20px; border: 2px solid #E2E8F0; border-radius: 12px; }
-          @media print { body { margin: 0; } .qr-container { border: none; } }
-        </style>
-      </head>
-      <body>
-        <div class="label">${location.code}</div>
-        <div class="qr-container" id="qr-target"></div>
-        <div class="sublabel">${qrValue}</div>
-      </body>
-      </html>
-    `);
-    printWindow.document.close();
-    // Render QR into the print window using inline SVG
-    const size = 200;
-    const svgEl = document.getElementById('qr-preview-svg')?.cloneNode(true) as SVGElement | null;
-    if (svgEl) {
-      svgEl.setAttribute('width', String(size));
-      svgEl.setAttribute('height', String(size));
-      printWindow.document.getElementById('qr-target')?.appendChild(svgEl);
-    }
-    setTimeout(() => { printWindow.print(); }, 300);
-  };
-
-  const handlePrintProductQR = (stock: InventoryStock) => {
-    const sku = stock.product?.sku ?? '—';
-    const name = stock.product?.name ?? 'Producto';
-    const printWindow = window.open('', '_blank', 'width=400,height=550');
-    if (!printWindow) return;
-    printWindow.document.write(`
-      <!DOCTYPE html>
-      <html>
-      <head>
-        <title>QR - ${sku}</title>
-        <style>
-          body { margin: 0; display: flex; flex-direction: column; align-items: center; justify-content: center; min-height: 100vh; font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; }
-          .sku { font-size: 24px; font-weight: 800; color: #1E293B; margin-bottom: 4px; letter-spacing: 1px; font-family: monospace; }
-          .name { font-size: 13px; color: #64748B; margin-bottom: 14px; text-align: center; max-width: 280px; }
-          .qr-container { padding: 20px; border: 2px solid #E2E8F0; border-radius: 12px; }
-          .location { font-size: 12px; color: #94A3B8; margin-top: 10px; }
-          @media print { body { margin: 0; } .qr-container { border: none; } }
-        </style>
-      </head>
-      <body>
-        <div class="sku">${sku}</div>
-        <div class="name">${name}</div>
-        <div class="qr-container" id="qr-target"></div>
-        <div class="location">Ubicacion: ${location.code}</div>
-      </body>
-      </html>
-    `);
-    printWindow.document.close();
-    const size = 200;
-    const svgEl = document.getElementById('qr-product-svg')?.cloneNode(true) as SVGElement | null;
-    if (svgEl) {
-      svgEl.setAttribute('width', String(size));
-      svgEl.setAttribute('height', String(size));
-      printWindow.document.getElementById('qr-target')?.appendChild(svgEl);
-    }
-    setTimeout(() => { printWindow.print(); }, 300);
-  };
-
   return (
     <Modal
       open={open}
@@ -344,14 +270,6 @@ export function LocationDetailModal({ open, location, warehouseId, orgId, onClos
             <Eye size={14} />
             {showQR ? 'Ocultar' : 'Ver QR'}
           </button>
-          <button
-            onClick={handlePrintQR}
-            className="rh-btn rh-btn-ghost"
-            style={{ padding: '6px 10px', display: 'flex', alignItems: 'center', gap: 4, fontSize: 12 }}
-          >
-            <Printer size={14} />
-            Imprimir
-          </button>
         </div>
 
         {/* QR Code Preview */}
@@ -442,14 +360,6 @@ export function LocationDetailModal({ open, location, warehouseId, orgId, onClos
                   >
                     <QrCode size={12} />
                     {showProductQR === stock.id ? 'Ocultar QR' : 'QR'}
-                  </button>
-                  <button
-                    onClick={() => handlePrintProductQR(stock)}
-                    className="rh-btn rh-btn-ghost"
-                    style={{ padding: '4px 8px', display: 'flex', alignItems: 'center', gap: 4, fontSize: 11 }}
-                  >
-                    <Printer size={12} />
-                    Imprimir
                   </button>
                   <div style={{ flex: 1 }} />
                   {removingStockId === stock.id ? (
