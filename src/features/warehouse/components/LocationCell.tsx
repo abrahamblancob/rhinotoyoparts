@@ -21,7 +21,6 @@ export function LocationCell({ location, stocks = [], onClick }: LocationCellPro
   const borderColor = getOccupancyBorderColor(location, stocks);
   const availableStocks = stocks.filter((s) => (s.quantity - s.reserved_quantity) > 0);
   const totalAvailable = availableStocks.reduce((sum, s) => sum + (s.quantity - s.reserved_quantity), 0);
-  const productCount = availableStocks.length;
   const hasStock = totalAvailable > 0;
 
   const tooltipLines = [location.code];
@@ -95,22 +94,6 @@ export function LocationCell({ location, stocks = [], onClick }: LocationCellPro
           >
             {totalAvailable}
           </span>
-          {productCount > 1 && (
-            <span
-              style={{
-                fontSize: 9,
-                fontWeight: 700,
-                color: '#FFFFFF',
-                backgroundColor: '#6366F1',
-                borderRadius: 8,
-                padding: '0px 4px',
-                lineHeight: 1.4,
-                textAlign: 'center',
-              }}
-            >
-              {productCount}
-            </span>
-          )}
         </div>
       )}
 
