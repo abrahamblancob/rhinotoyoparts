@@ -160,7 +160,7 @@ export function StockDashboard() {
   const locatedAvailableUnits = locatedItems.reduce((sum, s) => sum + (s.quantity - s.reserved_quantity), 0);
   const unlocatedUnits = unlocatedItems.reduce((sum, s) => sum + s.quantity, 0);
   const totalReserved = items.reduce((sum, s) => sum + s.reserved_quantity, 0);
-  const positionsWithStock = new Set(locatedItems.filter((s) => (s.quantity - s.reserved_quantity) > 0).map((s) => s.location_id)).size;
+  const positionsWithStock = new Set(locatedItems.filter((s) => s.quantity > 0).map((s) => s.location_id)).size;
 
   const lowStockCount = items.filter((s) => s.quantity <= LOW_STOCK_THRESHOLD).length;
   const normalStockCount = items.filter((s) => s.quantity > LOW_STOCK_THRESHOLD).length;
