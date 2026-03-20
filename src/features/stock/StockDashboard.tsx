@@ -131,6 +131,26 @@ export function StockDashboard() {
 
   const { data: stockItems, loading, reload } = useAsyncData<InventoryStock[]>(fetcher, [orgId, warehouseFilter, shouldIncludeChildren]);
 
+  // Fetch dispatch count from packed orders
+  const dispatchFetcher = useCallback(async () => {
+    if (!orgId) return { data: 0 as number, error: null };
+    let orgIds = [orgId];
+    if (shouldIncludeChildren) {
+      const { data: hierarchy } = await supabase.from('org_hierarchy').select('child_id').eq('parent_id', orgId);
+      orgIds = [orgId, ...(hierarchy ?? []).map((h: { child_id: string }) => h.child_id)];
+    }
+    const { data, error } = await supabase
+      .from('order_items')
+      .select('quantity, orders!inner(org_id, status)')
+      .in('orders.org_id', orgIds)
+      .eq('orders.status', 'packed');
+    if (error) return { data: 0, error: error.message };
+    const total = (data ?? []).reduce((sum: number, item: { quantity: number }) => sum + item.quantity, 0);
+    return { data: total, error: null };
+  }, [orgId, shouldIncludeChildren]);
+  const { data: dispatchCount } = useAsyncData<number>(dispatchFetcher, [orgId, shouldIncludeChildren]);
+  const inDispatchUnits = dispatchCount ?? 0;
+
   const { stats } = useWarehouseStats(warehouseFilter !== 'all' ? warehouseFilter : undefined);
 
   useEffect(() => {
@@ -159,7 +179,7 @@ export function StockDashboard() {
   const unlocatedItems = items.filter((s) => s.location_id === null);
   const locatedAvailableUnits = locatedItems.reduce((sum, s) => sum + (s.quantity - s.reserved_quantity), 0);
   const unlocatedUnits = unlocatedItems.reduce((sum, s) => sum + s.quantity, 0);
-  const totalReserved = items.reduce((sum, s) => sum + s.reserved_quantity, 0);
+  // totalReserved computed from packed orders (inDispatchUnits) not from inventory_stock
   const positionsWithStock = new Set(locatedItems.filter((s) => s.quantity > 0).map((s) => s.location_id)).size;
 
   const lowStockCount = items.filter((s) => s.quantity <= LOW_STOCK_THRESHOLD).length;
@@ -247,7 +267,7 @@ export function StockDashboard() {
           <div className="rh-stats-grid-5">
             <StatsCard title="Disponible en Estantería" value={`${locatedAvailableUnits} uds`} icon="📦" color="#10B981"
               trend={{ value: positionsWithStock, label: 'posiciones' }} />
-            <StatsCard title="En Despacho" value={`${totalReserved} uds`} icon="📋" color="#3B82F6" />
+            <StatsCard title="En Despacho" value={`${inDispatchUnits} uds`} icon="📋" color="#3B82F6" />
             <div onClick={() => unlocatedItems.length > 0 && setShowUnlocated(!showUnlocated)}
               style={{ cursor: unlocatedItems.length > 0 ? 'pointer' : 'default', borderRadius: 16,
                 outline: showUnlocated ? '2px solid #F59E0B' : 'none', outlineOffset: -1, transition: 'outline 0.2s' }}>
