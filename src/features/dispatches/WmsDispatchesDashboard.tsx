@@ -13,8 +13,9 @@ import { AssociateFilterCards } from '@/components/hub/shared/AssociateFilterCar
 import { supabase } from '@/lib/supabase.ts';
 
 interface OrgDispatchSummary {
-  orgId: string;
-  orgName: string;
+  id: string;
+  name: string;
+  type: string;
   readyToShip: number;
   inTransit: number;
   total: number;
@@ -41,25 +42,51 @@ interface OrderRow {
 }
 
 async function getOrgDispatchSummaries(): Promise<OrgDispatchSummary[]> {
-  const { data } = await supabase
-    .from('orders')
-    .select('org_id, status, organizations:org_id(name)')
-    .in('status', ['ready_to_ship', 'shipped', 'in_transit']);
+  // Fetch aggregators with their children
+  const { data: aggregators } = await supabase
+    .from('organizations')
+    .select('id, name, type')
+    .eq('type', 'aggregator')
+    .eq('status', 'active');
 
-  if (!data) return [];
+  if (!aggregators || aggregators.length === 0) return [];
 
-  const map = new Map<string, OrgDispatchSummary>();
-  for (const row of data as Array<{ org_id: string; status: string; organizations: { name: string } | null }>) {
-    let entry = map.get(row.org_id);
-    if (!entry) {
-      entry = { orgId: row.org_id, orgName: row.organizations?.name ?? 'Org', readyToShip: 0, inTransit: 0, total: 0 };
-      map.set(row.org_id, entry);
+  const results: OrgDispatchSummary[] = [];
+
+  for (const agg of aggregators) {
+    // Get child org IDs
+    const { data: hierarchy } = await supabase
+      .from('org_hierarchy')
+      .select('child_id')
+      .eq('parent_id', agg.id);
+
+    const childIds = (hierarchy ?? []).map((h: { child_id: string }) => h.child_id);
+    const allOrgIds = [agg.id, ...childIds];
+
+    const { data: orders } = await supabase
+      .from('orders')
+      .select('status')
+      .in('org_id', allOrgIds)
+      .in('status', ['ready_to_ship', 'shipped', 'in_transit']);
+
+    let readyToShip = 0;
+    let inTransit = 0;
+    for (const o of orders ?? []) {
+      if ((o as { status: string }).status === 'ready_to_ship') readyToShip++;
+      else inTransit++;
     }
-    if (row.status === 'ready_to_ship') entry.readyToShip++;
-    else entry.inTransit++;
-    entry.total++;
+
+    results.push({
+      id: agg.id,
+      name: agg.name,
+      type: agg.type,
+      readyToShip,
+      inTransit,
+      total: readyToShip + inTransit,
+    });
   }
-  return Array.from(map.values());
+
+  return results;
 }
 
 function timeAgo(date: string): string {
@@ -82,17 +109,29 @@ export function WmsDispatchesDashboard() {
   const orgId = isPlatform ? nav.effectiveOrgId ?? undefined : organization?.id;
 
   const fetcher = useCallback(async () => {
-    if (!orgId) return [];
+    if (!orgId) return [] as OrderRow[];
+
+    // If platform viewing aggregator (includeChildren), get child org IDs too
+    let orgIds = [orgId];
+    if (isPlatform && nav.includeChildren) {
+      const { data: hierarchy } = await supabase
+        .from('org_hierarchy')
+        .select('child_id')
+        .eq('parent_id', orgId);
+      const childIds = (hierarchy ?? []).map((h: { child_id: string }) => h.child_id);
+      orgIds = [orgId, ...childIds];
+    }
+
     const { data } = await supabase
       .from('orders')
       .select('id, order_number, status, total, created_at, updated_at, shipped_at, customer_phone, customers(name), assigned_profile:profiles!orders_assigned_to_fkey(full_name)')
-      .eq('org_id', orgId)
+      .in('org_id', orgIds)
       .in('status', ['ready_to_ship', 'shipped', 'in_transit'])
       .order('updated_at', { ascending: false });
-    return (data as OrderRow[] | null) ?? [];
-  }, [orgId]);
+    return (data as unknown as OrderRow[]) ?? [];
+  }, [orgId, isPlatform, nav.includeChildren]);
 
-  const { data: orders } = useAsyncData<OrderRow[]>(fetcher, [orgId]);
+  const { data: orders } = useAsyncData<OrderRow[]>(fetcher, [orgId, nav.includeChildren]);
   const allOrders = orders ?? [];
 
   const tab = TABS.find((t) => t.key === activeTab)!;
@@ -108,43 +147,21 @@ export function WmsDispatchesDashboard() {
 
     return (
       <OrgSelectorGrid<OrgDispatchSummary>
-        title="Despachos"
         summaries={nav.summaries}
         loading={nav.loading}
-        onSelectOrg={nav.selectAggregator}
-        stats={[
+        onSelect={nav.selectAggregator}
+        pageTitle="Despachos"
+        pageSubtitle="Selecciona un agregador para gestionar sus despachos"
+        globalStats={[
           { title: 'Esperando Recoger', value: totalReady, icon: '📦', color: '#F59E0B' },
           { title: 'En Tránsito', value: totalTransit, icon: '🚚', color: '#3B82F6' },
         ]}
-        renderOrgCard={(summary) => (
-          <>
-            <span style={{ fontSize: 18, fontWeight: 700 }}>{summary.total}</span>
-            <span style={{ fontSize: 12, color: '#64748B' }}>
-              {summary.readyToShip} esperando · {summary.inTransit} en tránsito
-            </span>
-          </>
-        )}
-        getOrgId={(s) => s.orgId}
-        getOrgName={(s) => s.orgName}
+        statFields={[
+          { key: 'readyToShip', label: 'Esperando', color: '#F59E0B', highlight: true },
+          { key: 'inTransit', label: 'En Tránsito', color: '#3B82F6' },
+          { key: 'total', label: 'Total', color: '#6366F1' },
+        ]}
       />
-    );
-  }
-
-  // Level 2: Associate filter (platform viewing aggregator)
-  if (nav.navState === 'list' && isPlatform && nav.associates.length > 0) {
-    return (
-      <div>
-        {nav.breadcrumbs.length > 0 && <Breadcrumbs items={nav.breadcrumbs} />}
-        <div className="rh-page-header">
-          <h1 className="rh-page-title">Despachos</h1>
-        </div>
-        <AssociateFilterCards
-          associates={nav.associates}
-          selectedId={nav.selectedAssociateId}
-          onSelect={nav.selectAssociate}
-        />
-        {renderContent()}
-      </div>
     );
   }
 
@@ -227,6 +244,13 @@ export function WmsDispatchesDashboard() {
       <div className="rh-page-header">
         <h1 className="rh-page-title">Despachos</h1>
       </div>
+      {isPlatform && nav.childOrgs.length > 0 && (
+        <AssociateFilterCards
+          childOrgs={nav.childOrgs}
+          filterChildOrgId={nav.filterChildOrgId}
+          onFilter={nav.setFilterChildOrgId}
+        />
+      )}
       {renderContent()}
     </div>
   );
