@@ -309,7 +309,7 @@ export function LocationDetailModal({ open, location, warehouseId, orgId, onClos
                 }}
               >
                 <div style={{ minWidth: 0 }}>
-                  <p style={{ fontSize: 13, fontWeight: 600, color: '#1E293B', margin: 0, fontFamily: 'monospace' }}>
+                  <p style={{ fontSize: 17, fontWeight: 700, color: '#1E293B', margin: 0, fontFamily: 'monospace' }}>
                     {stock.product?.sku ?? '—'}
                   </p>
                   <p style={{ fontSize: 11, color: '#94A3B8', margin: '2px 0 0', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
