@@ -55,7 +55,7 @@ function printSnapshot(snap: InventorySnapshot) {
   `;
 
   const pagesHtml = pages.map((pageRows, pageIdx) => {
-    const rows = pageRows.map((row, i) => `
+    const rows = pageRows.map((row) => `
       <tr>
         <td style="padding:6px 10px;border:1px solid #E2E8F0;font-family:monospace;font-weight:600;">${row.position}</td>
         <td style="padding:6px 10px;border:1px solid #E2E8F0;font-family:monospace;">${row.sku}</td>
