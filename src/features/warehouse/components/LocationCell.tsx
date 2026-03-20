@@ -21,13 +21,15 @@ export function LocationCell({ location, stocks = [], onClick }: LocationCellPro
   const borderColor = getOccupancyBorderColor(location, stocks);
   const totalQty = stocks.reduce((sum, s) => sum + s.quantity, 0);
   const totalReserved = stocks.reduce((sum, s) => sum + s.reserved_quantity, 0);
+  const totalAvailable = totalQty - totalReserved;
   const productCount = stocks.length;
   const hasStock = totalQty > 0;
 
   const tooltipLines = [location.code];
   if (hasStock) {
     for (const s of stocks) {
-      tooltipLines.push(`${s.product?.sku ?? '?'}: ${s.quantity} uds`);
+      const avail = s.quantity - s.reserved_quantity;
+      tooltipLines.push(`${s.product?.sku ?? '?'}: ${avail} disp. / ${s.reserved_quantity} en orden`);
     }
   } else {
     tooltipLines.push('Vacío');
@@ -85,7 +87,7 @@ export function LocationCell({ location, stocks = [], onClick }: LocationCellPro
               fontSize: 11,
               fontWeight: 700,
               color: '#FFFFFF',
-              backgroundColor: totalReserved >= totalQty ? '#EF4444' : '#F59E0B',
+              backgroundColor: totalAvailable <= 0 ? '#EF4444' : '#10B981',
               borderRadius: 10,
               padding: '1px 6px',
               lineHeight: 1.4,
@@ -93,7 +95,7 @@ export function LocationCell({ location, stocks = [], onClick }: LocationCellPro
               textAlign: 'center',
             }}
           >
-            {totalQty}
+            {totalAvailable}
           </span>
           {productCount > 1 && (
             <span
