@@ -148,17 +148,15 @@ export async function completeReceiving(orderId: string, receivedBy: string) {
   );
 }
 
-export async function getInventorySnapshots(opts: { orgId: string; warehouseId?: string; includeChildren?: boolean }) {
-  let scopeOrgIds = [opts.orgId];
-  if (opts.includeChildren) {
-    const { data: hierarchy } = await supabase
-      .from('org_hierarchy').select('child_id').eq('parent_id', opts.orgId);
-    scopeOrgIds = [opts.orgId, ...(hierarchy ?? []).map((h: { child_id: string }) => h.child_id)];
-  }
+export async function getInventorySnapshots(opts: { orgId: string; warehouseId?: string }) {
+  // Always include org + children (snapshots belong to aggregator, user may be platform or aggregator)
+  const { data: hierarchy } = await supabase
+    .from('org_hierarchy').select('child_id').eq('parent_id', opts.orgId);
+  const scopeOrgIds = [opts.orgId, ...(hierarchy ?? []).map((h: { child_id: string }) => h.child_id)];
 
   return query<InventorySnapshot[]>((sb) => {
     let q = sb.from('inventory_snapshots')
-      .select('*, warehouse:warehouses(name), receiving:receiving_orders(reference_number, supplier_name), creator:profiles!inventory_snapshots_created_by_fkey(full_name)')
+      .select('*, warehouse:warehouses(name), receiving:receiving_orders(reference_number, supplier_name), creator:profiles(full_name)')
       .in('org_id', scopeOrgIds)
       .order('created_at', { ascending: false })
       .limit(50);

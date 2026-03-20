@@ -462,7 +462,7 @@ export function StockDashboard() {
 
           {/* Inventory Audit Log */}
           <div style={{ marginTop: 24 }}>
-            <InventoryLog orgId={orgId} warehouseId={warehouseFilter} includeChildren={shouldIncludeChildren} />
+            <InventoryLog orgId={orgId} warehouseId={warehouseFilter} />
           </div>
         </>
       )}

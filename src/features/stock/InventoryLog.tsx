@@ -20,10 +20,9 @@ const SNAPSHOT_ROLES = ['platform_owner', 'aggregator_admin', 'warehouse_manager
 interface InventoryLogProps {
   orgId: string | undefined;
   warehouseId?: string;
-  includeChildren?: boolean;
 }
 
-export function InventoryLog({ orgId, warehouseId, includeChildren }: InventoryLogProps) {
+export function InventoryLog({ orgId, warehouseId }: InventoryLogProps) {
   const [expandedId, setExpandedId] = useState<string | null>(null);
   const [snapshotLoading, setSnapshotLoading] = useState(false);
   const user = useAuthStore((s) => s.user);
@@ -36,11 +35,10 @@ export function InventoryLog({ orgId, warehouseId, includeChildren }: InventoryL
     return getInventorySnapshots({
       orgId,
       warehouseId: warehouseId !== 'all' ? warehouseId : undefined,
-      includeChildren,
     });
-  }, [orgId, warehouseId, includeChildren]);
+  }, [orgId, warehouseId]);
 
-  const { data: snapshots, loading, reload } = useAsyncData<InventorySnapshot[]>(fetcher, [orgId, warehouseId, includeChildren]);
+  const { data: snapshots, loading, reload } = useAsyncData<InventorySnapshot[]>(fetcher, [orgId, warehouseId]);
 
   const items = snapshots ?? [];
 
