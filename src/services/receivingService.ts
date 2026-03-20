@@ -119,6 +119,22 @@ export async function deleteReceivingOrder(orderId: string) {
 }
 
 export async function completeReceiving(orderId: string, receivedBy: string) {
+  // Take inventory snapshot BEFORE completing (captures state before new items settle)
+  const { data: order } = await supabase
+    .from('receiving_orders')
+    .select('warehouse_id, org_id')
+    .eq('id', orderId)
+    .single();
+
+  if (order) {
+    await supabase.rpc('create_inventory_snapshot', {
+      p_warehouse_id: order.warehouse_id,
+      p_org_id: order.org_id,
+      p_receiving_order_id: orderId,
+      p_user_id: receivedBy,
+    });
+  }
+
   return query<ReceivingOrder>((sb) =>
     sb.from('receiving_orders')
       .update({
@@ -130,4 +146,41 @@ export async function completeReceiving(orderId: string, receivedBy: string) {
       .select()
       .single()
   );
+}
+
+export async function getInventorySnapshots(opts: { orgId: string; warehouseId?: string; includeChildren?: boolean }) {
+  let scopeOrgIds = [opts.orgId];
+  if (opts.includeChildren) {
+    const { data: hierarchy } = await supabase
+      .from('org_hierarchy').select('child_id').eq('parent_id', opts.orgId);
+    scopeOrgIds = [opts.orgId, ...(hierarchy ?? []).map((h: { child_id: string }) => h.child_id)];
+  }
+
+  return query<InventorySnapshot[]>((sb) => {
+    let q = sb.from('inventory_snapshots')
+      .select('*, warehouse:warehouses(name), receiving:receiving_orders(reference_number, supplier_name), creator:profiles!inventory_snapshots_created_by_fkey(full_name)')
+      .in('org_id', scopeOrgIds)
+      .order('created_at', { ascending: false })
+      .limit(50);
+    if (opts.warehouseId) q = q.eq('warehouse_id', opts.warehouseId);
+    return q;
+  });
+}
+
+export interface InventorySnapshot {
+  id: string;
+  warehouse_id: string;
+  org_id: string;
+  triggered_by_receiving_id: string | null;
+  total_available: number;
+  total_positions: number;
+  total_in_dispatch: number;
+  total_in_transit: number;
+  total_unlocated: number;
+  position_matrix: { position: string; sku: string; product_name: string; quantity: number; reserved: number }[];
+  created_at: string;
+  created_by: string | null;
+  warehouse?: { name: string } | null;
+  receiving?: { reference_number: string | null; supplier_name: string | null } | null;
+  creator?: { full_name: string } | null;
 }

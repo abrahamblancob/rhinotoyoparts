@@ -21,6 +21,7 @@ import { getOrgStockSummaries } from '@/services/dashboardService.ts';
 import type { OrgStockSummary } from '@/services/dashboardService.ts';
 import { supabase } from '@/lib/supabase.ts';
 import type { InventoryStock } from '@/types/warehouse.ts';
+import { InventoryLog } from './InventoryLog.tsx';
 
 const LOW_STOCK_THRESHOLD = 5;
 
@@ -458,6 +459,14 @@ export function StockDashboard() {
                 )}
               </div>
             )}
+          </div>
+
+          {/* Inventory Audit Log */}
+          <div style={{ marginTop: 24 }}>
+            <h2 style={{ fontSize: 17, fontWeight: 700, color: '#1E293B', marginBottom: 16, display: 'flex', alignItems: 'center', gap: 8 }}>
+              📜 Log de Auditoría de Inventario
+            </h2>
+            <InventoryLog orgId={orgId} warehouseId={warehouseFilter} includeChildren={shouldIncludeChildren} />
           </div>
         </>
       )}
