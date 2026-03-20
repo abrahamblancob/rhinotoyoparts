@@ -158,8 +158,10 @@ export function StockDashboard() {
 
   const locatedItems = items.filter((s) => s.location_id !== null);
   const unlocatedItems = items.filter((s) => s.location_id === null);
-  const locatedUnits = locatedItems.reduce((sum, s) => sum + s.quantity, 0);
+  const locatedAvailableUnits = locatedItems.reduce((sum, s) => sum + (s.quantity - s.reserved_quantity), 0);
   const unlocatedUnits = unlocatedItems.reduce((sum, s) => sum + s.quantity, 0);
+  const totalReserved = items.reduce((sum, s) => sum + s.reserved_quantity, 0);
+  const positionsWithStock = new Set(locatedItems.filter((s) => (s.quantity - s.reserved_quantity) > 0).map((s) => s.location_id)).size;
   const totalRows = items.length;
   const locationCoveragePct = totalRows > 0 ? Math.round((locatedItems.length / totalRows) * 100) : 0;
 
@@ -246,9 +248,9 @@ export function StockDashboard() {
       ) : (
         <>
           <div className="rh-stats-grid-5">
-            <StatsCard title="Productos en Almacén" value={uniqueProducts} icon="📦" color="#6366F1" />
-            <StatsCard title="En Estantería" value={`${locatedUnits} uds`} icon="📍" color="#10B981"
-              trend={{ value: locationCoveragePct, label: 'ubicados' }} />
+            <StatsCard title="Disponible en Estantería" value={`${locatedAvailableUnits} uds`} icon="📦" color="#10B981"
+              trend={{ value: positionsWithStock, label: 'posiciones' }} />
+            <StatsCard title="En Despacho" value={`${totalReserved} uds`} icon="📋" color="#3B82F6" />
             <div onClick={() => unlocatedItems.length > 0 && setShowUnlocated(!showUnlocated)}
               style={{ cursor: unlocatedItems.length > 0 ? 'pointer' : 'default', borderRadius: 16,
                 outline: showUnlocated ? '2px solid #F59E0B' : 'none', outlineOffset: -1, transition: 'outline 0.2s' }}>
@@ -315,7 +317,7 @@ export function StockDashboard() {
                     <span style={{ width: 12, height: 12, borderRadius: '50%', backgroundColor: '#10B981', display: 'inline-block' }} />
                     <span style={{ fontSize: 13, color: '#475569' }}>En estantería</span>
                   </div>
-                  <span style={{ fontSize: 13, fontWeight: 600, color: '#1E293B' }}>{locatedUnits} unidades</span>
+                  <span style={{ fontSize: 13, fontWeight: 600, color: '#1E293B' }}>{locatedAvailableUnits} unidades</span>
                 </div>
                 <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
                   <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
