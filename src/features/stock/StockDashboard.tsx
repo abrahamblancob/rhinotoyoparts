@@ -179,7 +179,6 @@ export function StockDashboard() {
   const unlocatedItems = items.filter((s) => s.location_id === null);
   const locatedAvailableUnits = locatedItems.reduce((sum, s) => sum + (s.quantity - s.reserved_quantity), 0);
   const unlocatedUnits = unlocatedItems.reduce((sum, s) => sum + s.quantity, 0);
-  // totalReserved computed from packed orders (inDispatchUnits) not from inventory_stock
   const positionsWithStock = new Set(locatedItems.filter((s) => s.quantity > 0).map((s) => s.location_id)).size;
 
   const lowStockCount = items.filter((s) => s.quantity <= LOW_STOCK_THRESHOLD).length;
