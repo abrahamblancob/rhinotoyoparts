@@ -1,7 +1,5 @@
 import { useState, useCallback } from 'react';
 import { ChevronDown } from 'lucide-react';
-import { useAuthStore } from '@/stores/authStore.ts';
-import { usePermissions } from '@/hooks/usePermissions.ts';
 import { useAsyncData } from '@/hooks/useAsyncData.ts';
 import { getInventorySnapshots } from '@/services/receivingService.ts';
 import type { InventorySnapshot } from '@/services/receivingService.ts';
