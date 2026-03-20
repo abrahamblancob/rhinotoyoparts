@@ -270,7 +270,7 @@ export function StockDashboard() {
             <div onClick={() => unlocatedItems.length > 0 && setShowUnlocated(!showUnlocated)}
               style={{ cursor: unlocatedItems.length > 0 ? 'pointer' : 'default', borderRadius: 16,
                 outline: showUnlocated ? '2px solid #F59E0B' : 'none', outlineOffset: -1, transition: 'outline 0.2s' }}>
-              <StatsCard title="Sin Ubicar" value={`${unlocatedUnits} uds`} icon="🚫" color="#F59E0B" />
+              <StatsCard title="En Tránsito" value={`${unlocatedUnits} uds`} icon="🚚" color="#F59E0B" />
             </div>
             <StatsCard title="Alertas Stock Bajo" value={lowStockCount} icon="⚠️" color="#D3010A" />
           </div>

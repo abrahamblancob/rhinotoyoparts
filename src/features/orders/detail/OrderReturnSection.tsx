@@ -39,7 +39,7 @@ export function OrderReturnSection({ orderId }: OrderReturnSectionProps) {
   const allItems = items ?? [];
   const photos = returnOrder.photo_urls ?? [];
   const isCompleted = returnOrder.status === 'completed';
-  const replenishCount = allItems.filter((i) => i.disposition === 'replenish').length;
+  const replenishCount = allItems.filter((i) => i.disposition === 'replenish' || i.disposition === 'good').length;
   const defectiveCount = allItems.filter((i) => i.disposition === 'defective' || i.disposition === 'damaged').length;
 
   const subtitle = [

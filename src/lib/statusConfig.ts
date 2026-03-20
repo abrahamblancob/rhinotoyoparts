@@ -53,6 +53,7 @@ export const STATUS_STYLES: Record<string, StatusStyle> = {
   damaged: { bg: '#EF444415', text: '#EF4444', label: 'Dañado' },
   // Return item dispositions
   replenish: { bg: '#10B98115', text: '#10B981', label: 'Reposición' },
+  good: { bg: '#10B98115', text: '#10B981', label: 'Buen Estado' },
   defective: { bg: '#EF444415', text: '#EF4444', label: 'Defectuoso' },
   inspecting: { bg: '#6366F115', text: '#6366F1', label: 'En inspección' },
 };

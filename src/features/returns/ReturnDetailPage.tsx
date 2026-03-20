@@ -19,6 +19,7 @@ import type { ReturnOrder, ReturnOrderItem } from '@/types/warehouse.ts';
 
 const DISPOSITION_ICONS: Record<string, { icon: string; color: string }> = {
   replenish: { icon: '♻️', color: '#10B981' },
+  good: { icon: '✅', color: '#10B981' },
   defective: { icon: '⚠️', color: '#EF4444' },
   damaged: { icon: '💔', color: '#DC2626' },
   pending: { icon: '⏳', color: '#F59E0B' },
@@ -66,7 +67,7 @@ export function ReturnDetailPage() {
 
   const statusStyle = getStatusStyle(returnOrder.status);
   const photos = returnOrder.photo_urls ?? [];
-  const replenishCount = allItems.filter((i) => i.disposition === 'replenish').length;
+  const replenishCount = allItems.filter((i) => i.disposition === 'replenish' || i.disposition === 'good').length;
   const defectiveCount = allItems.filter((i) => i.disposition === 'defective' || i.disposition === 'damaged').length;
 
   return (
@@ -232,7 +233,7 @@ export function ReturnDetailPage() {
                     padding: 14,
                     borderRadius: 8,
                     border: '1px solid #E1DFDD',
-                    backgroundColor: item.disposition === 'replenish' ? '#F0FDF4'
+                    backgroundColor: item.disposition === 'replenish' || item.disposition === 'good' ? '#F0FDF4'
                       : item.disposition === 'defective' || item.disposition === 'damaged' ? '#FEF2F2'
                       : '#fff',
                   }}
