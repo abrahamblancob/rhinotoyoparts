@@ -1,5 +1,5 @@
 import { useState, useCallback } from 'react';
-import { ChevronDown, Camera } from 'lucide-react';
+import { ChevronDown, Camera, Printer } from 'lucide-react';
 import { useAuthStore } from '@/stores/authStore.ts';
 import { usePermissions } from '@/hooks/usePermissions.ts';
 import { useAsyncData } from '@/hooks/useAsyncData.ts';
@@ -7,12 +7,15 @@ import { getInventorySnapshots } from '@/services/receivingService.ts';
 import type { InventorySnapshot } from '@/services/receivingService.ts';
 import { supabase } from '@/lib/supabase.ts';
 
-function formatDate(iso: string): string {
+function formatDateGMT4(iso: string): string {
   const d = new Date(iso);
-  const offset = d.getTime() + (-4 * 60 * 60 * 1000 - d.getTimezoneOffset() * 60000);
-  const local = new Date(offset);
-  return local.toLocaleDateString('es-VE', { day: '2-digit', month: '2-digit', year: 'numeric' })
-    + ' ' + local.toLocaleTimeString('es-VE', { hour: '2-digit', minute: '2-digit' });
+  const gmt4 = new Date(d.getTime() - 4 * 60 * 60 * 1000);
+  const day = String(gmt4.getUTCDate()).padStart(2, '0');
+  const month = String(gmt4.getUTCMonth() + 1).padStart(2, '0');
+  const year = gmt4.getUTCFullYear();
+  const hours = String(gmt4.getUTCHours()).padStart(2, '0');
+  const minutes = String(gmt4.getUTCMinutes()).padStart(2, '0');
+  return `${day}/${month}/${year} ${hours}:${minutes}`;
 }
 
 const SNAPSHOT_ROLES = ['platform_owner', 'aggregator_admin', 'warehouse_manager'];
@@ -20,6 +23,114 @@ const SNAPSHOT_ROLES = ['platform_owner', 'aggregator_admin', 'warehouse_manager
 interface InventoryLogProps {
   orgId: string | undefined;
   warehouseId?: string;
+}
+
+function printSnapshot(snap: InventorySnapshot) {
+  const matrix = snap.position_matrix ?? [];
+  const dateStr = formatDateGMT4(snap.created_at);
+  const creator = snap.creator?.full_name ?? '—';
+  const ROWS_PER_PAGE = 20;
+
+  // Split matrix into pages of 20
+  const pages: typeof matrix[] = [];
+  for (let i = 0; i < matrix.length; i += ROWS_PER_PAGE) {
+    pages.push(matrix.slice(i, i + ROWS_PER_PAGE));
+  }
+  if (pages.length === 0) pages.push([]);
+
+  const headerHtml = `
+    <div style="display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:12px;">
+      <div>
+        <h1 style="font-size:18px;font-weight:700;margin:0;">Auditoría de Inventario</h1>
+        <p style="font-size:12px;color:#64748B;margin:4px 0 0;">${dateStr} (GMT-4) · Registrado por: ${creator}</p>
+      </div>
+      <img src="/logo.jpg" alt="Rhino" style="height:40px;" />
+    </div>
+    <div style="display:flex;gap:24px;margin-bottom:16px;font-size:13px;">
+      <span><strong style="color:#10B981">${snap.total_available}</strong> Disponible</span>
+      <span><strong style="color:#6366F1">${snap.total_positions}</strong> Posiciones</span>
+      <span><strong style="color:#3B82F6">${snap.total_in_dispatch}</strong> En Despacho</span>
+      <span><strong style="color:#F59E0B">${snap.total_unlocated}</strong> En Tránsito</span>
+    </div>
+  `;
+
+  const pagesHtml = pages.map((pageRows, pageIdx) => {
+    const rows = pageRows.map((row, i) => `
+      <tr>
+        <td style="padding:6px 10px;border:1px solid #E2E8F0;font-family:monospace;font-weight:600;">${row.position}</td>
+        <td style="padding:6px 10px;border:1px solid #E2E8F0;font-family:monospace;">${row.sku}</td>
+        <td style="padding:6px 10px;border:1px solid #E2E8F0;font-size:12px;color:#475569;">${row.product_name}</td>
+        <td style="padding:6px 10px;border:1px solid #E2E8F0;text-align:right;font-weight:600;">${row.quantity}</td>
+        <td style="padding:6px 10px;border:1px solid #E2E8F0;text-align:right;color:${row.reserved > 0 ? '#F59E0B' : '#94A3B8'};">${row.reserved}</td>
+        <td style="padding:6px 10px;border:1px solid #E2E8F0;min-width:120px;"></td>
+      </tr>
+    `).join('');
+
+    // Fill empty rows to complete 20 per page
+    const emptyRows = Array.from({ length: ROWS_PER_PAGE - pageRows.length }, () => `
+      <tr>
+        <td style="padding:6px 10px;border:1px solid #E2E8F0;">&nbsp;</td>
+        <td style="padding:6px 10px;border:1px solid #E2E8F0;">&nbsp;</td>
+        <td style="padding:6px 10px;border:1px solid #E2E8F0;">&nbsp;</td>
+        <td style="padding:6px 10px;border:1px solid #E2E8F0;">&nbsp;</td>
+        <td style="padding:6px 10px;border:1px solid #E2E8F0;">&nbsp;</td>
+        <td style="padding:6px 10px;border:1px solid #E2E8F0;">&nbsp;</td>
+      </tr>
+    `).join('');
+
+    return `
+      <div style="${pageIdx > 0 ? 'page-break-before:always;' : ''}">
+        ${pageIdx === 0 ? headerHtml : `<p style="font-size:12px;color:#94A3B8;margin-bottom:8px;">Auditoría de Inventario — ${dateStr} (pág. ${pageIdx + 1})</p>`}
+        <table style="width:100%;border-collapse:collapse;font-size:13px;">
+          <thead>
+            <tr style="background-color:#F8FAFC;">
+              <th style="padding:8px 10px;border:1px solid #E2E8F0;text-align:left;font-weight:600;">Posición</th>
+              <th style="padding:8px 10px;border:1px solid #E2E8F0;text-align:left;font-weight:600;">SKU</th>
+              <th style="padding:8px 10px;border:1px solid #E2E8F0;text-align:left;font-weight:600;">Producto</th>
+              <th style="padding:8px 10px;border:1px solid #E2E8F0;text-align:right;font-weight:600;">Cantidad</th>
+              <th style="padding:8px 10px;border:1px solid #E2E8F0;text-align:right;font-weight:600;">Reservado</th>
+              <th style="padding:8px 10px;border:1px solid #E2E8F0;text-align:center;font-weight:600;">Auditoría</th>
+            </tr>
+          </thead>
+          <tbody>${rows}${emptyRows}</tbody>
+        </table>
+        <p style="font-size:10px;color:#94A3B8;text-align:right;margin-top:4px;">Página ${pageIdx + 1} de ${pages.length}</p>
+      </div>
+    `;
+  }).join('');
+
+  const footerHtml = `
+    <div style="margin-top:32px;border-top:1px solid #E2E8F0;padding-top:16px;">
+      <div style="display:flex;justify-content:space-between;">
+        <div>
+          <p style="font-size:12px;color:#64748B;margin:0;">Firma del Auditor: ____________________________</p>
+          <p style="font-size:12px;color:#64748B;margin:8px 0 0;">Nombre: ____________________________</p>
+        </div>
+        <div>
+          <p style="font-size:12px;color:#64748B;margin:0;">Fecha: ____________________________</p>
+          <p style="font-size:12px;color:#64748B;margin:8px 0 0;">Observaciones: ____________________________</p>
+        </div>
+      </div>
+    </div>
+  `;
+
+  const printWindow = window.open('', '_blank', 'width=900,height=700');
+  if (!printWindow) return;
+  printWindow.document.write(`
+    <!DOCTYPE html>
+    <html>
+    <head>
+      <title>Auditoría de Inventario - ${dateStr}</title>
+      <style>
+        body { margin: 24px; font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; }
+        @media print { body { margin: 12px; } }
+      </style>
+    </head>
+    <body>${pagesHtml}${footerHtml}</body>
+    </html>
+  `);
+  printWindow.document.close();
+  setTimeout(() => printWindow.print(), 400);
 }
 
 export function InventoryLog({ orgId, warehouseId }: InventoryLogProps) {
@@ -45,7 +156,6 @@ export function InventoryLog({ orgId, warehouseId }: InventoryLogProps) {
   const handleSnapshot = async () => {
     if (!orgId || !user || snapshotLoading) return;
 
-    // Resolve warehouse_id: if specific warehouse selected use it, otherwise find first for this org
     let whId = warehouseId !== 'all' ? warehouseId : undefined;
     if (!whId) {
       const { data: wh } = await supabase
@@ -124,7 +234,7 @@ export function InventoryLog({ orgId, warehouseId }: InventoryLogProps) {
                   <div style={{ flex: 1 }}>
                     <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
                       <span style={{ fontSize: 14, fontWeight: 600, color: '#1E293B' }}>
-                        {formatDate(snap.created_at)}
+                        {formatDateGMT4(snap.created_at)}
                       </span>
                       {snap.receiving?.reference_number && (
                         <span className="rh-badge" style={{ backgroundColor: '#EFF6FF', color: '#2563EB', border: '1px solid #BFDBFE', fontSize: 11 }}>
@@ -146,8 +256,7 @@ export function InventoryLog({ orgId, warehouseId }: InventoryLogProps) {
                       <Stat label="Disponible" value={snap.total_available} color="#10B981" />
                       <Stat label="Posiciones" value={snap.total_positions} color="#6366F1" />
                       <Stat label="En Despacho" value={snap.total_in_dispatch} color="#3B82F6" />
-                      <Stat label="En Tránsito" value={snap.total_in_transit} color="#F59E0B" />
-                      <Stat label="Sin Ubicar" value={snap.total_unlocated} color="#EF4444" />
+                      <Stat label="En Tránsito" value={snap.total_unlocated} color="#F59E0B" />
                     </div>
                   </div>
                   <ChevronDown size={18} style={{
@@ -164,11 +273,21 @@ export function InventoryLog({ orgId, warehouseId }: InventoryLogProps) {
                       <span style={{ fontSize: 13, fontWeight: 600, color: '#475569' }}>
                         Matriz de Posiciones ({matrix.length} registros)
                       </span>
-                      {snap.creator?.full_name && (
-                        <span style={{ fontSize: 12, color: '#94A3B8' }}>
-                          Registrado por: {snap.creator.full_name}
-                        </span>
-                      )}
+                      <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
+                        {snap.creator?.full_name && (
+                          <span style={{ fontSize: 12, color: '#94A3B8' }}>
+                            Registrado por: {snap.creator.full_name}
+                          </span>
+                        )}
+                        <button
+                          onClick={(e) => { e.stopPropagation(); printSnapshot(snap); }}
+                          className="rh-btn-secondary"
+                          style={{ display: 'flex', alignItems: 'center', gap: 4, padding: '4px 10px', fontSize: 12 }}
+                        >
+                          <Printer size={13} />
+                          Imprimir / PDF
+                        </button>
+                      </div>
                     </div>
                     {matrix.length > 0 ? (
                       <div className="rh-table-wrapper">
