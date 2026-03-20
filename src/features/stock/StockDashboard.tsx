@@ -155,8 +155,6 @@ export function StockDashboard() {
 
   const uniqueProducts = new Set(items.map((s) => s.product_id)).size;
   const totalUnits = items.reduce((sum, s) => sum + s.quantity, 0);
-  const totalReserved = items.reduce((sum, s) => sum + s.reserved_quantity, 0);
-  const totalAvailable = totalUnits - totalReserved;
 
   const locatedItems = items.filter((s) => s.location_id !== null);
   const unlocatedItems = items.filter((s) => s.location_id === null);
@@ -403,7 +401,6 @@ export function StockDashboard() {
                       </thead>
                       <tbody>
                         {filtered.map((stock) => {
-                          const available = stock.quantity - stock.reserved_quantity;
                           const isLow = stock.quantity <= LOW_STOCK_THRESHOLD;
                           const isUnlocated = !stock.location_id;
 
