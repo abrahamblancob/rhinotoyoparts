@@ -133,13 +133,12 @@ export function StockDashboard() {
   const { data: stockItems, loading, reload } = useAsyncData<InventoryStock[]>(fetcher, [orgId, warehouseFilter, shouldIncludeChildren]);
 
   // Fetch dispatch count from packed orders
+  // Always include children for aggregator orgs (orders belong to child associates)
   const dispatchFetcher = useCallback(async () => {
     if (!orgId) return { data: 0 as number, error: null };
-    let orgIds = [orgId];
-    if (shouldIncludeChildren) {
-      const { data: hierarchy } = await supabase.from('org_hierarchy').select('child_id').eq('parent_id', orgId);
-      orgIds = [orgId, ...(hierarchy ?? []).map((h: { child_id: string }) => h.child_id)];
-    }
+    const { data: hierarchy } = await supabase.from('org_hierarchy').select('child_id').eq('parent_id', orgId);
+    const childIds = (hierarchy ?? []).map((h: { child_id: string }) => h.child_id);
+    const orgIds = [orgId, ...childIds];
     const { data, error } = await supabase
       .from('order_items')
       .select('quantity, orders!inner(org_id, status)')
@@ -148,7 +147,7 @@ export function StockDashboard() {
     if (error) return { data: 0, error: error.message };
     const total = (data ?? []).reduce((sum: number, item: { quantity: number }) => sum + item.quantity, 0);
     return { data: total, error: null };
-  }, [orgId, shouldIncludeChildren]);
+  }, [orgId]);
   const { data: dispatchCount } = useAsyncData<number>(dispatchFetcher, [orgId, shouldIncludeChildren]);
   const inDispatchUnits = dispatchCount ?? 0;
 
@@ -463,9 +462,6 @@ export function StockDashboard() {
 
           {/* Inventory Audit Log */}
           <div style={{ marginTop: 24 }}>
-            <h2 style={{ fontSize: 17, fontWeight: 700, color: '#1E293B', marginBottom: 16, display: 'flex', alignItems: 'center', gap: 8 }}>
-              📜 Log de Auditoría de Inventario
-            </h2>
             <InventoryLog orgId={orgId} warehouseId={warehouseFilter} includeChildren={shouldIncludeChildren} />
           </div>
         </>
