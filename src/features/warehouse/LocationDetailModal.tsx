@@ -309,7 +309,7 @@ export function LocationDetailModal({ open, location, warehouseId, orgId, onClos
               {locationStocks.length === 1 ? 'Producto en Ubicación' : `${locationStocks.length} Productos en Ubicación`}
             </h4>
             <span style={{ fontSize: 12, color: '#64748B', fontWeight: 600 }}>
-              Disponible: {locationStocks.reduce((sum, s) => sum + (s.quantity - s.reserved_quantity), 0)} uds
+              Total: {locationStocks.reduce((sum, s) => sum + s.quantity, 0)} uds
             </span>
           </div>
 
@@ -330,15 +330,9 @@ export function LocationDetailModal({ open, location, warehouseId, orgId, onClos
                     </p>
                   </div>
                   <div>
-                    <p style={{ fontSize: 11, color: '#94A3B8', margin: 0 }}>Disponible</p>
-                    <p style={{ fontSize: 18, fontWeight: 700, color: (stock.quantity - stock.reserved_quantity) > 0 ? '#10B981' : '#DC2626', margin: '2px 0 0' }}>
-                      {stock.quantity - stock.reserved_quantity}
-                    </p>
-                  </div>
-                  <div>
-                    <p style={{ fontSize: 11, color: '#94A3B8', margin: 0 }}>En Orden</p>
-                    <p style={{ fontSize: 18, fontWeight: 700, color: stock.reserved_quantity > 0 ? '#F59E0B' : '#94A3B8', margin: '2px 0 0' }}>
-                      {stock.reserved_quantity}
+                    <p style={{ fontSize: 11, color: '#94A3B8', margin: 0 }}>Cantidad</p>
+                    <p style={{ fontSize: 18, fontWeight: 700, color: stock.quantity > 0 ? '#10B981' : '#94A3B8', margin: '2px 0 0' }}>
+                      {stock.quantity}
                     </p>
                   </div>
                   {stock.lot_number && (
