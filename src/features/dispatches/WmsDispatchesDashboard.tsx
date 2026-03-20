@@ -108,8 +108,8 @@ export function WmsDispatchesDashboard() {
 
   const orgId = isPlatform ? nav.effectiveOrgId ?? undefined : organization?.id;
 
-  const fetcher = useCallback(async () => {
-    if (!orgId) return [] as OrderRow[];
+  const fetcher = useCallback(async (): Promise<{ data: OrderRow[] | null; error: string | null }> => {
+    if (!orgId) return { data: [], error: null };
 
     // If platform viewing aggregator (includeChildren), get child org IDs too
     let orgIds = [orgId];
@@ -122,13 +122,14 @@ export function WmsDispatchesDashboard() {
       orgIds = [orgId, ...childIds];
     }
 
-    const { data } = await supabase
+    const { data, error } = await supabase
       .from('orders')
       .select('id, order_number, status, total, created_at, updated_at, shipped_at, customer_phone, customers(name), assigned_profile:profiles!orders_assigned_to_fkey(full_name)')
       .in('org_id', orgIds)
       .in('status', ['ready_to_ship', 'shipped', 'in_transit'])
       .order('updated_at', { ascending: false });
-    return (data as unknown as OrderRow[]) ?? [];
+    if (error) return { data: null, error: error.message };
+    return { data: (data as unknown as OrderRow[]) ?? [], error: null };
   }, [orgId, isPlatform, nav.includeChildren]);
 
   const { data: orders } = useAsyncData<OrderRow[]>(fetcher, [orgId, nav.includeChildren]);
