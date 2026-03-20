@@ -250,7 +250,7 @@ export interface ReceivingOrderItem {
 // ── Returns ──
 
 export type ReturnOrderStatus = 'pending' | 'inspecting' | 'completed';
-export type ReturnItemDisposition = 'pending' | 'replenish' | 'defective' | 'damaged';
+export type ReturnItemDisposition = 'pending' | 'replenish' | 'good' | 'defective' | 'damaged';
 export type ReturnReason =
   | 'wrong_product' | 'damaged_in_transit' | 'defective'
   | 'incomplete_order' | 'customer_changed_mind' | 'wrong_quantity'
