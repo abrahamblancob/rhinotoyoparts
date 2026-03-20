@@ -1,5 +1,5 @@
 import { useState, useCallback, useRef } from 'react';
-import { MapPin, Package, QrCode, Eye, Search, Trash2, X } from 'lucide-react';
+import { MapPin, Package, QrCode, Eye, Search, X } from 'lucide-react';
 import { QRCodeSVG } from 'qrcode.react';
 import { Modal } from '@/components/hub/shared/Modal.tsx';
 import { useAsyncData } from '@/hooks/useAsyncData.ts';
@@ -30,10 +30,7 @@ export function LocationDetailModal({ open, location, warehouseId, orgId, onClos
   const [assigning, setAssigning] = useState(false);
   const [assignQuantity, setAssignQuantity] = useState(1);
   const [selectedProduct, setSelectedProduct] = useState<InventoryStock | null>(null);
-  const [removing, setRemoving] = useState(false);
-  const [removingStockId, setRemovingStockId] = useState<string | null>(null);
   const [showQR, setShowQR] = useState(false);
-  const [showProductQR, setShowProductQR] = useState<string | null>(null);
   const [error, setError] = useState('');
 
   // Cleanup ref for cancel handler
@@ -146,34 +143,6 @@ export function LocationDetailModal({ open, location, warehouseId, orgId, onClos
     setSearchResults([]);
     setSearching(false);
     setError('');
-  };
-
-  const handleRemoveProduct = async (stock: InventoryStock) => {
-    setRemoving(true);
-    setError('');
-
-    const result = await warehouseService.removeProductFromLocation(
-      stock.id,
-      location.id,
-      stock.product_id,
-      stock.quantity,
-    );
-    if (result.error) {
-      setError(result.error);
-      setRemoving(false);
-      return;
-    }
-
-    logActivity({
-      action: 'remove_stock',
-      entityType: 'location',
-      entityId: location.id,
-      description: `Removió ${stock.product?.name ?? 'producto'} de ubicación ${location.code}`,
-    });
-
-    setRemoving(false);
-    setRemovingStockId(null);
-    reloadStock();
   };
 
   return (
@@ -297,13 +266,13 @@ export function LocationDetailModal({ open, location, warehouseId, orgId, onClos
         )}
       </div>
 
-      {/* Stock Info */}
+      {/* Stock Table */}
       {locationStocks.length > 0 ? (
         <div
           className="rh-card"
-          style={{ padding: 16, marginBottom: 16, border: '1px solid #E2E8F0' }}
+          style={{ padding: 0, marginBottom: 16, border: '1px solid #E2E8F0', overflow: 'hidden', borderRadius: 10 }}
         >
-          <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 12 }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '12px 16px', backgroundColor: '#F8FAFC', borderBottom: '1px solid #E2E8F0' }}>
             <Package size={18} style={{ color: '#10B981' }} />
             <h4 style={{ fontSize: 14, fontWeight: 700, color: '#1E293B', margin: 0, flex: 1 }}>
               {locationStocks.length === 1 ? 'Producto en Ubicación' : `${locationStocks.length} Productos en Ubicación`}
@@ -313,112 +282,48 @@ export function LocationDetailModal({ open, location, warehouseId, orgId, onClos
             </span>
           </div>
 
-          <div style={{ maxHeight: 340, overflowY: 'auto', display: 'flex', flexDirection: 'column', gap: 10 }}>
-            {locationStocks.map((stock) => (
-              <div key={stock.id} style={{ padding: 12, backgroundColor: '#F8FAFC', borderRadius: 8, border: '1px solid #E2E8F0' }}>
-                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 8 }}>
-                  <div>
-                    <p style={{ fontSize: 11, color: '#94A3B8', margin: 0 }}>Producto</p>
-                    <p style={{ fontSize: 13, fontWeight: 600, color: '#1E293B', margin: '2px 0 0' }}>
-                      {stock.product?.name ?? 'Sin nombre'}
-                    </p>
-                  </div>
-                  <div>
-                    <p style={{ fontSize: 11, color: '#94A3B8', margin: 0 }}>SKU</p>
-                    <p style={{ fontSize: 13, fontWeight: 500, color: '#475569', margin: '2px 0 0', fontFamily: 'monospace' }}>
-                      {stock.product?.sku ?? '—'}
-                    </p>
-                  </div>
-                  <div>
-                    <p style={{ fontSize: 11, color: '#94A3B8', margin: 0 }}>Cantidad</p>
-                    <p style={{ fontSize: 18, fontWeight: 700, color: stock.quantity > 0 ? '#10B981' : '#94A3B8', margin: '2px 0 0' }}>
-                      {stock.quantity}
-                    </p>
-                  </div>
-                  {stock.lot_number && (
-                    <div>
-                      <p style={{ fontSize: 11, color: '#94A3B8', margin: 0 }}>Lote</p>
-                      <p style={{ fontSize: 12, fontWeight: 500, color: '#475569', margin: '2px 0 0' }}>
-                        {stock.lot_number}
-                      </p>
-                    </div>
-                  )}
-                </div>
+          {/* Table header */}
+          <div style={{
+            display: 'grid', gridTemplateColumns: '1fr auto',
+            padding: '8px 16px', backgroundColor: '#F1F5F9',
+            borderBottom: '1px solid #E2E8F0',
+          }}>
+            <span style={{ fontSize: 11, fontWeight: 700, color: '#64748B', textTransform: 'uppercase', letterSpacing: 0.5 }}>
+              Producto
+            </span>
+            <span style={{ fontSize: 11, fontWeight: 700, color: '#64748B', textTransform: 'uppercase', letterSpacing: 0.5, textAlign: 'right' }}>
+              Cant.
+            </span>
+          </div>
 
-                {/* Actions row */}
-                <div style={{ display: 'flex', gap: 6, marginTop: 10, borderTop: '1px solid #E2E8F0', paddingTop: 8 }}>
-                  <button
-                    onClick={() => setShowProductQR(showProductQR === stock.id ? null : stock.id)}
-                    className="rh-btn rh-btn-ghost"
-                    style={{ padding: '4px 8px', display: 'flex', alignItems: 'center', gap: 4, fontSize: 11 }}
-                  >
-                    <QrCode size={12} />
-                    {showProductQR === stock.id ? 'Ocultar QR' : 'QR'}
-                  </button>
-                  <div style={{ flex: 1 }} />
-                  {removingStockId === stock.id ? (
-                    <div style={{ display: 'flex', gap: 4, alignItems: 'center' }}>
-                      <span style={{ fontSize: 11, color: '#991B1B', fontWeight: 600 }}>¿Seguro?</span>
-                      <button
-                        onClick={() => handleRemoveProduct(stock)}
-                        disabled={removing}
-                        style={{
-                          padding: '4px 10px', fontSize: 11, fontWeight: 600,
-                          color: '#fff', backgroundColor: '#DC2626', border: 'none',
-                          borderRadius: 4, cursor: removing ? 'not-allowed' : 'pointer',
-                          opacity: removing ? 0.7 : 1,
-                        }}
-                      >
-                        {removing ? '...' : 'Sí'}
-                      </button>
-                      <button
-                        onClick={() => setRemovingStockId(null)}
-                        disabled={removing}
-                        className="rh-btn rh-btn-ghost"
-                        style={{ padding: '4px 8px', fontSize: 11 }}
-                      >
-                        No
-                      </button>
-                    </div>
-                  ) : (
-                    <button
-                      onClick={() => setRemovingStockId(stock.id)}
-                      style={{
-                        display: 'flex', alignItems: 'center', gap: 4,
-                        padding: '4px 8px', fontSize: 11, fontWeight: 600, color: '#DC2626',
-                        background: 'none', border: '1px solid #FECACA', borderRadius: 4,
-                        cursor: 'pointer',
-                      }}
-                    >
-                      <Trash2 size={12} />
-                      Quitar
-                    </button>
-                  )}
+          {/* Table rows */}
+          <div style={{ maxHeight: 360, overflowY: 'auto' }}>
+            {locationStocks.map((stock, i) => (
+              <div
+                key={stock.id}
+                style={{
+                  display: 'grid', gridTemplateColumns: '1fr auto',
+                  padding: '10px 16px', alignItems: 'center',
+                  borderBottom: i < locationStocks.length - 1 ? '1px solid #F1F5F9' : 'none',
+                  backgroundColor: i % 2 === 0 ? '#fff' : '#FAFBFC',
+                }}
+              >
+                <div style={{ minWidth: 0 }}>
+                  <p style={{ fontSize: 13, fontWeight: 600, color: '#1E293B', margin: 0, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                    {stock.product?.name ?? 'Sin nombre'}
+                  </p>
+                  <p style={{ fontSize: 11, color: '#94A3B8', margin: '2px 0 0', fontFamily: 'monospace' }}>
+                    {stock.product?.sku ?? '—'}
+                    {stock.lot_number && <span style={{ marginLeft: 8, color: '#B45309' }}>Lote: {stock.lot_number}</span>}
+                  </p>
                 </div>
-
-                {/* Product QR (toggled per product) */}
-                {showProductQR === stock.id && (
-                  <div style={{
-                    display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 6,
-                    marginTop: 10, paddingTop: 10, borderTop: '1px solid #E2E8F0',
-                  }}>
-                    <div style={{
-                      padding: 14, backgroundColor: '#fff', borderRadius: 10,
-                      border: '1px solid #E2E8F0', display: 'inline-block',
-                    }}>
-                      <QRCodeSVG
-                        id="qr-product-svg"
-                        value={stock.product?.sku ?? stock.product_id}
-                        size={120}
-                        level="M"
-                        includeMargin={false}
-                      />
-                    </div>
-                    <p style={{ fontSize: 12, fontWeight: 700, color: '#1E293B', margin: 0, fontFamily: 'monospace' }}>
-                      {stock.product?.sku ?? '—'}
-                    </p>
-                  </div>
-                )}
+                <span style={{
+                  fontSize: 16, fontWeight: 700,
+                  color: stock.quantity > 0 ? '#10B981' : '#94A3B8',
+                  textAlign: 'right', minWidth: 36,
+                }}>
+                  {stock.quantity}
+                </span>
               </div>
             ))}
           </div>
@@ -535,7 +440,7 @@ export function LocationDetailModal({ open, location, warehouseId, orgId, onClos
                               display: 'inline-block', padding: '1px 6px', borderRadius: 4,
                               backgroundColor: '#F59E0B20', color: '#B45309', fontWeight: 600,
                             }}>
-                              📍 En ubicacion: {stock.location?.code ?? '—'}
+                              En ubicacion: {stock.location?.code ?? '—'}
                             </span>
                           </span>
                         ) : (
@@ -545,7 +450,7 @@ export function LocationDetailModal({ open, location, warehouseId, orgId, onClos
                               display: 'inline-block', padding: '1px 6px', borderRadius: 4,
                               backgroundColor: '#10B98120', color: '#065F46', fontWeight: 600,
                             }}>
-                              ✅ Sin asignar
+                              Sin asignar
                             </span>
                           </span>
                         )}
@@ -554,11 +459,6 @@ export function LocationDetailModal({ open, location, warehouseId, orgId, onClos
                         <span style={{ fontWeight: 700, color: '#059669', fontSize: 13 }}>
                           {avail} disponible
                         </span>
-                        {stock.reserved_quantity > 0 && (
-                          <span style={{ fontSize: 11, color: '#D97706' }}>
-                            {stock.reserved_quantity} reservado
-                          </span>
-                        )}
                       </div>
                     </div>
                   );
@@ -602,8 +502,8 @@ export function LocationDetailModal({ open, location, warehouseId, orgId, onClos
                     </p>
                     <p style={{ fontSize: 11, color: '#64748B', margin: 0 }}>
                       SKU: {selectedProduct.product?.sku ?? '—'} | {selectedProduct.location_id != null
-                        ? `⚠️ Se moverá desde: ${selectedProduct.location?.code ?? '—'}`
-                        : '✅ Sin ubicacion asignada'}
+                        ? `Se moverá desde: ${selectedProduct.location?.code ?? '—'}`
+                        : 'Sin ubicacion asignada'}
                     </p>
                     <p style={{ fontSize: 11, color: '#059669', margin: '2px 0 0', fontWeight: 600 }}>
                       {maxAvail} disponible para transferir
