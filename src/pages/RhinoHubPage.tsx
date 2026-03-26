@@ -1,7 +1,7 @@
 import { useEffect } from 'react';
 import { Link } from 'react-router-dom';
 import { motion } from 'framer-motion';
-import { ArrowLeft, LogIn } from 'lucide-react';
+import { ArrowLeft } from 'lucide-react';
 import { RhinoHubSection } from '../components/sections/RhinoHubSection';
 import { Footer } from '../components/layout/Footer';
 import { trackEvent } from '../utils/analytics';
@@ -35,15 +35,6 @@ function RhinoHubNavbar() {
               <ArrowLeft size={15} />
               <span className="hidden sm:inline">Volver al inicio</span>
               <span className="sm:hidden">Inicio</span>
-            </Link>
-            <Link
-              to="/hub/login"
-              onClick={() => trackEvent({ action: 'rhinohub_login_click', category: 'rhinohub', label: 'navbar' })}
-              className="rhino-hero-btn-primary"
-              style={{ padding: '10px 24px', fontSize: 14, borderRadius: 10, gap: 8, boxShadow: '0 4px 16px rgba(211, 47, 47, 0.25)' }}
-            >
-              <LogIn size={16} />
-              Iniciar sesión
             </Link>
           </div>
         </div>

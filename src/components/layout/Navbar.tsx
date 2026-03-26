@@ -69,13 +69,6 @@ export function Navbar() {
                 </Link>
               );
             })}
-            <Link
-              to="/rhinohub"
-              onClick={() => trackNavClick('Rhino Hub')}
-              className="rhino-hub-nav-link"
-            >
-              Rhino Hub
-            </Link>
           </div>
 
           {/* Mobile toggle */}
@@ -125,13 +118,6 @@ export function Navbar() {
                   </Link>
                 );
               })}
-              <Link
-                to="/rhinohub"
-                onClick={() => { trackNavClick('Rhino Hub'); closeMenu(); }}
-                className="block rhino-hub-nav-link-mobile"
-              >
-                Rhino Hub
-              </Link>
             </div>
           </motion.div>
         )}
