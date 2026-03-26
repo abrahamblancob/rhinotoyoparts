@@ -5,5 +5,4 @@ export const NAV_ITEMS: NavItem[] = [
   { label: 'Nosotros', href: '/#nosotros' },
   { label: 'Rhino Vision', href: '/rhinovision' },
   { label: 'Tienda', href: '/#tienda' },
-  { label: 'Rhino Móvil', href: '/tracking' },
 ];
