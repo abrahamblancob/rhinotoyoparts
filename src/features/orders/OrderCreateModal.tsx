@@ -262,18 +262,15 @@ export function OrderCreateModal({ open, onClose, onCreated, editOrder, editItem
           .select('product_id, quantity, reserved_quantity, product:products!inner(*)')
           .eq('warehouse_id', selectedWarehouse.id)
           .gt('quantity', 0)
-          .limit(30);
+          .or(`name.ilike.%${query}%,sku.ilike.%${query}%`, { referencedTable: 'products' })
+          .limit(50);
         if (error) { console.error('Product search error:', error); }
         if (productSearchRef.current === query) {
-          // Client-side filter by query + deduplicate by product_id (sum quantities)
+          // Deduplicate by product_id (sum quantities across locations)
           const productMap = new Map<string, Product & { warehouseQty: number }>();
           for (const row of (stockRows ?? []) as unknown as { product_id: string; quantity: number; reserved_quantity: number; product: Product }[]) {
             const p = row.product;
             if (!p) continue;
-            const q2 = query.toLowerCase();
-            const nameMatch = p.name?.toLowerCase().includes(q2);
-            const skuMatch = p.sku?.toLowerCase().includes(q2);
-            if (!nameMatch && !skuMatch) continue;
             const existing = productMap.get(p.id);
             const available = row.quantity - row.reserved_quantity;
             if (existing) {
