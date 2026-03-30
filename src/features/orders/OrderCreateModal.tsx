@@ -295,7 +295,8 @@ export function OrderCreateModal({ open, onClose, onCreated, editOrder, editItem
           // Use aggregator's catalog when an associate is selected
           const catalogOrgId = selectedOrg && inventoryOrg.id !== selectedOrg.id ? selectedOrg.id : inventoryOrg.id;
           q = q.eq('org_id', catalogOrgId);
-        } else if (!isPlatformOwner && organization) q = q.eq('org_id', organization.id);
+        }
+        // Non-platform users: RLS handles visibility (own org + parent aggregator)
         const { data, error } = await q;
         if (error) console.error('Product search error:', error);
         if (productSearchRef.current === query) { setProductResults((data as Product[]) ?? []); setProductLoading(false); }
